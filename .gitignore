@@ -120,3 +120,7 @@ fleet_tables_*.ext
 
 # Required to not make `fleet-desktop` macOS executable built with a `dirty` flag (see #35006).
 Fleet\ Desktop.app
+
+# Openframe build artifacts (not the source directories)
+/orbit-*
+/osquery-*
