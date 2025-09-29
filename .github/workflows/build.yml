@@ -49,7 +49,7 @@ jobs:
           - os: windows-latest
             go_os: windows
             go_arch: amd64
-            artifact_name: fleet-windows-amd64.exe
+            artifact_name: fleet-windows-amd64
          
     steps:
       - name: Checkout
