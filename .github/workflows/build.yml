@@ -10,7 +10,7 @@ permissions:
 
 on:
   push:
-    branches: [main, feature/update-macos-signing-pipeline]
+    branches: [main]
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
