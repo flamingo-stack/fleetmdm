@@ -76,6 +76,7 @@ func main() {
 		versionCommand,
 		shellCommand,
 		uuidCommand,
+		cleanupCommand,
 	}
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
