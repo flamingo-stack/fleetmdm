@@ -16,7 +16,7 @@ import (
 
 var cleanupCommand = &cli.Command{
 	Name:  "cleanup",
-	Usage: "Clean up orbit data, logs, and configuration (does not touch osquery process)",
+	Usage: "Clean up orbit data, logs, and configuration in OpenFrame mode (stops osqueryd process)",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
 			Name:  "all",
@@ -35,12 +35,8 @@ var cleanupCommand = &cli.Command{
 			Usage: "Clean enrollment secrets and node keys",
 		},
 		&cli.BoolFlag{
-			Name:  "registry",
-			Usage: "Clean Windows registry entries (Windows only)",
-		},
-		&cli.BoolFlag{
-			Name:  "service",
-			Usage: "Stop and remove orbit service (does not stop osqueryd)",
+			Name:  "stop-osquery",
+			Usage: "Stop osqueryd process",
 		},
 		&cli.BoolFlag{
 			Name:  "dry-run",
@@ -50,11 +46,26 @@ var cleanupCommand = &cli.Command{
 			Name:  "force",
 			Usage: "Skip confirmation prompt",
 		},
+		&cli.BoolFlag{
+			Name:    "openframe-mode",
+			Usage:   "Enable OpenFrame mode for cleanup",
+			EnvVars: []string{"ORBIT_OPENFRAME_MODE"},
+		},
+		&cli.StringFlag{
+			Name:    "openframe-osquery-path",
+			Usage:   "Custom path to osqueryd binary when using OpenFrame mode",
+			EnvVars: []string{"ORBIT_OPENFRAME_OSQUERY_PATH"},
+		},
 	},
 	Action: cleanupAction,
 }
 
 func cleanupAction(c *cli.Context) error {
+	// Check that we're running in OpenFrame mode
+	if !c.Bool("openframe-mode") {
+		return fmt.Errorf("This command only works in OpenFrame mode.\nPlease run with --openframe-mode flag or set ORBIT_OPENFRAME_MODE environment variable")
+	}
+
 	// Check for root/admin privileges
 	if !hasAdminPrivileges() {
 		return fmt.Errorf("This command requires administrator/root privileges.\nPlease run with sudo (macOS/Linux) or as Administrator (Windows)")
@@ -71,17 +82,16 @@ func cleanupAction(c *cli.Context) error {
 	cleanLogs := c.Bool("logs")
 	cleanCache := c.Bool("cache")
 	cleanSecrets := c.Bool("secrets")
-	cleanRegistry := c.Bool("registry")
-	cleanService := c.Bool("service")
+	stopOsquery := c.Bool("stop-osquery")
 
 	// If nothing specified, show help
-	if !cleanAll && !cleanLogs && !cleanCache && !cleanSecrets && !cleanRegistry && !cleanService {
+	if !cleanAll && !cleanLogs && !cleanCache && !cleanSecrets && !stopOsquery {
 		return cli.ShowSubcommandHelp(c)
 	}
 
 	// Confirmation prompt
 	if !force && !dryRun {
-		fmt.Print("⚠️  This will delete orbit data. Continue? [y/N]: ")
+		fmt.Print("⚠️  This will delete orbit data and stop osqueryd. Continue? [y/N]: ")
 		var response string
 		fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
@@ -91,15 +101,16 @@ func cleanupAction(c *cli.Context) error {
 	}
 
 	if dryRun {
-		fmt.Println("🔍 DRY RUN - No files will be deleted\n")
+		fmt.Println("🔍 DRY RUN - No files will be deleted and no processes will be stopped\n")
 	}
 
 	results := &cleanupResults{}
 
-	// Stop service and processes (but NOT osqueryd!)
-	if cleanAll || cleanService {
-		if err := stopOrbitService(dryRun, results); err != nil {
-			log.Error().Err(err).Msg("Failed to stop orbit service")
+	// Stop osqueryd process in OpenFrame mode
+	if cleanAll || stopOsquery {
+		osquerydPath := c.String("openframe-osquery-path")
+		if err := stopOsqueryd(osquerydPath, dryRun, results); err != nil {
+			log.Error().Err(err).Msg("Failed to stop osqueryd")
 		}
 	}
 
@@ -116,17 +127,6 @@ func cleanupAction(c *cli.Context) error {
 		cleanSecretFiles(rootDir, dryRun, results)
 	}
 
-	// Platform-specific cleanup
-	if cleanAll || cleanRegistry {
-		if runtime.GOOS == "windows" {
-			cleanWindowsRegistry(dryRun, results)
-		}
-	}
-
-	if cleanAll || cleanService {
-		cleanServiceFiles(dryRun, results)
-	}
-
 	// Print results
 	printResults(dryRun, results)
 
@@ -139,7 +139,7 @@ func cleanupAction(c *cli.Context) error {
 
 type cleanupResults struct {
 	filesRemoved    []string
-	servicesRemoved []string
+	processesKilled []string
 	errors          []error
 }
 
@@ -168,78 +168,41 @@ func hasAdminPrivileges() bool {
 	}
 }
 
-// stopOrbitService stops orbit service and fleet-desktop, but NOT osqueryd
-func stopOrbitService(dryRun bool, results *cleanupResults) error {
-	fmt.Println("🛑 Stopping orbit service and fleet-desktop...")
+// stopOsqueryd stops the osqueryd process in OpenFrame mode
+func stopOsqueryd(osquerydPath string, dryRun bool, results *cleanupResults) error {
+	fmt.Println("🛑 Stopping osqueryd process...")
 
 	switch runtime.GOOS {
-	case "darwin":
-		return stopOrbitServiceMacOS(dryRun, results)
-	case "linux":
-		return stopOrbitServiceLinux(dryRun, results)
+	case "darwin", "linux":
+		// Use pkill to stop osqueryd by name
+		if dryRun {
+			fmt.Println("  Would run: pkill osqueryd")
+		} else {
+			cmd := exec.Command("pkill", "osqueryd")
+			if err := cmd.Run(); err != nil {
+				// Process might not be running, that's okay
+				log.Debug().Err(err).Msg("pkill osqueryd returned error (process might not be running)")
+			}
+			results.processesKilled = append(results.processesKilled, "osqueryd")
+			fmt.Println("  Stopped osqueryd process")
+		}
 	case "windows":
-		return stopOrbitServiceWindows(dryRun, results)
+		// Use taskkill to stop osqueryd on Windows
+		if dryRun {
+			fmt.Println("  Would run: taskkill /F /IM osqueryd.exe")
+		} else {
+			cmd := exec.Command("taskkill", "/F", "/IM", "osqueryd.exe")
+			if err := cmd.Run(); err != nil {
+				// Process might not be running, that's okay
+				log.Debug().Err(err).Msg("taskkill osqueryd.exe returned error (process might not be running)")
+			}
+			results.processesKilled = append(results.processesKilled, "osqueryd.exe")
+			fmt.Println("  Stopped osqueryd.exe process")
+		}
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
-}
 
-func stopOrbitServiceMacOS(dryRun bool, results *cleanupResults) error {
-	commands := [][]string{
-		{"launchctl", "stop", "com.fleetdm.orbit"},
-		{"launchctl", "unload", "/Library/LaunchDaemons/com.fleetdm.orbit.plist"},
-		{"pkill", "fleet-desktop"},
-	}
-
-	for _, cmd := range commands {
-		if dryRun {
-			fmt.Printf("  Would run: %s\n", strings.Join(cmd, " "))
-		} else {
-			c := exec.Command(cmd[0], cmd[1:]...)
-			_ = c.Run() // Ignore errors (service might not be running)
-		}
-	}
-
-	results.servicesRemoved = append(results.servicesRemoved, "com.fleetdm.orbit")
-	return nil
-}
-
-func stopOrbitServiceLinux(dryRun bool, results *cleanupResults) error {
-	commands := [][]string{
-		{"systemctl", "stop", "orbit.service"},
-		{"systemctl", "disable", "orbit.service"},
-		{"pkill", "-f", "fleet-desktop"},
-	}
-
-	for _, cmd := range commands {
-		if dryRun {
-			fmt.Printf("  Would run: %s\n", strings.Join(cmd, " "))
-		} else {
-			c := exec.Command(cmd[0], cmd[1:]...)
-			_ = c.Run() // Ignore errors
-		}
-	}
-
-	results.servicesRemoved = append(results.servicesRemoved, "orbit.service")
-	return nil
-}
-
-func stopOrbitServiceWindows(dryRun bool, results *cleanupResults) error {
-	// Stop Windows Service
-	if dryRun {
-		fmt.Println("  Would run: Stop-Service -Name 'Fleet osquery'")
-		fmt.Println("  Would run: Stop-Process -Name fleet-desktop")
-	} else {
-		// Stop service
-		cmd := exec.Command("net", "stop", "Fleet osquery")
-		_ = cmd.Run()
-
-		// Kill fleet-desktop
-		cmd = exec.Command("taskkill", "/F", "/IM", "fleet-desktop.exe")
-		_ = cmd.Run()
-	}
-
-	results.servicesRemoved = append(results.servicesRemoved, "Fleet osquery")
 	return nil
 }
 
@@ -270,74 +233,6 @@ func cleanSecretFiles(rootDir string, dryRun bool, results *cleanupResults) {
 	secretPaths := getSecretPaths(rootDir)
 	for _, path := range secretPaths {
 		removePathIfExists(path, dryRun, results)
-	}
-}
-
-// cleanServiceFiles removes service configuration files
-func cleanServiceFiles(dryRun bool, results *cleanupResults) {
-	fmt.Println("🗑️  Cleaning service configuration files...")
-
-	switch runtime.GOOS {
-	case "darwin":
-		paths := []string{
-			"/Library/LaunchDaemons/com.fleetdm.orbit.plist",
-			"/usr/local/bin/orbit",
-		}
-		for _, path := range paths {
-			removePathIfExists(path, dryRun, results)
-		}
-
-		// Forget package
-		if dryRun {
-			fmt.Println("  Would run: pkgutil --forget com.fleetdm.orbit.base.pkg")
-		} else {
-			cmd := exec.Command("pkgutil", "--forget", "com.fleetdm.orbit.base.pkg")
-			_ = cmd.Run()
-		}
-
-	case "linux":
-		paths := []string{
-			"/usr/lib/systemd/system/orbit.service",
-			"/etc/default/orbit",
-			"/usr/local/bin/orbit",
-		}
-		for _, path := range paths {
-			removePathIfExists(path, dryRun, results)
-		}
-
-		// Reload systemd
-		if !dryRun {
-			cmd := exec.Command("systemctl", "daemon-reload")
-			_ = cmd.Run()
-		}
-
-	case "windows":
-		// Windows service removal is handled in stopOrbitService
-	}
-}
-
-// cleanWindowsRegistry removes Windows registry entries
-func cleanWindowsRegistry(dryRun bool, results *cleanupResults) {
-	if runtime.GOOS != "windows" {
-		return
-	}
-
-	fmt.Println("🗑️  Cleaning Windows registry...")
-
-	registryCommands := []string{
-		// Remove uninstall entry
-		`Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" | Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq "Fleet osquery" } | Remove-Item -Recurse -Force`,
-		// Remove service entry
-		`Remove-Item "HKLM:\SYSTEM\CurrentControlSet\Services\Fleet osquery" -Recurse -Force -ErrorAction SilentlyContinue`,
-	}
-
-	for _, regCmd := range registryCommands {
-		if dryRun {
-			fmt.Printf("  Would run PowerShell: %s\n", regCmd)
-		} else {
-			cmd := exec.Command("powershell", "-Command", regCmd)
-			_ = cmd.Run()
-		}
 	}
 }
 
@@ -420,10 +315,10 @@ func printResults(dryRun bool, results *cleanupResults) {
 
 	if dryRun {
 		fmt.Printf("✅ Would clean %d files/directories\n", len(results.filesRemoved))
-		fmt.Printf("✅ Would remove %d services\n", len(results.servicesRemoved))
+		fmt.Printf("✅ Would stop %d processes\n", len(results.processesKilled))
 	} else {
 		fmt.Printf("✅ Cleaned %d files/directories\n", len(results.filesRemoved))
-		fmt.Printf("✅ Removed %d services\n", len(results.servicesRemoved))
+		fmt.Printf("✅ Stopped %d processes\n", len(results.processesKilled))
 	}
 
 	if len(results.errors) > 0 {
@@ -434,9 +329,7 @@ func printResults(dryRun bool, results *cleanupResults) {
 	fmt.Println()
 
 	if !dryRun && len(results.errors) == 0 {
-		fmt.Println("🎉 Cleanup completed successfully!")
-		fmt.Println()
-		fmt.Println("Note: osqueryd process was NOT stopped (as requested)")
+		fmt.Println("🎉 OpenFrame cleanup completed successfully!")
 	}
 }
 
