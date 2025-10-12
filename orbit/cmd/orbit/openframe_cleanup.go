@@ -16,36 +16,8 @@ import (
 
 var cleanupCommand = &cli.Command{
 	Name:  "cleanup",
-	Usage: "Clean up orbit data, logs, and configuration in OpenFrame mode (stops osqueryd process)",
+	Usage: "Clean up all orbit data, logs, secrets and stop osqueryd process in OpenFrame mode",
 	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "all",
-			Usage: "Clean all data including enrollment secrets and node keys",
-		},
-		&cli.BoolFlag{
-			Name:  "logs",
-			Usage: "Clean only log files",
-		},
-		&cli.BoolFlag{
-			Name:  "cache",
-			Usage: "Clean only cache and temporary files",
-		},
-		&cli.BoolFlag{
-			Name:  "secrets",
-			Usage: "Clean enrollment secrets and node keys",
-		},
-		&cli.BoolFlag{
-			Name:  "stop-osquery",
-			Usage: "Stop osqueryd process",
-		},
-		&cli.BoolFlag{
-			Name:  "dry-run",
-			Usage: "Show what would be deleted without actually deleting",
-		},
-		&cli.BoolFlag{
-			Name:  "force",
-			Usage: "Skip confirmation prompt",
-		},
 		&cli.BoolFlag{
 			Name:    "openframe-mode",
 			Usage:   "Enable OpenFrame mode for cleanup",
@@ -76,59 +48,22 @@ func cleanupAction(c *cli.Context) error {
 		rootDir = getDefaultRootDir()
 	}
 
-	dryRun := c.Bool("dry-run")
-	force := c.Bool("force")
-	cleanAll := c.Bool("all")
-	cleanLogs := c.Bool("logs")
-	cleanCache := c.Bool("cache")
-	cleanSecrets := c.Bool("secrets")
-	stopOsquery := c.Bool("stop-osquery")
-
-	// If nothing specified, show help
-	if !cleanAll && !cleanLogs && !cleanCache && !cleanSecrets && !stopOsquery {
-		return cli.ShowSubcommandHelp(c)
-	}
-
-	// Confirmation prompt
-	if !force && !dryRun {
-		fmt.Print("⚠️  This will delete orbit data and stop osqueryd. Continue? [y/N]: ")
-		var response string
-		fmt.Scanln(&response)
-		if response != "y" && response != "Y" {
-			fmt.Println("Cleanup cancelled.")
-			return nil
-		}
-	}
-
-	if dryRun {
-		fmt.Println("🔍 DRY RUN - No files will be deleted and no processes will be stopped\n")
-	}
-
+	fmt.Println("🧹 Starting OpenFrame cleanup...")
 	results := &cleanupResults{}
 
 	// Stop osqueryd process in OpenFrame mode
-	if cleanAll || stopOsquery {
-		osquerydPath := c.String("openframe-osquery-path")
-		if err := stopOsqueryd(osquerydPath, dryRun, results); err != nil {
-			log.Error().Err(err).Msg("Failed to stop osqueryd")
-		}
+	osquerydPath := c.String("openframe-osquery-path")
+	if err := stopOsqueryd(osquerydPath, results); err != nil {
+		log.Error().Err(err).Msg("Failed to stop osqueryd")
 	}
 
-	// Clean files
-	if cleanAll || cleanLogs {
-		cleanLogFiles(rootDir, dryRun, results)
-	}
-
-	if cleanAll || cleanCache {
-		cleanCacheFiles(rootDir, dryRun, results)
-	}
-
-	if cleanAll || cleanSecrets {
-		cleanSecretFiles(rootDir, dryRun, results)
-	}
+	// Clean all files
+	cleanLogFiles(rootDir, results)
+	cleanCacheFiles(rootDir, results)
+	cleanSecretFiles(rootDir, results)
 
 	// Print results
-	printResults(dryRun, results)
+	printResults(results)
 
 	if len(results.errors) > 0 {
 		return fmt.Errorf("cleanup completed with %d errors", len(results.errors))
@@ -169,36 +104,26 @@ func hasAdminPrivileges() bool {
 }
 
 // stopOsqueryd stops the osqueryd process in OpenFrame mode
-func stopOsqueryd(osquerydPath string, dryRun bool, results *cleanupResults) error {
+func stopOsqueryd(osquerydPath string, results *cleanupResults) error {
 	fmt.Println("🛑 Stopping osqueryd process...")
 
 	switch runtime.GOOS {
 	case "darwin", "linux":
-		// Use pkill to stop osqueryd by name
-		if dryRun {
-			fmt.Println("  Would run: pkill osqueryd")
-		} else {
-			cmd := exec.Command("pkill", "osqueryd")
-			if err := cmd.Run(); err != nil {
-				// Process might not be running, that's okay
-				log.Debug().Err(err).Msg("pkill osqueryd returned error (process might not be running)")
-			}
-			results.processesKilled = append(results.processesKilled, "osqueryd")
-			fmt.Println("  Stopped osqueryd process")
+		cmd := exec.Command("pkill", "osqueryd")
+		if err := cmd.Run(); err != nil {
+			// Process might not be running, that's okay
+			log.Debug().Err(err).Msg("pkill osqueryd returned error (process might not be running)")
 		}
+		results.processesKilled = append(results.processesKilled, "osqueryd")
+		fmt.Println("  Stopped osqueryd process")
 	case "windows":
-		// Use taskkill to stop osqueryd on Windows
-		if dryRun {
-			fmt.Println("  Would run: taskkill /F /IM osqueryd.exe")
-		} else {
-			cmd := exec.Command("taskkill", "/F", "/IM", "osqueryd.exe")
-			if err := cmd.Run(); err != nil {
-				// Process might not be running, that's okay
-				log.Debug().Err(err).Msg("taskkill osqueryd.exe returned error (process might not be running)")
-			}
-			results.processesKilled = append(results.processesKilled, "osqueryd.exe")
-			fmt.Println("  Stopped osqueryd.exe process")
+		cmd := exec.Command("taskkill", "/F", "/IM", "osqueryd.exe")
+		if err := cmd.Run(); err != nil {
+			// Process might not be running, that's okay
+			log.Debug().Err(err).Msg("taskkill osqueryd.exe returned error (process might not be running)")
 		}
+		results.processesKilled = append(results.processesKilled, "osqueryd.exe")
+		fmt.Println("  Stopped osqueryd.exe process")
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -207,32 +132,32 @@ func stopOsqueryd(osquerydPath string, dryRun bool, results *cleanupResults) err
 }
 
 // cleanLogFiles removes log files
-func cleanLogFiles(rootDir string, dryRun bool, results *cleanupResults) {
+func cleanLogFiles(rootDir string, results *cleanupResults) {
 	fmt.Println("🗑️  Cleaning log files...")
 
 	logPaths := getLogPaths(rootDir)
 	for _, path := range logPaths {
-		removePathIfExists(path, dryRun, results)
+		removePathIfExists(path, results)
 	}
 }
 
 // cleanCacheFiles removes cache and temporary files
-func cleanCacheFiles(rootDir string, dryRun bool, results *cleanupResults) {
+func cleanCacheFiles(rootDir string, results *cleanupResults) {
 	fmt.Println("🗑️  Cleaning cache files...")
 
 	cachePaths := getCachePaths(rootDir)
 	for _, path := range cachePaths {
-		removePathIfExists(path, dryRun, results)
+		removePathIfExists(path, results)
 	}
 }
 
 // cleanSecretFiles removes secrets and enrollment data
-func cleanSecretFiles(rootDir string, dryRun bool, results *cleanupResults) {
+func cleanSecretFiles(rootDir string, results *cleanupResults) {
 	fmt.Println("🗑️  Cleaning secrets and enrollment data...")
 
 	secretPaths := getSecretPaths(rootDir)
 	for _, path := range secretPaths {
-		removePathIfExists(path, dryRun, results)
+		removePathIfExists(path, results)
 	}
 }
 
@@ -288,38 +213,28 @@ func getSecretPaths(rootDir string) []string {
 }
 
 // removePathIfExists removes a path if it exists
-func removePathIfExists(path string, dryRun bool, results *cleanupResults) {
+func removePathIfExists(path string, results *cleanupResults) {
 	// Check if path exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return
 	}
 
-	if dryRun {
-		fmt.Printf("  Would remove: %s\n", path)
-		results.filesRemoved = append(results.filesRemoved, path)
+	fmt.Printf("  Removing: %s\n", path)
+	if err := os.RemoveAll(path); err != nil {
+		log.Error().Err(err).Msgf("Failed to remove: %s", path)
+		results.errors = append(results.errors, err)
 	} else {
-		fmt.Printf("  Removing: %s\n", path)
-		if err := os.RemoveAll(path); err != nil {
-			log.Error().Err(err).Msgf("Failed to remove: %s", path)
-			results.errors = append(results.errors, err)
-		} else {
-			results.filesRemoved = append(results.filesRemoved, path)
-		}
+		results.filesRemoved = append(results.filesRemoved, path)
 	}
 }
 
 // printResults prints cleanup results
-func printResults(dryRun bool, results *cleanupResults) {
+func printResults(results *cleanupResults) {
 	fmt.Println()
 	fmt.Println("=" + strings.Repeat("=", 50))
 
-	if dryRun {
-		fmt.Printf("✅ Would clean %d files/directories\n", len(results.filesRemoved))
-		fmt.Printf("✅ Would stop %d processes\n", len(results.processesKilled))
-	} else {
-		fmt.Printf("✅ Cleaned %d files/directories\n", len(results.filesRemoved))
-		fmt.Printf("✅ Stopped %d processes\n", len(results.processesKilled))
-	}
+	fmt.Printf("✅ Cleaned %d files/directories\n", len(results.filesRemoved))
+	fmt.Printf("✅ Stopped %d processes\n", len(results.processesKilled))
 
 	if len(results.errors) > 0 {
 		fmt.Printf("⚠️  %d errors occurred\n", len(results.errors))
@@ -328,8 +243,7 @@ func printResults(dryRun bool, results *cleanupResults) {
 	fmt.Println("=" + strings.Repeat("=", 50))
 	fmt.Println()
 
-	if !dryRun && len(results.errors) == 0 {
+	if len(results.errors) == 0 {
 		fmt.Println("🎉 OpenFrame cleanup completed successfully!")
 	}
 }
-
