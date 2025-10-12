@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/orbit/pkg/constant"
-	"github.com/fleetdm/fleet/v4/orbit/pkg/update"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 )
