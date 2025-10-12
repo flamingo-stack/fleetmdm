@@ -200,10 +200,10 @@ func NewOrbitClient(
 	orbitCapabilities := fleet.GetOrbitClientCapabilities()
 	urlPrefix := ""
 	if openFrameMode {
-		log.Info().Msg("Add tools agent prefix for openframe mode")
+		log.Debug().Msg("Add tools agent prefix for openframe mode")
 		urlPrefix = "/tools/agent/fleetmdm-server"
 	} else {
-		log.Info().Msg("Add no tools agent prefix for non-openframe mode")
+		log.Debug().Msg("Add no tools agent prefix for non-openframe mode")
 	}
 	bc, err := newBaseClient(addr, insecureSkipVerify, rootCA, urlPrefix, fleetClientCert, orbitCapabilities)
 	if err != nil {
