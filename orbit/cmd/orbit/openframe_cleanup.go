@@ -37,11 +37,6 @@ func cleanupAction(c *cli.Context) error {
 		return fmt.Errorf("This command only works in OpenFrame mode.\nPlease run with --openframe-mode flag or set ORBIT_OPENFRAME_MODE environment variable")
 	}
 
-	// Check for root/admin privileges
-	if !hasAdminPrivileges() {
-		return fmt.Errorf("This command requires administrator/root privileges.\nPlease run with sudo (macOS/Linux) or as Administrator (Windows)")
-	}
-
 	rootDir := c.String("root-dir")
 	if rootDir == "" {
 		rootDir = getDefaultRootDir()
@@ -86,19 +81,6 @@ func getDefaultRootDir() string {
 		return filepath.Join(os.Getenv("ProgramFiles"), "Orbit")
 	default: // linux
 		return "/opt/orbit"
-	}
-}
-
-// hasAdminPrivileges checks if running with admin/root privileges
-func hasAdminPrivileges() bool {
-	switch runtime.GOOS {
-	case "windows":
-		// Check if running as administrator
-		cmd := exec.Command("net", "session")
-		err := cmd.Run()
-		return err == nil
-	default: // unix-like
-		return os.Geteuid() == 0
 	}
 }
 
