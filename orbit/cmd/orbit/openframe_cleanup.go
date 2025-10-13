@@ -42,26 +42,30 @@ func cleanupAction(c *cli.Context) error {
 		rootDir = getDefaultRootDir()
 	}
 
-	fmt.Println("🧹 Starting OpenFrame cleanup...")
+	fmt.Println("Starting OpenFrame cleanup...")
 	results := &cleanupResults{}
 
 	// Stop osqueryd process in OpenFrame mode
 	osquerydPath := c.String("openframe-osquery-path")
 	if err := stopOsqueryd(osquerydPath, results); err != nil {
-		log.Error().Err(err).Msg("Failed to stop osqueryd")
+		return fmt.Errorf("failed to stop osqueryd: %w", err)
 	}
 
-	// Clean all files
-	cleanLogFiles(rootDir, results)
-	cleanCacheFiles(rootDir, results)
-	cleanSecretFiles(rootDir, results)
+	// Clean all files - fail fast on any error
+	if err := cleanLogFiles(rootDir, results); err != nil {
+		return fmt.Errorf("failed to clean log files: %w", err)
+	}
+
+	if err := cleanCacheFiles(rootDir, results); err != nil {
+		return fmt.Errorf("failed to clean cache files: %w", err)
+	}
+
+	if err := cleanSecretFiles(rootDir, results); err != nil {
+		return fmt.Errorf("failed to clean secret files: %w", err)
+	}
 
 	// Print results
 	printResults(results)
-
-	if len(results.errors) > 0 {
-		return fmt.Errorf("cleanup completed with %d errors", len(results.errors))
-	}
 
 	return nil
 }
@@ -69,7 +73,6 @@ func cleanupAction(c *cli.Context) error {
 type cleanupResults struct {
 	filesRemoved    []string
 	processesKilled []string
-	errors          []error
 }
 
 // getDefaultRootDir returns the default root directory based on OS
@@ -86,7 +89,7 @@ func getDefaultRootDir() string {
 
 // stopOsqueryd stops the osqueryd process in OpenFrame mode
 func stopOsqueryd(osquerydPath string, results *cleanupResults) error {
-	fmt.Println("🛑 Stopping osqueryd process...")
+	fmt.Println("Stopping osqueryd process...")
 
 	switch runtime.GOOS {
 	case "darwin", "linux":
@@ -113,33 +116,42 @@ func stopOsqueryd(osquerydPath string, results *cleanupResults) error {
 }
 
 // cleanLogFiles removes log files
-func cleanLogFiles(rootDir string, results *cleanupResults) {
-	fmt.Println("🗑️  Cleaning log files...")
+func cleanLogFiles(rootDir string, results *cleanupResults) error {
+	fmt.Println("Cleaning log files...")
 
 	logPaths := getLogPaths(rootDir)
 	for _, path := range logPaths {
-		removePathIfExists(path, results)
+		if err := removePathIfExists(path, results); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // cleanCacheFiles removes cache and temporary files
-func cleanCacheFiles(rootDir string, results *cleanupResults) {
-	fmt.Println("🗑️  Cleaning cache files...")
+func cleanCacheFiles(rootDir string, results *cleanupResults) error {
+	fmt.Println("Cleaning cache files...")
 
 	cachePaths := getCachePaths(rootDir)
 	for _, path := range cachePaths {
-		removePathIfExists(path, results)
+		if err := removePathIfExists(path, results); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // cleanSecretFiles removes secrets and enrollment data
-func cleanSecretFiles(rootDir string, results *cleanupResults) {
-	fmt.Println("🗑️  Cleaning secrets and enrollment data...")
+func cleanSecretFiles(rootDir string, results *cleanupResults) error {
+	fmt.Println("Cleaning secrets and enrollment data...")
 
 	secretPaths := getSecretPaths(rootDir)
 	for _, path := range secretPaths {
-		removePathIfExists(path, results)
+		if err := removePathIfExists(path, results); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // getLogPaths returns paths to log files
@@ -194,19 +206,19 @@ func getSecretPaths(rootDir string) []string {
 }
 
 // removePathIfExists removes a path if it exists
-func removePathIfExists(path string, results *cleanupResults) {
+func removePathIfExists(path string, results *cleanupResults) error {
 	// Check if path exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return
+		return nil
 	}
 
 	fmt.Printf("  Removing: %s\n", path)
 	if err := os.RemoveAll(path); err != nil {
-		log.Error().Err(err).Msgf("Failed to remove: %s", path)
-		results.errors = append(results.errors, err)
-	} else {
-		results.filesRemoved = append(results.filesRemoved, path)
+		return fmt.Errorf("failed to remove %s: %w", path, err)
 	}
+	
+	results.filesRemoved = append(results.filesRemoved, path)
+	return nil
 }
 
 // printResults prints cleanup results
@@ -214,17 +226,11 @@ func printResults(results *cleanupResults) {
 	fmt.Println()
 	fmt.Println("=" + strings.Repeat("=", 50))
 
-	fmt.Printf("✅ Cleaned %d files/directories\n", len(results.filesRemoved))
-	fmt.Printf("✅ Stopped %d processes\n", len(results.processesKilled))
-
-	if len(results.errors) > 0 {
-		fmt.Printf("⚠️  %d errors occurred\n", len(results.errors))
-	}
+	fmt.Printf("Cleaned %d files/directories\n", len(results.filesRemoved))
+	fmt.Printf("Stopped %d processes\n", len(results.processesKilled))
 
 	fmt.Println("=" + strings.Repeat("=", 50))
 	fmt.Println()
 
-	if len(results.errors) == 0 {
-		fmt.Println("🎉 OpenFrame cleanup completed successfully!")
-	}
+	fmt.Println("OpenFrame cleanup completed successfully!")
 }
