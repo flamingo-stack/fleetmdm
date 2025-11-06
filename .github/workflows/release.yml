@@ -135,30 +135,35 @@ jobs:
       - name: Prepare release artifacts
         run: |
           set -e
-          ls -l release-artifacts
+          ls -lR release-artifacts
+          ls -lR release-artifacts/fleet-mac-universal
+          ls -lR release-artifacts/fleet-windows-amd64
           mkdir -p final-artifacts/clients
+
           # macOS
-          if [ -d "release-artifacts/${client}-macos" ]; then
-            [ -f "release-artifacts/${client}-macos/${client}" ] && \
-              cp "release-artifacts/${client}-macos/${client}" "final-artifacts/clients/${client}_macos"
-            tar -czf "final-artifacts/clients/${client}_macos.tar.gz" \
-              -C "release-artifacts/${client}-macos" .
+          if [ -d "release-artifacts/fleet-mac-universal" ]; then
+            cp "release-artifacts/fleet-mac-universal/artifacts/fleet" "final-artifacts/clients/fleet-macos-universal"
+            tar -czf "final-artifacts/clients/fleet-macos-universal.tar.gz" \
+              -C "final-artifacts/clients" fleet-macos-universal
+            rm "final-artifacts/clients/fleet-macos-universal"
           fi
+
           # Windows
-          if [ -d "release-artifacts/${client}-windows" ]; then
-            [ -f "release-artifacts/${client}-windows/${client}.exe" ] && \
-              cp "release-artifacts/${client}-windows/${client}.exe" "final-artifacts/clients/${client}_windows.exe"
-            (cd "release-artifacts/${client}-windows" && \
-              zip -r "${GITHUB_WORKSPACE}/final-artifacts/clients/${client}_windows.zip" .)
+          if [ -d "release-artifacts/fleet-windows-amd64" ]; then
+            cp "release-artifacts/fleet-windows-amd64/artifacts/fleet.exe" "final-artifacts/clients/fleet-windows-amd64.exe"
+            (cd "final-artifacts/clients" && \
+              zip "fleet-windows-amd64.zip" fleet-windows-amd64.exe)
+            rm "final-artifacts/clients/fleet-windows-amd64.exe"
           fi
+
           ls -lh final-artifacts/clients/
 
       - name: Generate release header
         run: |
           cat > RELEASE_HEADER.md <<EOF
           ## Fleet Clients
-          - **macOS** (Universal): \`openframe-client_macos.tar.gz\`
-          - **Windows** (x64): \`openframe-client_windows.zip\`
+          - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
+          - **Windows** (amd64): \`fleet-windows-amd64.zip\`
           EOF
 
       - name: Create Release
