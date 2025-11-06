@@ -15,8 +15,8 @@ on:
       - "**/*.md"
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Tag to release (e.g., v1.2.3)"
+      version:
+        description: "Version to Release (e.g., v1.2.3)"
         required: true
         type: string
 
@@ -116,9 +116,12 @@ jobs:
     name: "Create Release"
     needs: [build_client]
     runs-on: ubuntu-latest
+    # if: |
+    #   github.event_name == 'workflow_dispatch' && 
+    #   inputs.version != ''
     if: |
-      github.event_name == 'workflow_dispatch' && 
-      inputs.version != ''
+      github.event_name == 'push' || 
+      github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -161,8 +164,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version }}
-          name: "🦩 ${{ inputs.version }}"
+          tag_name: 0.0.1  # ${{ inputs.version }}
+          name: "🦩 0.0.1"  # ${{ inputs.version }}"
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
