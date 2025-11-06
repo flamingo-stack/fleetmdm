@@ -1,4 +1,4 @@
-name: Fleet Release
+name: Fleet Agent Build and Test Latest
 
 permissions:
   contents: write
@@ -9,16 +9,21 @@ permissions:
   id-token: write
 
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to Release (e.g., v1.2.3)"
+      tag:
+        description: "Tag to release (e.g., v1.2.3)"
         required: true
         type: string
+
+concurrency:
+  group: pr-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: "ghcr.io"
@@ -35,8 +40,7 @@ jobs:
     name: "Build Go Client (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     if: |
-      github.event_name == 'push' || 
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
     defaults:
       run:
         shell: bash
@@ -51,7 +55,11 @@ jobs:
           - os: windows-latest
             go_os: windows
             go_arch: amd64
-            artifact_name: fleet-windows-amd64
+            artifact_name: fleet-windows-amd64.exe
+          # - os: windows-latest
+          #   go_os: windows
+          #   go_arch: 386
+          #   artifact_name: fleet-windows-i386.exe
          
     steps:
       - name: Checkout
@@ -72,14 +80,14 @@ jobs:
             architectures=($(echo '${{ toJSON(matrix.go_arch) }}' | jq -r '.[]'))
             for arch in "${architectures[@]}"; do
               echo "Building for ${{ matrix.go_os }}/${arch}"
-              env GOARCH=${arch} go build -o ./build_target/fleet-${arch} ./orbit/cmd/orbit
+              env GOARCH=${arch} go build -o ./build_target/orbit-mac-${arch} ./orbit/cmd/orbit
             done
             ls -la ./build_target
             echo "Create ${{ matrix.artifact_name }}"
             mkdir -p ./artifacts
             arch0=${architectures[0]}
             arch1=${architectures[1]}
-            lipo -create ./build_target/fleet-${arch0} ./build_target/fleet-${arch1} -output ./artifacts/${{ env.BINARY_NAME }}
+            lipo -create ./build_target/orbit-mac-${arch0} ./build_target/orbit-mac-${arch1} -output ./artifacts/${{ env.BINARY_NAME }}
             lipo -info ./artifacts/${{ env.BINARY_NAME }}
             ls -la ./artifacts
             rm -rf ./build_target
@@ -100,69 +108,3 @@ jobs:
           apple_id_password: ${{ secrets.APPLE_ID_PASSWORD }}
           apple_team_id: ${{ secrets.APPLE_TEAM_ID }}
           binary_name: ${{ env.BINARY_NAME }}
-
-      - name: Upload client artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: |
-            artifacts/
-          if-no-files-found: warn
-          retention-days: 30
-          compression-level: 9
-
-
-  release:
-    name: "Create Release"
-    needs: [build_client]
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' && 
-      inputs.version != ''
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-        continue-on-error: true
-
-      - name: Prepare release artifacts
-        run: |
-          set -e
-          mkdir -p final-artifacts/clients
-
-          # macOS
-          if [ -d "release-artifacts/fleet-mac-universal" ]; then
-            tar -czf "final-artifacts/clients/fleet-macos-universal.tar.gz" \
-              -C "release-artifacts/fleet-mac-universal" fleet
-          fi
-          # Windows
-          if [ -d "release-artifacts/fleet-windows-amd64" ]; then
-            (cd "release-artifacts/fleet-windows-amd64" && \
-              zip "${GITHUB_WORKSPACE}/final-artifacts/clients/fleet-windows-amd64.zip" fleet.exe)
-          fi
-
-          ls -lh final-artifacts/clients/
-
-      - name: Generate release header
-        run: |
-          cat > RELEASE_HEADER.md <<EOF
-          ## Fleet Clients
-          - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
-          - **Windows** (amd64): \`fleet-windows-amd64.zip\`
-          EOF
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: 0.0.1  # ${{ inputs.version }}
-          name: "🦩 0.0.1"  # ${{ inputs.version }}"
-          draft: false
-          prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          body_path: RELEASE_HEADER.md
-          files: |
-            final-artifacts/clients/*
