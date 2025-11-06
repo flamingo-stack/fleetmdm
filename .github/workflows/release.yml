@@ -142,7 +142,7 @@ jobs:
 
           # macOS
           if [ -d "release-artifacts/fleet-mac-universal" ]; then
-            cp "release-artifacts/fleet-mac-universal/artifacts/fleet" "final-artifacts/clients/fleet-macos-universal"
+            cp "release-artifacts/fleet-mac-universal/fleet" "final-artifacts/clients/fleet-macos-universal"
             tar -czf "final-artifacts/clients/fleet-macos-universal.tar.gz" \
               -C "final-artifacts/clients" fleet-macos-universal
             rm "final-artifacts/clients/fleet-macos-universal"
@@ -150,7 +150,7 @@ jobs:
 
           # Windows
           if [ -d "release-artifacts/fleet-windows-amd64" ]; then
-            cp "release-artifacts/fleet-windows-amd64/artifacts/fleet.exe" "final-artifacts/clients/fleet-windows-amd64.exe"
+            cp "release-artifacts/fleet-windows-amd64/fleet.exe" "final-artifacts/clients/fleet-windows-amd64.exe"
             (cd "final-artifacts/clients" && \
               zip "fleet-windows-amd64.zip" fleet-windows-amd64.exe)
             rm "final-artifacts/clients/fleet-windows-amd64.exe"
