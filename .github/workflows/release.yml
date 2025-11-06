@@ -1,4 +1,4 @@
-name: Fleet Agent Build and Push Latest
+name: Fleet Release
 
 permissions:
   contents: write
@@ -35,7 +35,8 @@ jobs:
     name: "Build Go Client (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     if: |
-      github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+      github.event_name == 'push' || 
+      github.event_name == 'workflow_dispatch'
     defaults:
       run:
         shell: bash
@@ -109,3 +110,62 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
           compression-level: 9
+
+
+  release:
+    name: "Create Release"
+    needs: [build_client]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && 
+      inputs.version != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+        continue-on-error: true
+
+      - name: Prepare release artifacts
+        run: |
+          set -e
+          ls -l release-artifacts
+          mkdir -p final-artifacts/clients
+          # macOS
+          if [ -d "release-artifacts/${client}-macos" ]; then
+            [ -f "release-artifacts/${client}-macos/${client}" ] && \
+              cp "release-artifacts/${client}-macos/${client}" "final-artifacts/clients/${client}_macos"
+            tar -czf "final-artifacts/clients/${client}_macos.tar.gz" \
+              -C "release-artifacts/${client}-macos" .
+          fi
+          # Windows
+          if [ -d "release-artifacts/${client}-windows" ]; then
+            [ -f "release-artifacts/${client}-windows/${client}.exe" ] && \
+              cp "release-artifacts/${client}-windows/${client}.exe" "final-artifacts/clients/${client}_windows.exe"
+            (cd "release-artifacts/${client}-windows" && \
+              zip -r "${GITHUB_WORKSPACE}/final-artifacts/clients/${client}_windows.zip" .)
+          fi
+          ls -lh final-artifacts/clients/
+
+      - name: Generate release header
+        run: |
+          cat > RELEASE_HEADER.md <<EOF
+          ## Fleet Clients
+          - **macOS** (Universal): \`openframe-client_macos.tar.gz\`
+          - **Windows** (x64): \`openframe-client_windows.zip\`
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: "🦩 ${{ inputs.version }}"
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body_path: RELEASE_HEADER.md
+          files: |
+            final-artifacts/clients/*
