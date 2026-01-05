@@ -3,13 +3,15 @@ set -e
 
 CONFIG_FILE="${FLEET_CONFIG:-/etc/fleet/fleet.yml}"
 
-# Parse MySQL connection
-MYSQL_HOST=$(echo "$FLEET_MYSQL_ADDRESS" | cut -d':' -f1)
-MYSQL_PORT=$(echo "$FLEET_MYSQL_ADDRESS" | cut -d':' -f2)
+# Parse MySQL connection (default port 3306)
+MYSQL_HOST="${FLEET_MYSQL_ADDRESS%%:*}"
+MYSQL_PORT="${FLEET_MYSQL_ADDRESS##*:}"
+[ "$MYSQL_PORT" = "$MYSQL_HOST" ] && MYSQL_PORT=3306
 
-# Parse Redis connection
-REDIS_HOST=$(echo "$FLEET_REDIS_ADDRESS" | cut -d':' -f1)
-REDIS_PORT=$(echo "$FLEET_REDIS_ADDRESS" | cut -d':' -f2)
+# Parse Redis connection (default port 6379)
+REDIS_HOST="${FLEET_REDIS_ADDRESS%%:*}"
+REDIS_PORT="${FLEET_REDIS_ADDRESS##*:}"
+[ "$REDIS_PORT" = "$REDIS_HOST" ] && REDIS_PORT=6379
 
 # Wait for MySQL
 echo "Waiting for MySQL ($MYSQL_HOST:$MYSQL_PORT)..."

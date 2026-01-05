@@ -8,7 +8,7 @@ RUN apk add --no-cache nodejs npm && \
     npm install -g fleetctl@${FLEET_VERSION}
 
 # Stage 2: Runtime
-FROM --platform=$BUILDPLATFORM fleetdm/fleet:v${FLEET_VERSION}
+FROM fleetdm/fleet:v${FLEET_VERSION}
 
 LABEL org.opencontainers.image.description="OpenFrame Fleet MDM Server"
 LABEL org.opencontainers.image.source="https://github.com/flamingo-stack/fleet"
@@ -34,6 +34,6 @@ RUN chmod +x /entrypoint.sh
 EXPOSE ${FLEET_SERVER_PORT}
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -sf http://localhost:${FLEET_SERVER_PORT}/healthz || exit 1
+    CMD ["sh", "-c", "curl -sf http://localhost:${FLEET_SERVER_PORT:-8080}/healthz || exit 1"]
 
 ENTRYPOINT ["/entrypoint.sh"]
