@@ -3,6 +3,17 @@ set -e
 
 CONFIG_FILE="${FLEET_CONFIG:-/etc/fleet/fleet.yml}"
 
+# Validate required environment variables
+if [ -z "$FLEET_MYSQL_ADDRESS" ]; then
+    echo "Error: FLEET_MYSQL_ADDRESS environment variable is required" >&2
+    exit 1
+fi
+
+if [ -z "$FLEET_REDIS_ADDRESS" ]; then
+    echo "Error: FLEET_REDIS_ADDRESS environment variable is required" >&2
+    exit 1
+fi
+
 # Parse MySQL connection (default port 3306)
 MYSQL_HOST="${FLEET_MYSQL_ADDRESS%%:*}"
 MYSQL_PORT="${FLEET_MYSQL_ADDRESS##*:}"
