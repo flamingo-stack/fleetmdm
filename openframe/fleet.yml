@@ -1,14 +1,14 @@
 mysql:
-  address: ${FLEET_MYSQL_ADDRESS}
-  database: ${FLEET_MYSQL_DATABASE}
-  username: ${FLEET_MYSQL_USERNAME}
-  password: ${FLEET_MYSQL_PASSWORD}
+  address: 127.0.0.1:3306
+  database: fleet
+  username: fleet
+  password: fleet
 
 redis:
-  address: ${FLEET_REDIS_ADDRESS}
+  address: 127.0.0.1:6379
 
 server:
-  address: 0.0.0.0:${FLEET_SERVER_PORT}
+  address: 0.0.0.0:8080
   tls: false
 
 logging:
