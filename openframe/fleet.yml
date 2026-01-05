@@ -1,0 +1,24 @@
+mysql:
+  address: ${FLEET_MYSQL_ADDRESS}
+  database: ${FLEET_MYSQL_DATABASE}
+  username: ${FLEET_MYSQL_USERNAME}
+  password: ${FLEET_MYSQL_PASSWORD}
+
+redis:
+  address: ${FLEET_REDIS_ADDRESS}
+
+server:
+  address: 0.0.0.0:${FLEET_SERVER_PORT}
+  tls: false
+
+logging:
+  json: true
+  disable_banner: true
+
+osquery:
+  status_log_plugin: filesystem
+  result_log_plugin: filesystem
+
+filesystem:
+  status_log_file: /var/log/osquery/status.log
+  result_log_file: /var/log/osquery/result.log
