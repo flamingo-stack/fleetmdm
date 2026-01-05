@@ -9,7 +9,7 @@ ARG TARGETARCH
 RUN apk add --no-cache curl tar && \
     ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
     curl -fsSL "https://github.com/fleetdm/fleet/releases/download/fleet-v${FLEET_VERSION}/fleetctl_v${FLEET_VERSION}_linux_${ARCH}.tar.gz" \
-    | tar -xzf - -C /usr/local/bin fleetctl
+    | tar -xzf - --strip-components=1 -C /usr/local/bin "fleetctl_v${FLEET_VERSION}_linux_${ARCH}/fleetctl"
 
 # Stage 2: Runtime
 FROM fleetdm/fleet:v${FLEET_VERSION}
