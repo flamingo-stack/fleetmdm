@@ -19,11 +19,12 @@ LABEL org.opencontainers.image.source="https://github.com/flamingo-stack/fleet"
 
 USER root
 
-ARG FLEET_SERVER_PORT=8080
+# Server port - matches K8s service configuration
+ARG FLEET_SERVER_PORT=8070
 ENV FLEET_SERVER_PORT=${FLEET_SERVER_PORT}
-ENV FLEET_SERVER_ADDRESS=0.0.0.0:${FLEET_SERVER_PORT}
 
 RUN mkdir -p /etc/fleet /var/log/osquery && \
+    chmod 755 /var/log/osquery && \
     apk add --no-cache curl netcat-openbsd
 
 # Copy fleetctl from builder
@@ -31,13 +32,14 @@ COPY --from=builder /usr/local/bin/fleetctl /usr/local/bin/fleetctl
 
 # Copy configuration files
 COPY entrypoint.sh /entrypoint.sh
+COPY init-fleet.sh /usr/share/init-fleet.sh
 COPY fleet.yml /etc/fleet/fleet.yml
 
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /usr/share/init-fleet.sh
 
 EXPOSE ${FLEET_SERVER_PORT}
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD ["sh", "-c", "curl -sf http://localhost:${FLEET_SERVER_PORT:-8080}/healthz || exit 1"]
+    CMD curl -sf http://localhost:${FLEET_SERVER_PORT}/healthz || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -2,6 +2,7 @@
 set -e
 
 CONFIG_FILE="${FLEET_CONFIG:-/etc/fleet/fleet.yml}"
+FLEET_SERVER_PORT="${FLEET_SERVER_PORT:-8070}"
 
 # Validate required environment variables
 if [ -z "$FLEET_MYSQL_ADDRESS" ]; then
@@ -42,6 +43,38 @@ echo "Redis is ready"
 echo "Preparing database..."
 fleet prepare db --config "$CONFIG_FILE" --no-prompt
 
-# Start Fleet
+# Function to wait for Fleet to be ready
+wait_for_fleet() {
+    echo "Waiting for Fleet to be ready..."
+    attempts=0
+    max_attempts=30
+
+    while [ $attempts -lt $max_attempts ]; do
+        if curl -sf "http://localhost:${FLEET_SERVER_PORT}/healthz" >/dev/null 2>&1; then
+            echo "Fleet is ready!"
+            return 0
+        fi
+        attempts=$((attempts + 1))
+        sleep 5
+    done
+
+    echo "Fleet failed to start after $max_attempts attempts"
+    return 1
+}
+
+# Start Fleet server
 echo "Starting Fleet server..."
-exec fleet serve --config "$CONFIG_FILE"
+fleet serve --config "$CONFIG_FILE" &
+FLEET_PID=$!
+
+# Wait for Fleet to be ready
+wait_for_fleet
+
+# Initialize Fleet if auto-init is enabled and API token doesn't exist
+if [ "$FLEET_SETUP_AUTO_INIT" = "true" ] && [ ! -f /etc/fleet/api_token.txt ]; then
+    echo "Running Fleet initialization..."
+    sh /usr/share/init-fleet.sh || true
+fi
+
+# Keep container running and monitor Fleet process
+wait $FLEET_PID
