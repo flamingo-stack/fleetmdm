@@ -82,9 +82,7 @@ universal_binaries:
     ids: [fleetctl-macos] # source binaries
     replace: true
     name_template: fleetctl # resulting binary name
-    hooks:
-      post:
-        - sh -c "FLEETCTL_BINARY_PATH={{ .Path }} ./tools/sign-fleetctl/main.sh"
+    # Signing handled by separate macOS job in release workflow
 
 archives:
   - id: fleet
@@ -111,27 +109,7 @@ archives:
     format: zip
     wrap_in_directory: true
 
-dockers:
-  - goos: linux
-    goarch: amd64
-    ids:
-      - fleet
-      - fleetctl
-    dockerfile: tools/fleet-docker/Dockerfile
-    image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Tag }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:v{{ .Major }}"
-
-  - goos: linux
-    goarch: amd64
-    ids:
-      - fleetctl
-    dockerfile: tools/fleetctl-docker/Dockerfile
-    build_flag_templates:
-      - "--build-arg=binpath=fleetctl"
-    image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleetctl:{{ .Tag }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleetctl:v{{ .Major }}"
+# Docker images built via buildx in release workflow
 
 checksum:
   name_template: "checksums.txt"
