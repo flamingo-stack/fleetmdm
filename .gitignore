@@ -124,3 +124,6 @@ Fleet\ Desktop.app
 # Openframe build artifacts (not the source directories)
 /orbit-*
 /osquery-*
+# Openframe
+orbit**
+osquery**

@@ -752,6 +752,7 @@ func main() {
 				}
 			}
 		}
+		
 
 		// Clear leftover files from updates
 		if err := filepath.Walk(c.String("root-dir"), func(path string, info fs.FileInfo, err error) error {
