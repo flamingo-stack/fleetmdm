@@ -2,10 +2,6 @@ version: 2
 
 project_name: fleet
 
-monorepo:
-  tag_prefix: fleet-
-  dir: .
-
 before:
   hooks:
     - make deps
@@ -64,4 +60,5 @@ dockers:
       - fleetctl
     dockerfile: tools/fleet-docker/Dockerfile
     image_templates:
-      - 'fleetdm/fleet:{{ .ShortCommit }}'
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .ShortCommit }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"

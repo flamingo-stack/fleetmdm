@@ -10,6 +10,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -38,7 +40,9 @@ jobs:
     name: "Go Tests (${{ matrix.suite }})"
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     continue-on-error: true
     strategy:
       fail-fast: false
@@ -254,7 +258,9 @@ jobs:
     name: "Go Tests (NanoMDM)"
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     services:
       mysql:
         image: mysql:8.0.36
@@ -358,7 +364,8 @@ jobs:
     name: "Build Client (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      github.event_name == 'workflow_dispatch'
     defaults:
       run:
         shell: bash
@@ -422,3 +429,55 @@ jobs:
           apple_id_password: ${{ secrets.APPLE_ID_PASSWORD }}
           apple_team_id: ${{ secrets.APPLE_TEAM_ID }}
           binary_name: ${{ env.BINARY_NAME }}
+
+  # ---------------------------------------------------------------------------
+  # Build & Push Docker Images (on push to main)
+  # ---------------------------------------------------------------------------
+  build_docker:
+    name: "Build Docker (latest)"
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+
+      - name: Install JS Dependencies
+        run: make deps-js
+
+      - name: Run GoReleaser (snapshot)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> 2"
+          args: release --snapshot --clean -f .goreleaser-snapshot.yml
+        env:
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Push Docker images
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/fleet:latest
+          docker push ghcr.io/${{ github.repository_owner }}/fleet:$(git rev-parse --short HEAD)
