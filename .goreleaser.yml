@@ -119,8 +119,8 @@ dockers:
       - fleetctl
     dockerfile: tools/fleet-docker/Dockerfile
     image_templates:
-      - "fleetdm/fleet:{{ .Tag }}"
-      - "fleetdm/fleet:v{{ .Major }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Tag }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:v{{ .Major }}"
 
   - goos: linux
     goarch: amd64
@@ -130,8 +130,8 @@ dockers:
     build_flag_templates:
       - "--build-arg=binpath=fleetctl"
     image_templates:
-      - "fleetdm/fleetctl:{{ .Tag }}"
-      - "fleetdm/fleetctl:v{{ .Major }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleetctl:{{ .Tag }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleetctl:v{{ .Major }}"
 
 checksum:
   name_template: "checksums.txt"
@@ -143,8 +143,6 @@ changelog:
   disable: true
 
 release:
-  github:
-    owner: fleetdm
-    name: fleet
+  # Uses GITHUB_TOKEN to determine repository automatically
   draft: true
   prerelease: auto

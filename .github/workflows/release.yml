@@ -9,16 +9,20 @@ permissions:
   id-token: write
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
   workflow_dispatch:
     inputs:
       version:
         description: "Version to Release (e.g., v1.2.3)"
         required: true
         type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 env:
   REGISTRY: "ghcr.io"
@@ -31,15 +35,102 @@ env:
 # =============================================================================
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # GoReleaser - Build Fleet Server and fleetctl
+  # ---------------------------------------------------------------------------
+  goreleaser:
+    name: "GoReleaser (Fleet + fleetctl)"
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+
+      - name: Install JS Dependencies
+        run: make deps-js
+
+      - name: Install macOS signing tools
+        run: |
+          pushd /tmp
+          readonly version="0.27.0"
+          readonly codesign_package="apple-codesign-${version}-x86_64-unknown-linux-musl.tar.gz"
+          curl -O -L "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${version}/${codesign_package}"
+          curl -O -L "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${version}/${codesign_package}.sha256"
+          echo "$(cat $codesign_package.sha256)  $codesign_package" | sha256sum --quiet --strict --check -
+          tar --extract --strip-components 1 --file "$codesign_package"
+          mkdir -p $HOME/.bin
+          mv rcodesign $HOME/.bin/
+          echo "$HOME/.bin" >> $GITHUB_PATH
+          popd
+
+      - name: Create release tag
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -a "fleet-${{ inputs.version }}" -m "Release ${{ inputs.version }}"
+
+      - name: Run GoReleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser-pro
+          version: "~> 2"
+          args: release --clean -f .goreleaser.yml
+        env:
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_APPLICATION_CERTIFICATE: ${{ secrets.APPLE_APPLICATION_CERTIFICATE }}
+          APPLE_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_APPLICATION_CERTIFICATE_PASSWORD }}
+          APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
+          APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
+          APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+
+      - name: Attest binaries and archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/**"
+        continue-on-error: true
+
+      - name: Upload GoReleaser artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: goreleaser-artifacts
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Build Orbit Client (macOS + Windows)
+  # ---------------------------------------------------------------------------
   build_client:
-    name: "Build Go Client (${{ matrix.os }})"
+    name: "Build Orbit Client (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
-    if: |
-      github.event_name == 'push' || 
-      github.event_name == 'workflow_dispatch'
-    defaults:
-      run:
-        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -52,7 +143,7 @@ jobs:
             go_os: windows
             go_arch: amd64
             artifact_name: fleet-windows-amd64
-         
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,9 +153,9 @@ jobs:
       - name: Prepare Build tools
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.1'
+          go-version-file: 'go.mod'
 
-      - name: Compile agent for ${{ matrix.go_os }}
+      - name: Compile Orbit for ${{ matrix.go_os }}
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
@@ -111,14 +202,13 @@ jobs:
           retention-days: 30
           compression-level: 9
 
-
+  # ---------------------------------------------------------------------------
+  # Create GitHub Release
+  # ---------------------------------------------------------------------------
   release:
     name: "Create Release"
-    needs: [build_client]
+    needs: [goreleaser, build_client]
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' && 
-      inputs.version != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -133,36 +223,67 @@ jobs:
         run: |
           set -e
           mkdir -p final-artifacts/clients
+          mkdir -p final-artifacts/server
 
-          # macOS
+          # Copy GoReleaser artifacts (Fleet server + fleetctl)
+          if [ -d "release-artifacts/goreleaser-artifacts" ]; then
+            cp release-artifacts/goreleaser-artifacts/*.tar.gz final-artifacts/server/ 2>/dev/null || true
+            cp release-artifacts/goreleaser-artifacts/*.zip final-artifacts/server/ 2>/dev/null || true
+            cp release-artifacts/goreleaser-artifacts/checksums.txt final-artifacts/server/ 2>/dev/null || true
+          fi
+
+          # macOS Orbit client
           if [ -d "release-artifacts/fleet-mac-universal" ]; then
-            tar -czf "final-artifacts/clients/fleet-macos-universal.tar.gz" \
+            tar -czf "final-artifacts/clients/orbit-macos-universal.tar.gz" \
               -C "release-artifacts/fleet-mac-universal" fleet
           fi
-          # Windows
+
+          # Windows Orbit client
           if [ -d "release-artifacts/fleet-windows-amd64" ]; then
             (cd "release-artifacts/fleet-windows-amd64" && \
-              zip "${GITHUB_WORKSPACE}/final-artifacts/clients/fleet-windows-amd64.zip" fleet.exe)
+              zip "${GITHUB_WORKSPACE}/final-artifacts/clients/orbit-windows-amd64.zip" fleet.exe)
           fi
 
-          ls -lh final-artifacts/clients/
+          echo "=== Server artifacts ==="
+          ls -lh final-artifacts/server/ 2>/dev/null || echo "No server artifacts"
+          echo "=== Client artifacts ==="
+          ls -lh final-artifacts/clients/ 2>/dev/null || echo "No client artifacts"
 
-      - name: Generate release header
+      - name: Generate release notes
         run: |
-          cat > RELEASE_HEADER.md <<EOF
-          ## Fleet Clients
-          - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
-          - **Windows** (amd64): \`fleet-windows-amd64.zip\`
+          cat > RELEASE_NOTES.md <<EOF
+          ## Release ${{ inputs.version }}
+
+          ### Fleet Server & fleetctl
+          Built with GoReleaser. See \`checksums.txt\` for verification.
+
+          | Component | Platform | File |
+          |-----------|----------|------|
+          | Fleet Server | Linux (amd64) | \`fleet_v*_linux.tar.gz\` |
+          | fleetctl | Linux (amd64) | \`fleetctl_v*_linux_amd64.tar.gz\` |
+          | fleetctl | Linux (arm64) | \`fleetctl_v*_linux_arm64.tar.gz\` |
+          | fleetctl | macOS (Universal) | \`fleetctl_v*_macos.tar.gz\` |
+          | fleetctl | Windows (amd64) | \`fleetctl_v*_windows_amd64.zip\` |
+
+          ### Orbit Clients (Openframe)
+          | Platform | File |
+          |----------|------|
+          | macOS (Universal) | \`orbit-macos-universal.tar.gz\` |
+          | Windows (amd64) | \`orbit-windows-amd64.zip\` |
+
+          ---
+          Built from commit: \`${{ github.sha }}\`
           EOF
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: "🦩 ${{ inputs.version }}"
+          name: "${{ inputs.version }}"
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          body_path: RELEASE_HEADER.md
+          body_path: RELEASE_NOTES.md
           files: |
+            final-artifacts/server/*
             final-artifacts/clients/*
