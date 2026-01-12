@@ -223,13 +223,6 @@ jobs:
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           docker push ghcr.io/${{ github.repository_owner }}/fleet:${SHORT_SHA}
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            docker push ghcr.io/${{ github.repository_owner }}/fleet:latest
-          else
-            BRANCH_TAG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-            docker tag ghcr.io/${{ github.repository_owner }}/fleet:${SHORT_SHA} ghcr.io/${{ github.repository_owner }}/fleet:${BRANCH_TAG}
-            docker push ghcr.io/${{ github.repository_owner }}/fleet:${BRANCH_TAG}
-          fi
 
   # ---------------------------------------------------------------------------
   # Cleanup test artifacts
