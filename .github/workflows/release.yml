@@ -36,10 +36,10 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # GoReleaser - Build Fleet Server and fleetctl
+  # GoReleaser - Build Fleet Server
   # ---------------------------------------------------------------------------
   goreleaser:
-    name: "GoReleaser (Fleet + fleetctl)"
+    name: "GoReleaser (Fleet)"
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
@@ -104,52 +104,6 @@ jobs:
             dist/*.zip
             dist/checksums.txt
           if-no-files-found: warn
-          retention-days: 30
-
-      - name: Upload fleetctl macOS binary for signing
-        uses: actions/upload-artifact@v4
-        with:
-          name: fleetctl-macos-unsigned
-          path: dist/fleetctl-macos_darwin_all/fleetctl
-          if-no-files-found: error
-          retention-days: 1
-
-  # ---------------------------------------------------------------------------
-  # Sign fleetctl macOS binary
-  # ---------------------------------------------------------------------------
-  sign_fleetctl:
-    name: "Sign fleetctl (macOS)"
-    needs: [goreleaser]
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Download unsigned fleetctl
-        uses: actions/download-artifact@v4
-        with:
-          name: fleetctl-macos-unsigned
-          path: artifacts
-
-      - name: Sign macOS binary
-        uses: ./.github/steps/sign-macos-package
-        with:
-          apple_certificate_p12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-          apple_certificate_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          apple_developer_id: ${{ secrets.APPLE_DEVELOPER_ID }}
-          apple_id_username: ${{ secrets.APPLE_ID_USERNAME }}
-          apple_id_password: ${{ secrets.APPLE_ID_PASSWORD }}
-          apple_team_id: ${{ secrets.APPLE_TEAM_ID }}
-          binary_name: fleetctl
-
-      - name: Upload signed fleetctl
-        uses: actions/upload-artifact@v4
-        with:
-          name: fleetctl-macos-signed
-          path: artifacts/fleetctl
-          if-no-files-found: error
           retention-days: 30
 
   # ---------------------------------------------------------------------------
@@ -243,11 +197,6 @@ jobs:
           - image: fleet
             dockerfile: tools/fleet-docker/Dockerfile
             context: .
-          - image: fleetctl
-            dockerfile: tools/fleetctl-docker/Dockerfile
-            context: .
-            build_args: |
-              binpath=fleetctl
 
     steps:
       - name: Checkout
@@ -264,15 +213,8 @@ jobs:
       - name: Extract binaries for Docker build
         run: |
           # Extract fleet binary
-          if [[ "${{ matrix.image }}" == "fleet" ]]; then
-            tar -xzf dist/fleet_v*_linux.tar.gz -C . --strip-components=1
-            ls -la fleet
-          fi
-          # Extract fleetctl binary
-          if [[ "${{ matrix.image }}" == "fleetctl" ]]; then
-            tar -xzf dist/fleetctl_v*_linux_amd64.tar.gz -C . --strip-components=1
-            ls -la fleetctl
-          fi
+          tar -xzf dist/fleet_v*_linux.tar.gz -C . --strip-components=1
+          ls -la fleet
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -312,7 +254,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: "Create Release"
-    needs: [goreleaser, sign_fleetctl, build_client, docker_buildx]
+    needs: [goreleaser, build_client, docker_buildx]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -330,34 +272,11 @@ jobs:
           mkdir -p final-artifacts/clients
           mkdir -p final-artifacts/server
 
-          # Copy GoReleaser artifacts (Fleet server + fleetctl)
+          # Copy GoReleaser artifacts (Fleet server)
           if [ -d "release-artifacts/goreleaser-artifacts" ]; then
             cp release-artifacts/goreleaser-artifacts/*.tar.gz final-artifacts/server/ 2>/dev/null || true
             cp release-artifacts/goreleaser-artifacts/*.zip final-artifacts/server/ 2>/dev/null || true
             cp release-artifacts/goreleaser-artifacts/checksums.txt final-artifacts/server/ 2>/dev/null || true
-          fi
-
-          # Replace unsigned fleetctl macOS with signed version
-          if [ -d "release-artifacts/fleetctl-macos-signed" ]; then
-            # Find the unsigned macOS archive and get its name
-            MACOS_ARCHIVE=$(ls final-artifacts/server/fleetctl_v*_macos.tar.gz 2>/dev/null | head -1)
-            if [ -n "$MACOS_ARCHIVE" ]; then
-              echo "Replacing unsigned fleetctl macOS archive with signed version"
-              rm -f "$MACOS_ARCHIVE"
-              # Create new archive with signed binary
-              ARCHIVE_NAME=$(basename "$MACOS_ARCHIVE")
-              mkdir -p tmp-fleetctl
-              cp release-artifacts/fleetctl-macos-signed/fleetctl tmp-fleetctl/
-              tar -czf "final-artifacts/server/${ARCHIVE_NAME}" -C tmp-fleetctl fleetctl
-              rm -rf tmp-fleetctl
-              # Update checksums
-              if [ -f "final-artifacts/server/checksums.txt" ]; then
-                # Remove old fleetctl macOS checksum and add new one
-                grep -v "fleetctl_v.*_macos.tar.gz" final-artifacts/server/checksums.txt > final-artifacts/server/checksums.tmp || true
-                (cd final-artifacts/server && sha256sum "${ARCHIVE_NAME}" >> checksums.tmp)
-                mv final-artifacts/server/checksums.tmp final-artifacts/server/checksums.txt
-              fi
-            fi
           fi
 
           # macOS Orbit client
@@ -382,16 +301,12 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           ## Release ${{ inputs.version }}
 
-          ### Fleet Server & fleetctl
+          ### Fleet Server
           Built with GoReleaser. See \`checksums.txt\` for verification.
 
           | Component | Platform | File |
           |-----------|----------|------|
           | Fleet Server | Linux (amd64) | \`fleet_v*_linux.tar.gz\` |
-          | fleetctl | Linux (amd64) | \`fleetctl_v*_linux_amd64.tar.gz\` |
-          | fleetctl | Linux (arm64) | \`fleetctl_v*_linux_arm64.tar.gz\` |
-          | fleetctl | macOS (Universal) | \`fleetctl_v*_macos.tar.gz\` |
-          | fleetctl | Windows (amd64) | \`fleetctl_v*_windows_amd64.zip\` |
 
           ### Orbit Clients (Openframe)
           | Platform | File |
