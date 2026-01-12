@@ -859,6 +859,8 @@ func (a *agent) runOrbitLoop() {
 		nil,
 		signerWrapper,
 		"",
+		false, // openFrameMode
+		nil,   // authManager
 	)
 	if err != nil {
 		log.Println("creating orbit client: ", err)
