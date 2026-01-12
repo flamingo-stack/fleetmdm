@@ -63,6 +63,7 @@ dockers:
     use: buildx
     build_flag_templates:
       - "--load"
+      - "--no-cache"
     extra_files:
       - tools/fleet-docker/entrypoint.sh
       - tools/fleet-docker/init-fleet.sh
