@@ -60,6 +60,9 @@ dockers:
       - fleet
       - fleetctl
     dockerfile: tools/fleet-docker/Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--load"
     extra_files:
       - tools/fleet-docker/entrypoint.sh
       - tools/fleet-docker/init-fleet.sh
