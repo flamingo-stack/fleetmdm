@@ -1,0 +1,41 @@
+name: Generate Matrix
+
+on:
+  workflow_call:
+    outputs:
+      clients_matrix:
+        description: "Clients Matrix configuration for orbit builds"
+        value: ${{ jobs.matrix.outputs.clients_matrix }}
+
+jobs:
+  matrix:
+    name: Generate matrix
+    runs-on: ubuntu-latest
+    outputs:
+      clients_matrix: ${{ steps.matrix.outputs.clients_matrix }}
+    steps:
+      - name: Define Matrix
+        id: matrix
+        run: |
+          clients_matrix_json='[
+            {
+              "name": "orbit",
+              "os": "macos-latest",
+              "go_os": "darwin",
+              "go_arch": ["arm64", "amd64"],
+              "artifact_name": "fleet-mac-universal"
+            },
+            {
+              "name": "orbit",
+              "os": "windows-latest",
+              "go_os": "windows",
+              "go_arch": "amd64",
+              "artifact_name": "fleet-windows-amd64"
+            }
+          ]'
+
+          {
+            echo 'clients_matrix<<EOF'
+            echo "$clients_matrix_json"
+            echo EOF
+          } >> $GITHUB_OUTPUT

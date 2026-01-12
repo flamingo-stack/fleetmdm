@@ -1,5 +1,9 @@
 name: Fleet Release
 
+# =============================================================================
+# WORKFLOW CONFIGURATION
+# =============================================================================
+
 permissions:
   contents: write
   packages: write
@@ -35,6 +39,14 @@ env:
 # =============================================================================
 
 jobs:
+  changes:
+    name: Detect Changes
+    uses: ./.github/workflows/changes.yml
+
+  matrix:
+    name: Generate Matrix
+    uses: ./.github/workflows/matrix.yml
+
   # ---------------------------------------------------------------------------
   # GoReleaser - Build Fleet Server
   # ---------------------------------------------------------------------------
@@ -111,19 +123,12 @@ jobs:
   # ---------------------------------------------------------------------------
   build_client:
     name: "Build Orbit Client (${{ matrix.os }})"
+    needs: [matrix]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            go_os: darwin
-            go_arch: [arm64, amd64]
-            artifact_name: fleet-mac-universal
-          - os: windows-latest
-            go_os: windows
-            go_arch: amd64
-            artifact_name: fleet-windows-amd64
+        include: ${{ fromJson(needs.matrix.outputs.clients_matrix) }}
 
     steps:
       - name: Checkout
@@ -187,17 +192,9 @@ jobs:
   # Build and Push Docker Images with buildx
   # ---------------------------------------------------------------------------
   docker_buildx:
-    name: "Docker Build (${{ matrix.image }})"
+    name: "Docker Build (fleet)"
     needs: [goreleaser]
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: fleet
-            dockerfile: tools/fleet-docker/Dockerfile
-            context: .
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,7 +209,6 @@ jobs:
 
       - name: Extract binaries for Docker build
         run: |
-          # Extract fleet binary
           tar -xzf dist/fleet_v*_linux.tar.gz -C . --strip-components=1
           ls -la fleet
 
@@ -230,7 +226,6 @@ jobs:
         id: version
         run: |
           VERSION="${{ inputs.version }}"
-          # Remove 'v' prefix if present for major version
           VERSION_NUM="${VERSION#v}"
           MAJOR=$(echo "$VERSION_NUM" | cut -d. -f1)
           echo "tag=${VERSION}" >> $GITHUB_OUTPUT
@@ -239,13 +234,13 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: .
+          file: tools/fleet-docker/Dockerfile
           push: true
-          build-args: ${{ matrix.build_args }}
           tags: |
-            ghcr.io/${{ env.ORGANISATION }}/${{ matrix.image }}:${{ steps.version.outputs.tag }}
-            ghcr.io/${{ env.ORGANISATION }}/${{ matrix.image }}:${{ steps.version.outputs.major }}
+            ghcr.io/${{ env.ORGANISATION }}/fleet:${{ steps.version.outputs.tag }}
+            ghcr.io/${{ env.ORGANISATION }}/fleet:${{ steps.version.outputs.major }}
+            ghcr.io/${{ env.ORGANISATION }}/fleet:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -254,7 +249,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: "Create Release"
-    needs: [goreleaser, build_client, docker_buildx]
+    needs: [goreleaser, build_client, docker_buildx, matrix]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -308,7 +303,11 @@ jobs:
           |-----------|----------|------|
           | Fleet Server | Linux (amd64) | \`fleet_v*_linux.tar.gz\` |
 
-          ### Orbit Clients (Openframe)
+          ### Docker Images
+          - \`ghcr.io/${{ env.ORGANISATION }}/fleet:${{ inputs.version }}\`
+          - \`ghcr.io/${{ env.ORGANISATION }}/fleet:latest\`
+
+          ### Orbit Clients
           | Platform | File |
           |----------|------|
           | macOS (Universal) | \`orbit-macos-universal.tar.gz\` |
@@ -330,3 +329,13 @@ jobs:
           files: |
             final-artifacts/server/*
             final-artifacts/clients/*
+
+      - name: Cleanup old container versions
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        continue-on-error: true
+        with:
+          package: fleet
+          delete-ghost-images: true
+          delete-tags: '.*'
+          exclude-tags: '^(?:[0-9]+\.[0-9]+\.[0-9]+|v[0-9]+|latest)$'
+          use-regex: true

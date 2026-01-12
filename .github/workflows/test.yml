@@ -1,5 +1,9 @@
 name: Fleet Test
 
+# =============================================================================
+# WORKFLOW CONFIGURATION
+# =============================================================================
+
 permissions:
   contents: read
   packages: write
@@ -10,12 +14,23 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
+    paths:
+      - 'server/**'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'ee/**'
+      - 'orbit/**'
+      - 'frontend/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'package.json'
+      - '.github/**'
   push:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: pr-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -33,43 +48,95 @@ env:
 # =============================================================================
 
 jobs:
+  changes:
+    name: Detect Changes
+    uses: ./.github/workflows/changes.yml
+    if: |
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+
+  matrix:
+    name: Generate Matrix
+    uses: ./.github/workflows/matrix.yml
+    if: |
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+
+  # ---------------------------------------------------------------------------
+  # Go Tests
+  # ---------------------------------------------------------------------------
+  go_test:
+    name: "Go Tests"
+    needs: [changes]
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Check if tests should run
+        id: should_run
+        run: echo "run=${{ needs.changes.outputs.go == 'true' || github.event_name == 'workflow_dispatch' }}" >> $GITHUB_OUTPUT
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: steps.should_run.outputs.run == 'true'
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        if: steps.should_run.outputs.run == 'true'
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run Go tests
+        if: steps.should_run.outputs.run == 'true'
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        if: steps.should_run.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
   # ---------------------------------------------------------------------------
   # Build Client (macOS + Windows)
   # ---------------------------------------------------------------------------
   build_client:
     name: "Build Client (${{ matrix.os }})"
+    needs: [changes, matrix]
     runs-on: ${{ matrix.os }}
     if: |
       (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
       github.event_name == 'workflow_dispatch'
-    defaults:
-      run:
-        shell: bash
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            go_os: darwin
-            go_arch: [arm64, amd64]
-            artifact_name: fleet-mac-universal
-          - os: windows-latest
-            go_os: windows
-            go_arch: amd64
-            artifact_name: fleet-windows-amd64.exe
+        include: ${{ fromJson(needs.matrix.outputs.clients_matrix) }}
 
     steps:
+      - name: Check if build should run
+        id: should_run
+        run: echo "run=${{ needs.changes.outputs.orbit == 'true' || github.event_name == 'workflow_dispatch' }}" >> $GITHUB_OUTPUT
+
       - name: Checkout
         uses: actions/checkout@v4
+        if: steps.should_run.outputs.run == 'true'
         with:
           fetch-depth: 1
 
       - name: Prepare Build tools
         uses: actions/setup-go@v5
+        if: steps.should_run.outputs.run == 'true'
         with:
           go-version-file: 'go.mod'
 
       - name: Compile agent for ${{ matrix.go_os }}
+        if: steps.should_run.outputs.run == 'true'
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
@@ -94,23 +161,22 @@ jobs:
             ls -la ./artifacts
           fi
 
-      - name: Sign MacOS package
-        if: runner.os == 'macOS'
-        uses: ./.github/steps/sign-macos-package
+      - name: Upload client artifact
+        if: steps.should_run.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
         with:
-          apple_certificate_p12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-          apple_certificate_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          apple_developer_id: ${{ secrets.APPLE_DEVELOPER_ID }}
-          apple_id_username: ${{ secrets.APPLE_ID_USERNAME }}
-          apple_id_password: ${{ secrets.APPLE_ID_PASSWORD }}
-          apple_team_id: ${{ secrets.APPLE_TEAM_ID }}
-          binary_name: ${{ env.BINARY_NAME }}
+          name: ${{ matrix.artifact_name }}-test
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 9
 
   # ---------------------------------------------------------------------------
   # Build & Push Docker Images (on push to main)
   # ---------------------------------------------------------------------------
   build_docker:
     name: "Build Docker (latest)"
+    needs: [changes]
     runs-on: ubuntu-22.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -157,3 +223,21 @@ jobs:
         run: |
           docker push ghcr.io/${{ github.repository_owner }}/fleet:latest
           docker push ghcr.io/${{ github.repository_owner }}/fleet:$(git rev-parse --short HEAD)
+
+  # ---------------------------------------------------------------------------
+  # Cleanup test artifacts
+  # ---------------------------------------------------------------------------
+  cleanup:
+    name: "Cleanup"
+    needs: [changes, build_client, go_test]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && always()
+    steps:
+      - name: Delete test artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            fleet-mac-universal-test
+            fleet-windows-amd64-test
+            coverage-report
+          failOnError: false
