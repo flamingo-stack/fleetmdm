@@ -172,13 +172,13 @@ jobs:
           compression-level: 9
 
   # ---------------------------------------------------------------------------
-  # Build & Push Docker Images (on push to main)
+  # Build & Push Docker Images (on push to main or workflow_dispatch)
   # ---------------------------------------------------------------------------
   build_docker:
     name: "Build Docker (latest)"
     needs: [changes]
     runs-on: ubuntu-22.04
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -221,8 +221,15 @@ jobs:
 
       - name: Push Docker images
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/fleet:latest
-          docker push ghcr.io/${{ github.repository_owner }}/fleet:$(git rev-parse --short HEAD)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          docker push ghcr.io/${{ github.repository_owner }}/fleet:${SHORT_SHA}
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            docker push ghcr.io/${{ github.repository_owner }}/fleet:latest
+          else
+            BRANCH_TAG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            docker tag ghcr.io/${{ github.repository_owner }}/fleet:${SHORT_SHA} ghcr.io/${{ github.repository_owner }}/fleet:${BRANCH_TAG}
+            docker push ghcr.io/${{ github.repository_owner }}/fleet:${BRANCH_TAG}
+          fi
 
   # ---------------------------------------------------------------------------
   # Cleanup test artifacts
