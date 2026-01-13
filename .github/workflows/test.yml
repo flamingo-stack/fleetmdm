@@ -25,17 +25,10 @@ on:
       - 'go.sum'
       - 'package.json'
       - '.github/**'
-  push:
-    branches: [main]
-  workflow_dispatch:
 
 concurrency:
   group: pr-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
-
-defaults:
-  run:
-    shell: bash
+  cancel-in-progress: false
 
 env:
   REGISTRY: "ghcr.io"
@@ -51,18 +44,12 @@ jobs:
   changes:
     name: Detect Changes
     uses: ./.github/workflows/changes.yml
-    if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
 
   matrix:
     name: Generate Matrix
     uses: ./.github/workflows/matrix.yml
-    if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
 
   # ---------------------------------------------------------------------------
   # Go Tests
@@ -71,13 +58,11 @@ jobs:
     name: "Go Tests"
     needs: [changes]
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     steps:
       - name: Check if tests should run
         id: should_run
-        run: echo "run=${{ needs.changes.outputs.go == 'true' || github.event_name == 'workflow_dispatch' }}" >> $GITHUB_OUTPUT
+        run: echo "run=${{ needs.changes.outputs.go == 'true' }}" >> $GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -110,9 +95,7 @@ jobs:
     name: "Build Client (${{ matrix.os }})"
     needs: [changes, matrix]
     runs-on: ${{ matrix.os }}
-    if: |
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -121,7 +104,7 @@ jobs:
     steps:
       - name: Check if build should run
         id: should_run
-        run: echo "run=${{ needs.changes.outputs.orbit == 'true' || github.event_name == 'workflow_dispatch' }}" >> $GITHUB_OUTPUT
+        run: echo "run=${{ needs.changes.outputs.orbit == 'true' }}" >> $GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -161,6 +144,18 @@ jobs:
             ls -la ./artifacts
           fi
 
+      - name: Sign MacOS package
+        if: steps.should_run.outputs.run == 'true' && runner.os == 'macOS'
+        uses: ./.github/steps/sign-macos-package
+        with:
+          apple_certificate_p12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          apple_certificate_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          apple_developer_id: ${{ secrets.APPLE_DEVELOPER_ID }}
+          apple_id_username: ${{ secrets.APPLE_ID_USERNAME }}
+          apple_id_password: ${{ secrets.APPLE_ID_PASSWORD }}
+          apple_team_id: ${{ secrets.APPLE_TEAM_ID }}
+          binary_name: ${{ env.BINARY_NAME }}
+
       - name: Upload client artifact
         if: steps.should_run.outputs.run == 'true'
         uses: actions/upload-artifact@v4
@@ -172,13 +167,13 @@ jobs:
           compression-level: 9
 
   # ---------------------------------------------------------------------------
-  # Build & Push Docker Images (on push to main or workflow_dispatch)
+  # Build Docker Image
   # ---------------------------------------------------------------------------
-  build_docker:
-    name: "Build Docker (latest)"
+  build:
+    name: "Build Docker"
     needs: [changes]
     runs-on: ubuntu-22.04
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -218,11 +213,6 @@ jobs:
           args: release --snapshot --clean -f .goreleaser-snapshot.yml
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-
-      - name: Push Docker images
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          docker push ghcr.io/${{ github.repository_owner }}/fleet:${SHORT_SHA}
 
   # ---------------------------------------------------------------------------
   # Cleanup test artifacts

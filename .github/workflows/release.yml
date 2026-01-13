@@ -24,10 +24,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-defaults:
-  run:
-    shell: bash
-
 env:
   REGISTRY: "ghcr.io"
   ORGANISATION: ${{ github.repository_owner }}
@@ -48,10 +44,10 @@ jobs:
     uses: ./.github/workflows/matrix.yml
 
   # ---------------------------------------------------------------------------
-  # GoReleaser - Build Fleet Server
+  # Build Fleet Server
   # ---------------------------------------------------------------------------
-  goreleaser:
-    name: "GoReleaser (Fleet)"
+  build:
+    name: "Build Fleet"
     runs-on: ubuntu-22.04
     steps:
       - name: Harden Runner
@@ -189,71 +185,11 @@ jobs:
           compression-level: 9
 
   # ---------------------------------------------------------------------------
-  # Build and Push Docker Images with buildx
-  # ---------------------------------------------------------------------------
-  docker_buildx:
-    name: "Docker Build (fleet)"
-    needs: [goreleaser]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Download GoReleaser artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: goreleaser-artifacts
-          path: dist
-
-      - name: Extract binaries for Docker build
-        run: |
-          tar -xzf dist/fleet_v*_linux.tar.gz -C . --strip-components=1
-          ls -la fleet
-          # Copy support files to build context root
-          cp tools/fleet-docker/entrypoint.sh .
-          cp tools/fleet-docker/init-fleet.sh .
-          cp tools/fleet-docker/fleet.yml .
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract version for tags
-        id: version
-        run: |
-          VERSION="${{ inputs.version }}"
-          VERSION_NUM="${VERSION#v}"
-          MAJOR=$(echo "$VERSION_NUM" | cut -d. -f1)
-          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
-          echo "major=v${MAJOR}" >> $GITHUB_OUTPUT
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: tools/fleet-docker/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ env.ORGANISATION }}/fleet:${{ steps.version.outputs.tag }}
-            ghcr.io/${{ env.ORGANISATION }}/fleet:${{ steps.version.outputs.major }}
-            ghcr.io/${{ env.ORGANISATION }}/fleet:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
   # Create GitHub Release
   # ---------------------------------------------------------------------------
   release:
     name: "Create Release"
-    needs: [goreleaser, build_client, docker_buildx, matrix]
+    needs: [build, build_client, matrix]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
