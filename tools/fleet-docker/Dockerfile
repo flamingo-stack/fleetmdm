@@ -18,9 +18,9 @@ COPY fleet /usr/bin/
 COPY fleetctl /usr/bin/
 
 # Copy initialization scripts and config
-COPY entrypoint.sh /entrypoint.sh
-COPY init-fleet.sh /usr/share/init-fleet.sh
-COPY fleet.yml /etc/fleet/fleet.yml
+COPY tools/fleet-docker/entrypoint.sh /entrypoint.sh
+COPY tools/fleet-docker/init-fleet.sh /usr/share/init-fleet.sh
+COPY tools/fleet-docker/fleet.yml /etc/fleet/fleet.yml
 
 # Set permissions
 RUN chmod +x /entrypoint.sh /usr/share/init-fleet.sh /usr/bin/fleet /usr/bin/fleetctl
