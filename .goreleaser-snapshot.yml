@@ -65,12 +65,9 @@ dockers:
       - "--no-cache"
       - "--pull"
     extra_files:
-      - src: tools/fleet-docker/entrypoint.sh
-        dst: entrypoint.sh
-      - src: tools/fleet-docker/init-fleet.sh
-        dst: init-fleet.sh
-      - src: tools/fleet-docker/fleet.yml
-        dst: fleet.yml
+      - tools/fleet-docker/entrypoint.sh
+      - tools/fleet-docker/init-fleet.sh
+      - tools/fleet-docker/fleet.yml
     image_templates:
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .ShortCommit }}"
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
