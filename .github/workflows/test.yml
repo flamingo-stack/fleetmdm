@@ -217,7 +217,6 @@ jobs:
           version: "~> 2"
           args: release --snapshot --clean -f .goreleaser-snapshot.yml
         env:
-          DOCKER_BUILDKIT: "0"
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
       - name: Push Docker images
