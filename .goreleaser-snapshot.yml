@@ -60,8 +60,10 @@ dockers:
       - fleet
       - fleetctl
     dockerfile: tools/fleet-docker/Dockerfile
+    use: docker
     build_flag_templates:
       - "--no-cache"
+      - "--pull"
     extra_files:
       - tools/fleet-docker/entrypoint.sh
       - tools/fleet-docker/init-fleet.sh

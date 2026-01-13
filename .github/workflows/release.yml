@@ -211,6 +211,10 @@ jobs:
         run: |
           tar -xzf dist/fleet_v*_linux.tar.gz -C . --strip-components=1
           ls -la fleet
+          # Copy support files to build context root
+          cp tools/fleet-docker/entrypoint.sh .
+          cp tools/fleet-docker/init-fleet.sh .
+          cp tools/fleet-docker/fleet.yml .
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
