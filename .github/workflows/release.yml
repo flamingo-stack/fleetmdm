@@ -35,14 +35,6 @@ env:
 # =============================================================================
 
 jobs:
-  changes:
-    name: Detect Changes
-    uses: ./.github/workflows/changes.yml
-
-  matrix:
-    name: Generate Matrix
-    uses: ./.github/workflows/matrix.yml
-
   # ---------------------------------------------------------------------------
   # Build Fleet Server
   # ---------------------------------------------------------------------------
@@ -119,12 +111,19 @@ jobs:
   # ---------------------------------------------------------------------------
   build_client:
     name: "Build Orbit Client (${{ matrix.os }})"
-    needs: [matrix]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.matrix.outputs.clients_matrix) }}
+        include:
+          - os: macos-latest
+            go_os: darwin
+            go_arch: ["arm64", "amd64"]
+            artifact_name: fleet-mac-universal
+          - os: windows-latest
+            go_os: windows
+            go_arch: amd64
+            artifact_name: fleet-windows-amd64
 
     steps:
       - name: Checkout
@@ -189,7 +188,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: "Create Release"
-    needs: [build, build_client, matrix]
+    needs: [build, build_client]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

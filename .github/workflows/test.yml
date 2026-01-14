@@ -46,11 +46,6 @@ jobs:
     uses: ./.github/workflows/changes.yml
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
 
-  matrix:
-    name: Generate Matrix
-    uses: ./.github/workflows/matrix.yml
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-
   # ---------------------------------------------------------------------------
   # Go Tests
   # ---------------------------------------------------------------------------
@@ -88,38 +83,36 @@ jobs:
           path: coverage.out
           retention-days: 7
 
-  # ---------------------------------------------------------------------------
-  # Build Client (macOS + Windows)
-  # ---------------------------------------------------------------------------
   build_client:
     name: "Build Client (${{ matrix.os }})"
-    needs: [changes, matrix]
+    needs: [changes]
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && needs.changes.outputs.orbit == 'true'
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.matrix.outputs.clients_matrix) }}
+        include:
+          - os: macos-latest
+            go_os: darwin
+            go_arch: ["arm64", "amd64"]
+            artifact_name: fleet-mac-universal
+          - os: windows-latest
+            go_os: windows
+            go_arch: amd64
+            artifact_name: fleet-windows-amd64
 
     steps:
-      - name: Check if build should run
-        id: should_run
-        run: echo "run=${{ needs.changes.outputs.orbit == 'true' }}" >> $GITHUB_OUTPUT
-
       - name: Checkout
         uses: actions/checkout@v4
-        if: steps.should_run.outputs.run == 'true'
         with:
           fetch-depth: 1
 
       - name: Prepare Build tools
         uses: actions/setup-go@v5
-        if: steps.should_run.outputs.run == 'true'
         with:
           go-version-file: 'go.mod'
 
       - name: Compile agent for ${{ matrix.go_os }}
-        if: steps.should_run.outputs.run == 'true'
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
@@ -145,7 +138,7 @@ jobs:
           fi
 
       - name: Sign MacOS package
-        if: steps.should_run.outputs.run == 'true' && runner.os == 'macOS'
+        if: runner.os == 'macOS'
         uses: ./.github/steps/sign-macos-package
         with:
           apple_certificate_p12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
@@ -157,7 +150,6 @@ jobs:
           binary_name: ${{ env.BINARY_NAME }}
 
       - name: Upload client artifact
-        if: steps.should_run.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}-test
@@ -211,23 +203,3 @@ jobs:
           distribution: goreleaser
           version: "~> 2"
           args: release --snapshot --clean -f .goreleaser-snapshot.yml
-        env:
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-
-  # ---------------------------------------------------------------------------
-  # Cleanup test artifacts
-  # ---------------------------------------------------------------------------
-  cleanup:
-    name: "Cleanup"
-    needs: [changes, build_client, go_test]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && always()
-    steps:
-      - name: Delete test artifacts
-        uses: geekyeggo/delete-artifact@v5
-        with:
-          name: |
-            fleet-mac-universal-test
-            fleet-windows-amd64-test
-            coverage-report
-          failOnError: false
