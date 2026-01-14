@@ -76,17 +76,16 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git tag -a "fleet-${{ inputs.version }}" -m "Release ${{ inputs.version }}"
+          git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }}"
 
       - name: Run GoReleaser
         id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          distribution: goreleaser-pro
+          distribution: goreleaser
           version: "~> 2"
           args: release --clean -f .goreleaser.yml
         env:
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest binaries and archives
@@ -137,6 +136,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Compile Orbit for ${{ matrix.go_os }}
+        shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
