@@ -113,6 +113,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Compile agent for ${{ matrix.go_os }}
+        shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
