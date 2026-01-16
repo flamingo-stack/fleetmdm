@@ -132,14 +132,14 @@ func rawCertToPemFile(t *testing.T, raw []byte) string {
 func TestDebugCheckAPIEndpoint(t *testing.T) {
 	const timeout = 100 * time.Millisecond
 	cases := [...]struct {
-		code        int // == 0 panics, negative value waits for timeout, sets status code to absolute value
+		code        int // == 0 hijacks and closes connection, negative value waits for timeout, sets status code to absolute value
 		body        string
 		errContains string // empty if checkAPIEndpoint should not return an error
 	}{
 		{401, `{"error": "fail", "node_invalid": true}`, ""},
 		{-401, `{"error": "fail", "node_invalid": true}`, "deadline exceeded"},
 		{200, `{"error": "", "node_invalid": false}`, "unexpected 200 response"},
-		{0, `panic`, "EOF"},
+		{0, ``, "EOF"},
 	}
 
 	var callCount int32
@@ -148,7 +148,15 @@ func TestDebugCheckAPIEndpoint(t *testing.T) {
 
 		switch {
 		case res.code == 0:
-			panic(res.body)
+			// Hijack the connection and close it abruptly to simulate EOF
+			// This avoids using panic which interferes with coverage profiling
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, err := hj.Hijack()
+				if err == nil {
+					conn.Close()
+				}
+			}
+			return
 		case res.code < 0:
 			time.Sleep(timeout + timeout/10)
 			res.code = -res.code
