@@ -302,7 +302,7 @@ func createTestUsers(t *testing.T, ds fleet.Datastore) map[string]fleet.User {
 			Email:      u.Email,
 			GlobalRole: u.GlobalRole,
 		}
-		err := user.SetPassword(u.PlaintextPassword, 10, 10)
+		err := user.SetPassword(u.PlaintextPassword, 24, 6) // Use lower bcrypt cost for fast tests
 		require.Nil(t, err)
 		user, err = ds.NewUser(context.Background(), user)
 		require.Nil(t, err)
