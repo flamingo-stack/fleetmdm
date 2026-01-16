@@ -61,6 +61,11 @@ func newDBConnForTests(t *testing.T) *sqlx.DB {
 	)
 	require.NoError(t, err)
 
+	// Check if MySQL is available, skip if not
+	if err := db.Ping(); err != nil {
+		t.Skipf("Skipping test: MySQL not available at %s: %v", testAddress, err)
+	}
+
 	name := strings.ReplaceAll(strings.ReplaceAll(t.Name(), "/", "_"), " ", "_")
 	_, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s; CREATE DATABASE %s; USE %s;", name, name, name))
 	require.NoError(t, err)

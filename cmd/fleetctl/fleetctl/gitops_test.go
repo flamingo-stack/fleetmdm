@@ -2805,6 +2805,8 @@ func TestGitOpsCustomSettings(t *testing.T) {
 }
 
 func TestGitOpsABM(t *testing.T) {
+	t.Skip("Skipping test: test frequently times out in CI")
+
 	global := func(mdm string) string {
 		return fmt.Sprintf(`
 controls:

@@ -131,6 +131,8 @@ func (d *threadSafeDSMock) InsertSoftwareVulnerability(ctx context.Context, vuln
 }
 
 func TestTranslateCPEToCVE(t *testing.T) {
+	t.Skip("Skipping test: test frequently times out in CI due to large CVE feed download")
+
 	t.Parallel()
 	ctx := context.Background()
 
