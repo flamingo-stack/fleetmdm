@@ -1,10 +1,6 @@
 #!/bin/sh
 set -e
 
-# Extract host and port from Redis address
-REDIS_HOST=$(echo $FLEET_REDIS_ADDRESS | cut -d':' -f1)
-REDIS_PORT=$(echo $FLEET_REDIS_ADDRESS | cut -d':' -f2)
-
 # Function to wait for Fleet to be ready
 wait_for_fleet() {
     echo "Waiting for Fleet to be ready..."
@@ -25,24 +21,9 @@ wait_for_fleet() {
     return 1
 }
 
-echo "Waiting for Redis ($REDIS_HOST:$REDIS_PORT) to be ready..."
-until nc -z $REDIS_HOST $REDIS_PORT; do
-    echo "Redis is not ready yet..."
-    sleep 2
-done
+
+echo "Preparing database..."
+fleet prepare db --config "$FLEET_CONFIG" --no-prompt 2>&1 | tee /tmp/prepare.log || grep -q "already exists" /tmp/prepare.log || exit 1
 
 echo "Starting Fleet server..."
 fleet serve --config "$FLEET_CONFIG" &
-FLEET_PID=$!
-
-# Wait for Fleet to be ready
-wait_for_fleet
-
-# Initialize Fleet using fleetctl if API token doesn't exist
-if [ "$FLEET_SETUP_AUTO_INIT" = "true" ] && [ ! -f /etc/fleet/api_token.txt ]; then
-    echo "Running Fleet initialization..."
-    sh /usr/share/init-fleet.sh || true
-fi
-
-# Keep container running and monitor Fleet process
-wait $FLEET_PID
