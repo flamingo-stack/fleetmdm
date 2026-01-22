@@ -64,7 +64,11 @@ jobs:
               - 'package.json'
               - 'yarn.lock'
             go:
-              - '**/*.go'
+              - 'server/**'
+              - 'cmd/**'
+              - 'pkg/**'
+              - 'ee/**'
+              - 'orbit/**'
               - 'go.mod'
               - 'go.sum'
             docker:

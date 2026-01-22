@@ -46,50 +46,42 @@ jobs:
     uses: ./.github/workflows/changes.yml
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
 
-  # ---------------------------------------------------------------------------
-  # Go Tests
-  # ---------------------------------------------------------------------------
-  go_test:
+  test_client:
     name: "Go Tests"
     needs: [changes]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      contains(needs.changes.outputs.go, 'true')
     steps:
-      - name: Check if tests should run
-        id: should_run
-        run: echo "run=${{ needs.changes.outputs.go == 'true' }}" >> $GITHUB_OUTPUT
-
       - name: Checkout
         uses: actions/checkout@v4
-        if: steps.should_run.outputs.run == 'true'
-        with:
-          fetch-depth: 1
 
       - name: Set up Go
         uses: actions/setup-go@v5
-        if: steps.should_run.outputs.run == 'true'
         with:
           go-version-file: 'go.mod'
 
       - name: Run Go tests
-        if: steps.should_run.outputs.run == 'true'
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        if: steps.should_run.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.out
-          retention-days: 7
+          retention-days: 3
 
   build_client:
     name: "Build Client (${{ matrix.os }})"
     needs: [changes]
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && needs.changes.outputs.orbit == 'true'
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      needs.changes.outputs.orbit == 'true'
     strategy:
-      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -99,7 +91,7 @@ jobs:
           - os: windows-latest
             go_os: windows
             go_arch: amd64
-            artifact_name: fleet-windows-amd64
+            artifact_name: fleet-windows-amd64.exe
 
     steps:
       - name: Checkout
@@ -165,8 +157,10 @@ jobs:
   build:
     name: "Build Docker"
     needs: [changes]
-    runs-on: ubuntu-22.04
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -175,8 +169,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -198,9 +190,9 @@ jobs:
       - name: Install JS Dependencies
         run: make deps-js
 
-      - name: Run GoReleaser (snapshot)
+      - name: Build with GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> 2"
-          args: release --snapshot --clean -f .goreleaser-snapshot.yml
+          args: build --snapshot --clean -f .goreleaser-snapshot.yml
