@@ -13,16 +13,16 @@ permissions:
   id-token: write
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
   workflow_dispatch:
     inputs:
       version:
         description: "Version to Release (e.g., v1.2.3)"
         required: true
         type: string
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
 
 env:
   REGISTRY: "ghcr.io"
@@ -35,82 +35,15 @@ env:
 # =============================================================================
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build Fleet Server
-  # ---------------------------------------------------------------------------
-  build:
-    name: "Build Fleet"
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: package.json
-
-      - name: Install JS Dependencies
-        run: make deps-js
-
-      - name: Create release tag
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }}"
-
-      - name: Run GoReleaser
-        id: goreleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> 2"
-          args: release --clean -f .goreleaser.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Attest binaries and archives
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: "dist/**"
-        continue-on-error: true
-
-      - name: Upload GoReleaser artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: goreleaser-artifacts
-          path: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
-          if-no-files-found: warn
-          retention-days: 30
-
-  # ---------------------------------------------------------------------------
-  # Build Orbit Client (macOS + Windows)
-  # ---------------------------------------------------------------------------
   build_client:
     name: "Build Orbit Client (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -183,9 +116,57 @@ jobs:
           retention-days: 30
           compression-level: 9
 
-  # ---------------------------------------------------------------------------
-  # Create GitHub Release
-  # ---------------------------------------------------------------------------
+  build:
+    name: "Build Fleet"
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      inputs.version != ''
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+
+      - name: Install JS Dependencies
+        run: make deps-js
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+          git push origin "${VERSION}"
+
+      - name: Run GoReleaser
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.version }}
+        run: |
+          goreleaser release --clean
+
   release:
     name: "Create Release"
     needs: [build, build_client]
@@ -260,21 +241,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: "${{ inputs.version }}"
+          name: "🦩 ${{ inputs.version }}"
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          body_path: RELEASE_NOTES.md
+          body_path: RELEASE_HEADER.md
           files: |
             final-artifacts/server/*
             final-artifacts/clients/*
-
-      - name: Cleanup old container versions
-        uses: dataaxiom/ghcr-cleanup-action@v1
-        continue-on-error: true
-        with:
-          package: fleet
-          delete-ghost-images: true
-          delete-tags: '.*'
-          exclude-tags: '^(?:[0-9]+\.[0-9]+\.[0-9]+|v[0-9]+|latest)$'
-          use-regex: true
