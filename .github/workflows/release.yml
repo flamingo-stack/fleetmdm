@@ -23,6 +23,16 @@ on:
         description: "Version to Release (e.g., v1.2.3)"
         required: true
         type: string
+      build_client:
+        description: "Build Orbit clients (macOS/Windows)"
+        required: false
+        type: boolean
+        default: true
+      build_server:
+        description: "Build Fleet server & Docker image"
+        required: false
+        type: boolean
+        default: true
 
 env:
   REGISTRY: "ghcr.io"
@@ -40,7 +50,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: |
       github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'workflow_dispatch' && inputs.build_client)
     defaults:
       run:
         shell: bash
@@ -120,8 +130,8 @@ jobs:
     name: "Build Fleet"
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'workflow_dispatch' &&
-      inputs.version != ''
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_server)
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -152,6 +162,7 @@ jobs:
         run: make deps-js
 
       - name: Create and push tag
+        if: github.event_name == 'workflow_dispatch'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -160,17 +171,41 @@ jobs:
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin "${VERSION}"
 
-      - name: Run GoReleaser
+      - name: Run GoReleaser (release)
+        if: github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ inputs.version }}
         run: |
           goreleaser release --clean
 
+      - name: Run GoReleaser (snapshot)
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          goreleaser release --snapshot --clean
+
+      - name: Set up Docker Buildx
+        if: github.event_name == 'push'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image (main)
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:latest
+
   release:
     name: "Create Release"
     needs: [build, build_client]
     runs-on: ubuntu-latest
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      (needs.build.result == 'success' || needs.build_client.result == 'success')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
