@@ -220,56 +220,26 @@ jobs:
         run: |
           set -e
           mkdir -p final-artifacts/clients
-          mkdir -p final-artifacts/server
 
-          # Copy GoReleaser artifacts (Fleet server)
-          if [ -d "release-artifacts/goreleaser-artifacts" ]; then
-            cp release-artifacts/goreleaser-artifacts/*.tar.gz final-artifacts/server/ 2>/dev/null || true
-            cp release-artifacts/goreleaser-artifacts/*.zip final-artifacts/server/ 2>/dev/null || true
-            cp release-artifacts/goreleaser-artifacts/checksums.txt final-artifacts/server/ 2>/dev/null || true
-          fi
-
-          # macOS Orbit client
+          # macOS
           if [ -d "release-artifacts/fleet-mac-universal" ]; then
-            tar -czf "final-artifacts/clients/orbit-macos-universal.tar.gz" \
+            tar -czf "final-artifacts/clients/fleet-macos-universal.tar.gz" \
               -C "release-artifacts/fleet-mac-universal" fleet
           fi
-
-          # Windows Orbit client
+          # Windows
           if [ -d "release-artifacts/fleet-windows-amd64" ]; then
             (cd "release-artifacts/fleet-windows-amd64" && \
-              zip "${GITHUB_WORKSPACE}/final-artifacts/clients/orbit-windows-amd64.zip" fleet.exe)
+              zip "${GITHUB_WORKSPACE}/final-artifacts/clients/fleet-windows-amd64.zip" fleet.exe)
           fi
 
-          echo "=== Server artifacts ==="
-          ls -lh final-artifacts/server/ 2>/dev/null || echo "No server artifacts"
-          echo "=== Client artifacts ==="
-          ls -lh final-artifacts/clients/ 2>/dev/null || echo "No client artifacts"
+          ls -lh final-artifacts/clients/
 
-      - name: Generate release notes
+      - name: Generate release header
         run: |
-          cat > RELEASE_NOTES.md <<EOF
-          ## Release ${{ inputs.version }}
-
-          ### Fleet Server
-          Built with GoReleaser. See \`checksums.txt\` for verification.
-
-          | Component | Platform | File |
-          |-----------|----------|------|
-          | Fleet Server | Linux (amd64) | \`fleet_v*_linux.tar.gz\` |
-
-          ### Docker Images
-          - \`ghcr.io/${{ env.ORGANISATION }}/fleet:${{ inputs.version }}\`
-          - \`ghcr.io/${{ env.ORGANISATION }}/fleet:latest\`
-
-          ### Orbit Clients
-          | Platform | File |
-          |----------|------|
-          | macOS (Universal) | \`orbit-macos-universal.tar.gz\` |
-          | Windows (amd64) | \`orbit-windows-amd64.zip\` |
-
-          ---
-          Built from commit: \`${{ github.sha }}\`
+          cat > RELEASE_HEADER.md <<EOF
+          ## Fleet Clients
+          - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
+          - **Windows** (amd64): \`fleet-windows-amd64.zip\`
           EOF
 
       - name: Create Release
@@ -282,5 +252,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           body_path: RELEASE_HEADER.md
           files: |
-            final-artifacts/server/*
             final-artifacts/clients/*
