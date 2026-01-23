@@ -11,6 +11,8 @@ on:
 jobs:
   changes:
     name: Detect Changes
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       server: ${{ steps.filter.outputs.server }}
