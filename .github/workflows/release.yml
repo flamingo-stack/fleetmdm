@@ -184,23 +184,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image (main)
-        if: github.event_name == 'push'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:latest
-
-      - name: Build and push Docker image (release)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:${{ inputs.version }}
             ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:latest
+            ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}/{1}:{2}', env.ORGANISATION, env.REPOSITORY, inputs.version) || '' }}
 
   release:
     name: "Create Release"
@@ -220,23 +211,6 @@ jobs:
           path: release-artifacts
         continue-on-error: true
 
-      - name: Determine release type
-        id: release-type
-        run: |
-          SERVER_BUILT="${{ needs.build.result == 'success' }}"
-          CLIENT_BUILT="${{ needs.build_client.result == 'success' }}"
-
-          if [[ "$SERVER_BUILT" == "true" && "$CLIENT_BUILT" == "true" ]]; then
-            echo "type=Server & Client" >> $GITHUB_OUTPUT
-            echo "name=🦩 ${{ inputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "$SERVER_BUILT" == "true" ]]; then
-            echo "type=Server" >> $GITHUB_OUTPUT
-            echo "name=🦩 ${{ inputs.version }} (Server)" >> $GITHUB_OUTPUT
-          elif [[ "$CLIENT_BUILT" == "true" ]]; then
-            echo "type=Client" >> $GITHUB_OUTPUT
-            echo "name=🦩 ${{ inputs.version }} (Client)" >> $GITHUB_OUTPUT
-          fi
-
       - name: Prepare release artifacts
         run: |
           set -e
@@ -255,38 +229,12 @@ jobs:
 
           ls -lh final-artifacts/clients/
 
-      - name: Generate release header
-        run: |
-          cat > RELEASE_HEADER.md <<EOF
-          ## ${{ steps.release-type.outputs.type }} Release ${{ inputs.version }}
-          EOF
-
-          if [[ "${{ needs.build.result }}" == "success" ]]; then
-            cat >> RELEASE_HEADER.md <<EOF
-
-          ### Fleet Server
-          - **Linux** (amd64): See GoReleaser artifacts
-          - **Docker**: \`ghcr.io/${{ env.ORGANISATION }}/fleet:${{ inputs.version }}\`
-          EOF
-          fi
-
-          if [[ "${{ needs.build_client.result }}" == "success" ]]; then
-            cat >> RELEASE_HEADER.md <<EOF
-
-          ### Fleet Clients
-          - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
-          - **Windows** (amd64): \`fleet-windows-amd64.zip\`
-          EOF
-          fi
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: ${{ steps.release-type.outputs.name }}
-          draft: false
-          prerelease: false
+          name: 🦩 ${{ inputs.version }}${{ (needs.build.result == 'success' && needs.build_client.result == 'success') && '' || needs.build.result == 'success' && ' (Server)' || ' (Client)' }}
+          generate_release_notes: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          body_path: RELEASE_HEADER.md
           files: |
             final-artifacts/clients/*
