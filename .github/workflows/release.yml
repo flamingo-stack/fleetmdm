@@ -186,18 +186,6 @@ jobs:
             goreleaser release --clean
           fi
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:latest
-            ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}/{1}:{2}', env.ORGANISATION, env.REPOSITORY, inputs.version) || '' }}
-
   release:
     name: "Create Release"
     needs: [build, build_client]
