@@ -29,7 +29,7 @@ on:
         type: boolean
         default: true
       build_server:
-        description: "Build Fleet server & Docker image"
+        description: "Build Fleet server"
         required: false
         type: boolean
         default: true
