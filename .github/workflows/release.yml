@@ -24,7 +24,7 @@ on:
         required: true
         type: string
       build_client:
-        description: "Build Orbit clients (macOS/Windows)"
+        description: "Build Fleet client (macOS/Windows)"
         required: false
         type: boolean
         default: true
@@ -50,7 +50,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: |
       github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.build_client)
+      (github.event_name == 'workflow_dispatch' && inputs.build_client && inputs.version != '')
     defaults:
       run:
         shell: bash
@@ -79,7 +79,6 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Compile Orbit for ${{ matrix.go_os }}
-        shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
@@ -123,7 +122,7 @@ jobs:
           path: |
             artifacts/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
           compression-level: 9
 
   build:
@@ -131,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.build_server)
+      (github.event_name == 'workflow_dispatch' && inputs.build_server && inputs.version != '')
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -171,23 +170,18 @@ jobs:
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin "${VERSION}"
 
-      - name: Run GoReleaser (release)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ inputs.version }}
+          GORELEASER_CURRENT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
         run: |
-          goreleaser release --clean
-
-      - name: Run GoReleaser (snapshot)
-        if: github.event_name == 'push'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          goreleaser release --snapshot --clean
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            goreleaser release --snapshot --clean
+          else
+            goreleaser release --clean
+          fi
 
       - name: Set up Docker Buildx
-        if: github.event_name == 'push'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image (main)
@@ -198,13 +192,23 @@ jobs:
           push: true
           tags: ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:latest
 
+      - name: Build and push Docker image (release)
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:${{ inputs.version }}
+            ghcr.io/${{ env.ORGANISATION }}/${{ env.REPOSITORY }}:latest
+
   release:
     name: "Create Release"
     needs: [build, build_client]
     runs-on: ubuntu-latest
     if: |
-      always() &&
       github.event_name == 'workflow_dispatch' &&
+      inputs.version != '' &&
       (needs.build.result == 'success' || needs.build_client.result == 'success')
     steps:
       - name: Checkout
@@ -215,6 +219,23 @@ jobs:
         with:
           path: release-artifacts
         continue-on-error: true
+
+      - name: Determine release type
+        id: release-type
+        run: |
+          SERVER_BUILT="${{ needs.build.result == 'success' }}"
+          CLIENT_BUILT="${{ needs.build_client.result == 'success' }}"
+
+          if [[ "$SERVER_BUILT" == "true" && "$CLIENT_BUILT" == "true" ]]; then
+            echo "type=Server & Client" >> $GITHUB_OUTPUT
+            echo "name=🦩 ${{ inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "$SERVER_BUILT" == "true" ]]; then
+            echo "type=Server" >> $GITHUB_OUTPUT
+            echo "name=🦩 ${{ inputs.version }} (Server)" >> $GITHUB_OUTPUT
+          elif [[ "$CLIENT_BUILT" == "true" ]]; then
+            echo "type=Client" >> $GITHUB_OUTPUT
+            echo "name=🦩 ${{ inputs.version }} (Client)" >> $GITHUB_OUTPUT
+          fi
 
       - name: Prepare release artifacts
         run: |
@@ -237,16 +258,32 @@ jobs:
       - name: Generate release header
         run: |
           cat > RELEASE_HEADER.md <<EOF
-          ## Fleet Clients
+          ## ${{ steps.release-type.outputs.type }} Release ${{ inputs.version }}
+          EOF
+
+          if [[ "${{ needs.build.result }}" == "success" ]]; then
+            cat >> RELEASE_HEADER.md <<EOF
+
+          ### Fleet Server
+          - **Linux** (amd64): See GoReleaser artifacts
+          - **Docker**: \`ghcr.io/${{ env.ORGANISATION }}/fleet:${{ inputs.version }}\`
+          EOF
+          fi
+
+          if [[ "${{ needs.build_client.result }}" == "success" ]]; then
+            cat >> RELEASE_HEADER.md <<EOF
+
+          ### Fleet Clients
           - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
           - **Windows** (amd64): \`fleet-windows-amd64.zip\`
           EOF
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: "🦩 ${{ inputs.version }}"
+          name: ${{ steps.release-type.outputs.name }}
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
