@@ -14,17 +14,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
-    paths:
-      - 'server/**'
-      - 'cmd/**'
-      - 'pkg/**'
-      - 'ee/**'
-      - 'orbit/**'
-      - 'frontend/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'package.json'
-      - '.github/**'
 
 concurrency:
   group: pr-${{ github.head_ref || github.ref }}
@@ -53,7 +42,7 @@ jobs:
     if: |
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft &&
-      needs.changes.outputs.orbit == 'true'
+      needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -80,7 +69,7 @@ jobs:
     if: |
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft &&
-      needs.changes.outputs.orbit == 'true'
+      needs.changes.outputs.client == 'true'
     strategy:
       matrix:
         include:
@@ -104,7 +93,7 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Compile agent for ${{ matrix.go_os }}
+      - name: Compile Client for ${{ matrix.go_os }}
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
@@ -113,14 +102,14 @@ jobs:
             architectures=($(echo '${{ toJSON(matrix.go_arch) }}' | jq -r '.[]'))
             for arch in "${architectures[@]}"; do
               echo "Building for ${{ matrix.go_os }}/${arch}"
-              env GOARCH=${arch} go build -o ./build_target/orbit-mac-${arch} ./orbit/cmd/orbit
+              env GOARCH=${arch} go build -o ./build_target/client-mac-${arch} ./orbit/cmd/orbit
             done
             ls -la ./build_target
             echo "Create ${{ matrix.artifact_name }}"
             mkdir -p ./artifacts
             arch0=${architectures[0]}
             arch1=${architectures[1]}
-            lipo -create ./build_target/orbit-mac-${arch0} ./build_target/orbit-mac-${arch1} -output ./artifacts/${{ env.BINARY_NAME }}
+            lipo -create ./build_target/client-mac-${arch0} ./build_target/client-mac-${arch1} -output ./artifacts/${{ env.BINARY_NAME }}
             lipo -info ./artifacts/${{ env.BINARY_NAME }}
             ls -la ./artifacts
             rm -rf ./build_target
@@ -152,12 +141,13 @@ jobs:
           compression-level: 9
 
   build:
-    name: "Build Docker"
+    name: "Build Server"
     needs: [changes]
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'pull_request' &&
-      !github.event.pull_request.draft
+      !github.event.pull_request.draft &&
+      needs.changes.outputs.server == 'true'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -193,4 +183,4 @@ jobs:
           install-only: true
 
       - name: Build with GoReleaser
-        run: goreleaser build --snapshot --clean -f .goreleaser-snapshot.yml
+        run: goreleaser build --snapshot --clean

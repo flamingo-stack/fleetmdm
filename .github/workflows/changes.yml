@@ -5,20 +5,8 @@ on:
     outputs:
       server:
         value: ${{ jobs.changes.outputs.server }}
-      orbit:
-        value: ${{ jobs.changes.outputs.orbit }}
-      frontend:
-        value: ${{ jobs.changes.outputs.frontend }}
-      go:
-        value: ${{ jobs.changes.outputs.go }}
-      docker:
-        value: ${{ jobs.changes.outputs.docker }}
-      charts:
-        value: ${{ jobs.changes.outputs.charts }}
-      commit_sha:
-        value: ${{ jobs.changes.outputs.commit_sha }}
-      test_commit_sha:
-        value: ${{ jobs.changes.outputs.test_commit_sha }}
+      client:
+        value: ${{ jobs.changes.outputs.client }}
 
 jobs:
   changes:
@@ -26,23 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       server: ${{ steps.filter.outputs.server }}
-      orbit: ${{ steps.filter.outputs.orbit }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      go: ${{ steps.filter.outputs.go }}
-      docker: ${{ steps.filter.outputs.docker }}
-      charts: ${{ steps.filter.outputs.charts }}
-      commit_sha: ${{ steps.setup_env.outputs.commit_sha }}
-      test_commit_sha: ${{ steps.setup_env.outputs.test_commit_sha }}
+      client: ${{ steps.filter.outputs.client }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-
-      - name: Set up environment
-        id: setup_env
-        run: |
-          echo "commit_sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
-          echo "test_commit_sha=test-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
       - uses: dorny/paths-filter@v2
         id: filter
@@ -55,24 +31,7 @@ jobs:
               - 'ee/**'
               - 'go.mod'
               - 'go.sum'
-            orbit:
+            client:
               - 'orbit/**'
               - 'go.mod'
               - 'go.sum'
-            frontend:
-              - 'frontend/**'
-              - 'package.json'
-              - 'yarn.lock'
-            go:
-              - 'server/**'
-              - 'cmd/**'
-              - 'pkg/**'
-              - 'ee/**'
-              - 'orbit/**'
-              - 'go.mod'
-              - 'go.sum'
-            docker:
-              - 'tools/fleet-docker/**'
-              - '.goreleaser*.yml'
-            charts:
-              - 'charts/**'

@@ -46,7 +46,7 @@ env:
 
 jobs:
   build_client:
-    name: "Build Orbit Client (${{ matrix.os }})"
+    name: "Build Client (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     if: |
       github.event_name == 'push' ||
@@ -78,7 +78,7 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Compile Orbit for ${{ matrix.go_os }}
+      - name: Compile Client for ${{ matrix.go_os }}
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             rm -rf ./build_target
@@ -179,12 +179,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            goreleaser release --snapshot --clean
-          else
-            goreleaser release --clean
-          fi
+        run: goreleaser release --clean
 
   release:
     name: "Create Release"
