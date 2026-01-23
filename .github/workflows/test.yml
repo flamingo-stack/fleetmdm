@@ -187,5 +187,10 @@ jobs:
       - name: Install JS Dependencies
         run: make deps-js
 
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+
       - name: Build with GoReleaser
         run: goreleaser build --snapshot --clean -f .goreleaser-snapshot.yml
