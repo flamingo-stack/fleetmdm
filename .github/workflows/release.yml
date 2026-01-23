@@ -221,7 +221,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: 🦩 ${{ inputs.version }}${{ (needs.build.result == 'success' && needs.build_client.result == 'success') && '' || needs.build.result == 'success' && ' (Server)' || ' (Client)' }}
+          name: 🦩 ${{ inputs.version }}
           generate_release_notes: true
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
