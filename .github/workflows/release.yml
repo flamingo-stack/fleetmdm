@@ -186,6 +186,7 @@ jobs:
     needs: [build, build_client]
     runs-on: ubuntu-latest
     if: |
+      !cancelled() &&
       github.event_name == 'workflow_dispatch' &&
       inputs.version != '' &&
       (needs.build.result == 'success' || needs.build_client.result == 'success')
