@@ -36,34 +36,7 @@ jobs:
       !github.event.pull_request.draft
 
   test_client:
-    name: "Go Tests"
-    needs: [changes]
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'pull_request' &&
-      !github.event.pull_request.draft &&
-      needs.changes.outputs.client == 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Run Go tests
-        run: go test -race -coverprofile=coverage.out ./...
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.out
-          retention-days: 3
-
-  build_client:
-    name: "Build Client (${{ matrix.os }})"
+    name: "Test Client (${{ matrix.name }})"
     needs: [changes]
     runs-on: ${{ matrix.os }}
     if: |
@@ -73,11 +46,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - name: unit-tests
+            os: ubuntu-latest
+            task: test
+          - name: macos
+            os: macos-latest
+            task: build
             go_os: darwin
             go_arch: ["arm64", "amd64"]
             artifact_name: fleet-mac-universal
-          - os: windows-latest
+          - name: windows
+            os: windows-latest
+            task: build
             go_os: windows
             go_arch: amd64
             artifact_name: fleet-windows-amd64.exe
@@ -88,12 +68,25 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Prepare Build tools
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
+      - name: Run Go tests
+        if: matrix.task == 'test'
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        if: matrix.task == 'test'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 3
+
       - name: Compile Client for ${{ matrix.go_os }}
+        if: matrix.task == 'build'
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
@@ -120,7 +113,7 @@ jobs:
           fi
 
       - name: Sign MacOS package
-        if: runner.os == 'macOS'
+        if: matrix.task == 'build' && runner.os == 'macOS'
         uses: ./.github/steps/sign-macos-package
         with:
           apple_certificate_p12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
@@ -132,6 +125,7 @@ jobs:
           binary_name: ${{ env.BINARY_NAME }}
 
       - name: Upload client artifact
+        if: matrix.task == 'build'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}-test
@@ -140,8 +134,8 @@ jobs:
           retention-days: 1
           compression-level: 9
 
-  build:
-    name: "Build Server"
+  test:
+    name: "Test Server"
     needs: [changes]
     runs-on: ubuntu-latest
     if: |
@@ -183,4 +177,6 @@ jobs:
           install-only: true
 
       - name: Build with GoReleaser
+        env:
+          GORELEASER_CURRENT_TAG: test-pr-${{ github.event.pull_request.number }}
         run: goreleaser build --snapshot --clean

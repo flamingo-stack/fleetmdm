@@ -32,42 +32,16 @@ builds:
       - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
       - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
 
-  - id: fleetctl
-    dir: ./cmd/fleetctl/
-    binary: fleetctl
-    env:
-      - CGO_ENABLED=1
-    goos:
-      - linux
-    goarch:
-      - amd64
-    flags:
-      - -tags=full,fts5,netgo
-      - -trimpath
-    ldflags:
-      - -extldflags "-static"
-      - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
-      - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
-      - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
-      - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
 dockers:
   - goos: linux
     goarch: amd64
     ids:
       - fleet
-      - fleetctl
     dockerfile: tools/fleet-docker/Dockerfile
     use: docker
     build_flag_templates:
       - "--no-cache"
       - "--pull"
-    extra_files:
-      - tools/fleet-docker/entrypoint.sh
-      - tools/fleet-docker/init-fleet.sh
-      - tools/fleet-docker/fleet.yml
     image_templates:
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .ShortCommit }}"
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"

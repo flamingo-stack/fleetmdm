@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.build_server && inputs.version != '')
+      (github.event_name == 'workflow_dispatch' && inputs.version != '')
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -139,6 +139,12 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -178,7 +184,7 @@ jobs:
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.version }}
         run: goreleaser release --clean
 
   release:

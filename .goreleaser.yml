@@ -20,52 +20,12 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     flags:
       - -tags=full,fts5,netgo
       - -trimpath
     ldflags:
       - -extldflags "-static"
-      - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
-      - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
-      - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
-      - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
-  - id: fleetctl
-    dir: ./cmd/fleetctl/
-    binary: fleetctl
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    flags:
-      - -trimpath
-    ldflags:
-      - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
-      - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
-      - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
-      - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
-  - id: fleetctl-macos
-    dir: ./cmd/fleetctl/
-    binary: fleetctl
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    flags:
-      - -trimpath
-    ldflags:
       - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
       - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
       - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
@@ -85,11 +45,10 @@ archives:
 
 dockers:
   - image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:v{{ .Major }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
     dockerfile: tools/fleet-docker/Dockerfile
     use: buildx
+    goarch: amd64
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
@@ -97,11 +56,35 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
     ids:
       - fleet
-      - fleetctl
-    extra_files:
-      - tools/fleet-docker/entrypoint.sh
-      - tools/fleet-docker/init-fleet.sh
-      - tools/fleet-docker/fleet.yml
+
+  - image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+    dockerfile: tools/fleet-docker/Dockerfile
+    use: buildx
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+    ids:
+      - fleet
+
+docker_manifests:
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:v{{ .Major }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
 
 checksum:
   name_template: "checksums.txt"
