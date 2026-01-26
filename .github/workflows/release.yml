@@ -23,16 +23,6 @@ on:
         description: "Version to Release (e.g., v1.2.3)"
         required: true
         type: string
-      build_client:
-        description: "Build Fleet client (macOS/Windows)"
-        required: false
-        type: boolean
-        default: true
-      build_server:
-        description: "Build Fleet server"
-        required: false
-        type: boolean
-        default: true
 
 env:
   REGISTRY: "ghcr.io"
@@ -50,7 +40,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: |
       github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.build_client && inputs.version != '')
+      (github.event_name == 'workflow_dispatch' && inputs.version != '')
     defaults:
       run:
         shell: bash
@@ -166,16 +156,6 @@ jobs:
       - name: Install JS Dependencies
         run: make deps-js
 
-      - name: Create and push tag
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          git tag -a "${VERSION}" -m "Release ${VERSION}"
-          git push origin "${VERSION}"
-
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -185,17 +165,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ inputs.version }}
-        run: goreleaser release --clean
+        run: goreleaser build --clean
 
   release:
     name: "Create Release"
     needs: [build, build_client]
     runs-on: ubuntu-latest
     if: |
-      !cancelled() &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.version != '' &&
-      (needs.build.result == 'success' || needs.build_client.result == 'success')
+      inputs.version != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -223,6 +201,14 @@ jobs:
           fi
 
           ls -lh final-artifacts/clients/
+
+      - name: Generate release header
+        run: |
+          cat > RELEASE_HEADER.md <<EOF
+          ## Fleet Clients
+          - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
+          - **Windows** (amd64): \`fleet-windows-amd64.zip\`
+          EOF
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
