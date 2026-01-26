@@ -32,6 +32,12 @@ builds:
       - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
       - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
       - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
+    overrides:
+      - goos: linux
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+          - CC=aarch64-linux-gnu-gcc
 
 archives:
   - id: fleet
