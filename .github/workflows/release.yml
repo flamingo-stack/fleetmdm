@@ -147,11 +147,19 @@ jobs:
         with:
           install-only: true
 
+      - name: Create local tag for release build
+        if: github.event_name == 'workflow_dispatch'
+        run: git tag -f ${{ inputs.version }}
+
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ inputs.version }}
-        run: goreleaser build --clean
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            goreleaser build --clean
+          else
+            goreleaser build --clean --snapshot
+          fi
 
   release:
     name: "Create Release"
