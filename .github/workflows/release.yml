@@ -10,6 +10,7 @@ permissions:
   pull-requests: write
   attestations: write
   id-token: write
+  packages: write
 
 on:
   push:
@@ -151,15 +152,32 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: git tag -f ${{ inputs.version }}
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            goreleaser build --clean
+            goreleaser release --clean --skip=publish
           else
-            goreleaser build --clean --snapshot
+            goreleaser release --clean --snapshot --skip=publish
           fi
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-linux
+          path: |
+            dist/fleet_linux_amd64_v1/fleet
+            dist/fleet_linux_arm64_v1/fleet
+          if-no-files-found: error
+          retention-days: 7
 
   release:
     name: "Create Release"
