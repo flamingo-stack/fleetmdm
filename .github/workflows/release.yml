@@ -170,9 +170,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            goreleaser release --clean --skip=publish
+            goreleaser release --clean --skip=release
           else
-            goreleaser release --clean --snapshot --skip=publish
+            goreleaser release --clean --snapshot --skip=release
           fi
 
       - name: Upload Linux artifacts
