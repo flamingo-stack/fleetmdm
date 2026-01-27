@@ -102,6 +102,5 @@ changelog:
   disable: true
 
 release:
-  # Uses GITHUB_TOKEN to determine repository automatically
-  draft: true
-  prerelease: auto
+  # Disable goreleaser release - using softprops/action-gh-release instead
+  disable: true
