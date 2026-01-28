@@ -6,7 +6,6 @@ name: Fleet Test
 
 permissions:
   contents: read
-  packages: write
   actions: write
   pull-requests: write
 
@@ -20,7 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGISTRY: "ghcr.io"
   BINARY_NAME: fleet
 
 # =============================================================================
@@ -155,13 +153,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -184,34 +175,4 @@ jobs:
           install-only: true
 
       - name: Build with GoReleaser
-        env:
-          GORELEASER_CURRENT_TAG: test-${{ github.event.pull_request.number }}
         run: goreleaser build --snapshot --clean
-
-      - name: Cleanup old test images
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ORG="${{ github.repository_owner }}"
-          PACKAGE="fleet"
-          KEEP=10
-
-          # Get all versions with test-* tags, sorted by creation date (newest first)
-          VERSIONS=$(gh api "/orgs/${ORG}/packages/container/${PACKAGE}/versions" \
-            --paginate \
-            --jq '[.[] | select(.metadata.container.tags[] | startswith("test-"))] | sort_by(.created_at) | reverse | .[].id' 2>/dev/null || \
-            gh api "/users/${ORG}/packages/container/${PACKAGE}/versions" \
-            --paginate \
-            --jq '[.[] | select(.metadata.container.tags[] | startswith("test-"))] | sort_by(.created_at) | reverse | .[].id' 2>/dev/null || echo "")
-
-          # Skip first KEEP versions, delete the rest
-          COUNT=0
-          for VERSION_ID in $VERSIONS; do
-            COUNT=$((COUNT + 1))
-            if [ $COUNT -gt $KEEP ]; then
-              echo "Deleting version ${VERSION_ID}"
-              gh api --method DELETE "/orgs/${ORG}/packages/container/${PACKAGE}/versions/${VERSION_ID}" 2>/dev/null || \
-              gh api --method DELETE "/users/${ORG}/packages/container/${PACKAGE}/versions/${VERSION_ID}" 2>/dev/null || true
-            fi
-          done
-          echo "Kept ${KEEP} most recent test images, deleted $((COUNT > KEEP ? COUNT - KEEP : 0)) old images"
