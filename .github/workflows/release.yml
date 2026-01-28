@@ -191,7 +191,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api /orgs/${{ github.repository_owner }}/packages/container/fleet/versions --jq '.[] | select(.metadata.container.tags | any(test("-[a-z0-9]+$"))) | .id' | xargs -I{} gh api --method DELETE /orgs/${{ github.repository_owner }}/packages/container/fleet/versions/{}
+          gh api /orgs/${{ github.repository_owner }}/packages/container/fleet/versions --jq '.[] | select(.metadata.container.tags | any(test("-(amd64|arm64)$"))) | .id' | xargs -I{} gh api --method DELETE /orgs/${{ github.repository_owner }}/packages/container/fleet/versions/{}
 
 
   release:
