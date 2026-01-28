@@ -37,7 +37,6 @@ jobs:
     name: "Test Client (${{ matrix.name }})"
     needs: [changes]
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     if: |
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft &&
@@ -68,6 +67,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run Go tests
+        continue-on-error: true
         run: go test -race -coverprofile=coverage.out ./orbit/...
 
       - name: Compile Client for ${{ matrix.go_os }}
