@@ -12,7 +12,7 @@ permissions:
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main, feature/rebased-main]
+    branches: [main]
 
 concurrency:
   group: pr-${{ github.head_ref || github.ref }}
@@ -168,3 +168,13 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           SKIP_DOCKER_PUSH: "true"
         run: goreleaser release --snapshot --clean --skip=publish
+
+  all-checks:
+    name: "All Checks"
+    needs: [changes, test_client, test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - run: echo "All checks passed"
