@@ -71,7 +71,7 @@ dockers:
       - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
     dockerfile: Dockerfile
     use: buildx
-    skip_push: "{{ if .Env.SKIP_DOCKER_PUSH }}true{{ else }}false{{ end }}"
+    skip_push: "{{ if eq .Env.DOCKER_PUSH \"false\" }}true{{ else }}false{{ end }}"
     build_flag_templates:
       - "--platform=linux/amd64"
 
@@ -83,7 +83,7 @@ dockers:
       - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
     dockerfile: Dockerfile
     use: buildx
-    skip_push: "{{ if .Env.SKIP_DOCKER_PUSH }}true{{ else }}false{{ end }}"
+    skip_push: "{{ if eq .Env.DOCKER_PUSH \"false\" }}true{{ else }}false{{ end }}"
     build_flag_templates:
       - "--platform=linux/arm64"
 
