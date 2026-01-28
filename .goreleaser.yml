@@ -68,7 +68,7 @@ dockers:
     goarch: amd64
     ids: [fleet]
     image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Env.DOCKER_TAG }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-amd64"
     dockerfile: Dockerfile
     use: buildx
     skip_push: "{{ if eq .Env.DOCKER_PUSH \"false\" }}true{{ else }}false{{ end }}"
@@ -80,7 +80,7 @@ dockers:
     goarch: arm64
     ids: [fleet]
     image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Env.DOCKER_TAG }}-arm64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-arm64"
     dockerfile: Dockerfile
     use: buildx
     skip_push: "{{ if eq .Env.DOCKER_PUSH \"false\" }}true{{ else }}false{{ end }}"
@@ -88,7 +88,7 @@ dockers:
       - "--platform=linux/arm64"
 
 docker_manifests:
-  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Env.DOCKER_TAG }}"
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}"
     image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Env.DOCKER_TAG }}-amd64"
-      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Env.DOCKER_TAG }}-arm64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-arm64"
