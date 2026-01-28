@@ -7,6 +7,7 @@ import { LogDestination } from "interfaces/config";
 interface ILogDestinationIndicatorProps {
   logDestination: LogDestination;
   webhookDestination?: string;
+  filesystemDestination?: string;
   excludeTooltip?: boolean;
 }
 
@@ -20,6 +21,7 @@ const generateClassTag = (rawValue: string): string => {
 const LogDestinationIndicator = ({
   logDestination,
   webhookDestination,
+  filesystemDestination,
   excludeTooltip = false,
 }: ILogDestinationIndicatorProps) => {
   const classTag = generateClassTag(logDestination);
@@ -40,8 +42,10 @@ const LogDestinationIndicator = ({
         return "AWS Lambda";
       case "pubsub":
         return "Google Cloud Pub/Sub";
-      case "kafta":
+      case "kafka":
         return "Apache Kafka";
+      case "nats":
+        return "NATS";
       case "stdout":
         return "Standard output (stdout)";
       case "webhook":
@@ -59,8 +63,8 @@ const LogDestinationIndicator = ({
         return (
           <>
             Each time a query runs, the data is sent to <br />
-            /var/log/osquery/osqueryd.snapshots.log <br />
-            in each host&apos;s filesystem.
+            {filesystemDestination} <br />
+            on the server&apos;s filesystem.
           </>
         );
       case "firehose":
@@ -91,10 +95,16 @@ const LogDestinationIndicator = ({
             / Sub.
           </>
         );
-      case "kafta":
+      case "kafka":
         return (
           <>
             Each time a query runs, the data <br /> is sent to Apache Kafka.
+          </>
+        );
+      case "nats":
+        return (
+          <>
+            Each time a query runs, the data <br /> is sent to NATS.
           </>
         );
       case "stdout":

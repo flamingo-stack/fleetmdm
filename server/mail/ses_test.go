@@ -1,11 +1,13 @@
 package mail
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/service/ses"
+	"github.com/aws/aws-sdk-go-v2/service/ses"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/stretchr/testify/assert"
 )
@@ -52,7 +54,7 @@ type mockSESSender struct {
 	shouldErr bool
 }
 
-func (m mockSESSender) SendRawEmail(input *ses.SendRawEmailInput) (*ses.SendRawEmailOutput, error) {
+func (m mockSESSender) SendRawEmail(ctx context.Context, input *ses.SendRawEmailInput, optFns ...func(*ses.Options)) (*ses.SendRawEmailOutput, error) {
 	if m.shouldErr {
 		return nil, errors.New("some error")
 	}
@@ -60,6 +62,20 @@ func (m mockSESSender) SendRawEmail(input *ses.SendRawEmailInput) (*ses.SendRawE
 }
 
 func Test_sesSender_SendEmail(t *testing.T) {
+	// Skip test if bindata assets aren't built (requires '-tags full')
+	defer func() {
+		if panicVal := recover(); panicVal != nil {
+			s, ok := panicVal.(string)
+			if ok && strings.Contains(s, "Assets may not be used when running Fleet as a library") {
+				t.Skip("skipping, test will fail due to assets not built (requires '-tags full')")
+			}
+			panic(panicVal) // Re-panic if it's a different error
+		}
+	}()
+	// Trigger bindata check immediately - this will panic if assets aren't built
+	checkMailer := &SMTPTestMailer{BaseURL: "http://test"}
+	_, _ = checkMailer.Message()
+
 	type fields struct {
 		client    fleetSESSender
 		sourceArn string
@@ -143,7 +159,7 @@ func Test_sesSender_SendEmail(t *testing.T) {
 				client:    tt.fields.client,
 				sourceArn: tt.fields.sourceArn,
 			}
-			tt.wantErr(t, s.SendEmail(tt.args.e), fmt.Sprintf("SendEmail(%v)", tt.args.e))
+			tt.wantErr(t, s.SendEmail(context.Background(), tt.args.e), fmt.Sprintf("SendEmail(%v)", tt.args.e))
 		})
 	}
 }

@@ -37,6 +37,11 @@ module.exports = {
       'Matt Carr',
       'Nico Waisman',
       'Dan Grzelak',
+      'Philip Chotipradit',
+      'Roger Cantrell',
+      'Chayce O\'Neal',
+      'David Bodmer',
+      'Fiona Skelton',
     ];
 
     // Filter the testimonials by product category

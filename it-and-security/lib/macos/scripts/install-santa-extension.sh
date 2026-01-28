@@ -11,11 +11,11 @@
 set -e  # Exit on any error
 
 # Variables
-GITHUB_REPO="harrisonravazzolo/osquery-santa-extension"
+GITHUB_REPO="allenhouchins/fleet-extensions"
 EXTENSION_DIR="/var/fleet/extensions"
 OSQUERY_DIR="/var/osquery"
 EXTENSIONS_LOAD_FILE="$OSQUERY_DIR/extensions.load"
-EXTENSION_NAME="santa_universal.ext"
+EXTENSION_NAME="santa.ext"
 EXTENSION_PATH="$EXTENSION_DIR/$EXTENSION_NAME"
 BACKUP_PATH="$EXTENSION_PATH.backup.$(date +%Y%m%d_%H%M%S)"
 
@@ -245,69 +245,67 @@ setup_extensions_load() {
     fi
 }
 
-# Function to test extension loading
-test_extension() {
-    log "Testing extension loading..."
+# Function to remove old extension and its reference from extensions.load
+remove_old_extension() {
+    local old_extension_name="santa_universal.ext"
+    local old_extension_path="$EXTENSION_DIR/$old_extension_name"
     
-    # Basic test to see if the extension can be executed
-    if "$EXTENSION_PATH" --help &>/dev/null || [[ $? -eq 0 ]]; then
-        log "Extension appears to be functional"
-    else
-        log "Warning: Extension test failed, but this may be normal depending on the extension"
+    # Remove old extension file if it exists
+    if [[ -f "$old_extension_path" ]]; then
+        log "Removing old extension file: $old_extension_path"
+        rm -f "$old_extension_path"
+    fi
+    
+    # Remove old extension reference from extensions.load if it exists
+    if [[ -f "$EXTENSIONS_LOAD_FILE" ]]; then
+        if grep -q "$old_extension_path" "$EXTENSIONS_LOAD_FILE"; then
+            log "Removing old extension reference from extensions.load"
+            grep -v "$old_extension_path" "$EXTENSIONS_LOAD_FILE" > "$EXTENSIONS_LOAD_FILE.tmp" || true
+            mv "$EXTENSIONS_LOAD_FILE.tmp" "$EXTENSIONS_LOAD_FILE"
+        fi
     fi
 }
 
-# Function to schedule orbit restart in background or restart immediately
+# Function to schedule orbit restart using detached child process or restart immediately
 handle_orbit_restart() {
     if [[ "$IMMEDIATE_RESTART" == "immediate" ]]; then
         log "Immediate restart requested - restarting orbit service now..."
-        
-        # Check if orbit service exists
-        if launchctl list | grep -q "com.fleetdm.orbit"; then
-            if launchctl kickstart -k system/com.fleetdm.orbit; then
-                log "Orbit service restarted successfully"
-                
-                # Wait a moment and check if service is running
-                sleep 2
-                if launchctl list | grep -q "com.fleetdm.orbit"; then
-                    log "Orbit service is running"
-                else
-                    log "Warning: Orbit service may not be running properly"
-                fi
-            else
-                log "Warning: Failed to restart orbit service"
-            fi
-        else
-            log "Warning: Orbit service not found"
-        fi
+        restart_orbit_immediate
     else
         log "Scheduling orbit service restart (safe for Fleet deployment)..."
-        
-        # Check if orbit service exists
-        if launchctl list | grep -q "com.fleetdm.orbit"; then
-            log "Orbit service found. Scheduling restart in 5 seconds..."
-            
-            # Create a properly detached background process that Fleet won't wait for
-            # Using nohup and redirecting all output to prevent Fleet from waiting
-            nohup bash -c "
-                sleep 5
-                echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Restarting orbit service...\" >> /var/log/santa_installer.log 2>&1
-                if launchctl kickstart -k system/com.fleetdm.orbit >> /var/log/santa_installer.log 2>&1; then
-                    echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Orbit service restarted successfully\" >> /var/log/santa_installer.log 2>&1
-                else
-                    echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Failed to restart orbit service\" >> /var/log/santa_installer.log 2>&1
-                fi
-            " >/dev/null 2>&1 &
-            
-            # Disown the process so the script can exit cleanly
-            disown
-            
-            log "Orbit restart scheduled for 5 seconds after script completion"
-            log "Check /var/log/santa_installer.log for restart status"
-        else
-            log "Warning: Orbit service not found. Extension will load on next orbit startup."
-        fi
+        schedule_orbit_restart
     fi
+}
+
+# Function to restart orbit immediately 
+restart_orbit_immediate() {
+    log "Restarting orbit service immediately..."
+    launchctl kickstart -k system/com.fleetdm.orbit
+    log "Orbit service restart command executed"
+}
+
+# Function to schedule orbit restart using detached child process
+schedule_orbit_restart() {
+    log "Scheduling orbit restart in 10 seconds (detached process method)..."
+    
+    # Start detached child process that will handle the restart
+    bash -c "bash $0 __restart_orbit >/dev/null 2>/dev/null </dev/null &"
+    
+    log "Orbit restart scheduled for 10 seconds after script completion"
+    log "Check /var/log/santa_installer.log for restart status"
+}
+
+# Function to handle the detached restart process
+handle_detached_restart() {
+    # This runs in the detached child process
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting detached restart process..." >> /var/log/santa_installer.log 2>&1
+    
+    # Wait for parent process to complete and report success
+    sleep 10
+    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Executing orbit restart..." >> /var/log/santa_installer.log 2>&1
+    launchctl kickstart -k system/com.fleetdm.orbit >> /var/log/santa_installer.log 2>&1
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Orbit restart command executed" >> /var/log/santa_installer.log 2>&1
 }
 
 # Function to cleanup on failure
@@ -332,6 +330,12 @@ trap cleanup_on_failure ERR
 
 # Main execution
 main() {
+    # Handle detached restart process
+    if [[ "$1" == "__restart_orbit" ]]; then
+        handle_detached_restart
+        exit 0
+    fi
+    
     log "=== Santa Extension Installer Started ==="
     if [[ "$IMMEDIATE_RESTART" == "immediate" ]]; then
         log "Mode: Immediate restart (manual execution)"
@@ -348,6 +352,9 @@ main() {
     # Create the extensions directory
     create_directory "$EXTENSION_DIR"
     
+    # Remove old extension and its reference before proceeding
+    remove_old_extension
+    
     # Backup existing extension
     backup_existing
     
@@ -356,10 +363,7 @@ main() {
     
     # Set up file permissions
     setup_file_permissions
-    
-    # Test the extension
-    test_extension
-    
+
     # Setup extensions.load file
     setup_extensions_load
     
@@ -378,7 +382,7 @@ main() {
     if [[ "$IMMEDIATE_RESTART" == "immediate" ]]; then
         log "Orbit service has been restarted immediately"
     else
-        log "Orbit service restart has been scheduled for 5 seconds"
+        log "Orbit service restart has been scheduled for 10 seconds"
     fi
     echo ""
 }

@@ -43,6 +43,9 @@ func TestConvertFileStdout(t *testing.T) {
 	r, w, _ := os.Pipe()
 	oldStdout := os.Stdout
 	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
 
 	// setup the cli and the convert command
 	app := cli.NewApp()

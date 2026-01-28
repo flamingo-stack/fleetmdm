@@ -32,6 +32,7 @@ import { API_ALL_TEAMS_ID } from "interfaces/team";
 import queriesAPI, { IQueriesResponse } from "services/entities/queries";
 import PATHS from "router/paths";
 
+import PageDescription from "components/PageDescription";
 import Button from "components/buttons/Button";
 import TableDataError from "components/DataError";
 import MainContent from "components/MainContent";
@@ -370,7 +371,10 @@ const ManageQueriesPage = ({
             availableQueries={queriesAvailableToAutomate}
             automatedQueryIds={automatedQueryIds}
             logDestination={config?.logging.result.plugin || ""}
-            webhookDestination={config?.logging.result.config.result_url}
+            webhookDestination={config?.logging.result.config?.result_url}
+            filesystemDestination={
+              config?.logging.result.config?.result_log_file
+            }
           />
         )}
         {showPreviewDataModal && (
@@ -388,49 +392,52 @@ const ManageQueriesPage = ({
     isTeamMaintainer ||
     isObserverPlus; // isObserverPlus checks global and selected team
 
+  let dropdownHelpText: string;
+  if (isAnyTeamSelected) {
+    dropdownHelpText = "Gather data about all hosts assigned to this team.";
+  } else if (config?.partnerships?.enable_primo) {
+    dropdownHelpText = "Gather data about your hosts.";
+  } else {
+    dropdownHelpText = "Gather data about all hosts.";
+  }
+
   return (
     <MainContent className={baseClass}>
-      <div className={`${baseClass}__wrapper`}>
+      <>
         <div className={`${baseClass}__header-wrap`}>
           <div className={`${baseClass}__header`}>
             <div className={`${baseClass}__text`}>
               <div className={`${baseClass}__title`}>{renderHeader()}</div>
             </div>
-          </div>
-
-          {canCustomQuery && (
-            <div className={`${baseClass}__action-button-container`}>
-              {(isGlobalAdmin || isTeamAdmin) &&
-                !!queriesAvailableToAutomate.length && (
+            {canCustomQuery && (
+              <div className={`${baseClass}__action-button-container`}>
+                {(isGlobalAdmin || isTeamAdmin) &&
+                  !!queriesAvailableToAutomate.length && (
+                    <Button
+                      onClick={onManageAutomationsClick}
+                      className={`${baseClass}__manage-automations button`}
+                      variant="inverse"
+                    >
+                      Manage automations
+                    </Button>
+                  )}
+                {canCustomQuery && (
                   <Button
-                    onClick={onManageAutomationsClick}
-                    className={`${baseClass}__manage-automations button`}
-                    variant="inverse"
+                    className={`${baseClass}__create-button`}
+                    onClick={onCreateQueryClick}
                   >
-                    Manage automations
+                    {isObserverPlus ? "Live query" : "Add query"}
                   </Button>
                 )}
-              {canCustomQuery && (
-                <Button
-                  className={`${baseClass}__create-button`}
-                  onClick={onCreateQueryClick}
-                >
-                  {isObserverPlus ? "Live query" : "Add query"}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className={`${baseClass}__description`}>
-          <p>
-            {isAnyTeamSelected
-              ? "Gather data about all hosts assigned to this team."
-              : "Gather data about all hosts."}
-          </p>
+              </div>
+            )}
+          </div>
+
+          <PageDescription content={dropdownHelpText} />
         </div>
         {renderQueriesTable()}
         {renderModals()}
-      </div>
+      </>
     </MainContent>
   );
 };

@@ -96,7 +96,7 @@ const QueriesTable = ({
   currentTeamId,
   isPremiumTier,
 }: IQueriesTableProps): JSX.Element | null => {
-  const { currentUser } = useContext(AppContext);
+  const { currentUser, config } = useContext(AppContext);
 
   // Functions to avoid race conditions
   // TODO - confirm these are still necessary
@@ -176,7 +176,7 @@ const QueriesTable = ({
     header: "You don't have any queries",
   };
 
-  if (isPremiumTier) {
+  if (isPremiumTier && !config?.partnerships?.enable_primo) {
     if (
       typeof currentTeamId === "undefined" ||
       currentTeamId === null ||
@@ -285,7 +285,7 @@ const QueriesTable = ({
             name: "delete query",
             buttonText: "Delete",
             iconSvg: "trash",
-            variant: "text-icon",
+            variant: "inverse",
             onClick: onDeleteQueryClick,
           }}
           emptyComponent={() => EmptyTable(emptyParams)}

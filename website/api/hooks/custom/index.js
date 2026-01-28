@@ -178,6 +178,13 @@ will be disabled and/or hidden in the UI.
                 throw new Error('Cannot attach view local `me`, because this view local already exists!  (Is it being attached somewhere else?)');
               }
               res.locals.me = undefined;
+
+              // Set security headers for all GET and HEAD requests.
+              res.setHeader(`X-Content-Type-Options`, `nosniff`);//[?]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options
+              res.setHeader('X-Frame-Options', 'SAMEORIGIN');// [?]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Frame-Options
+              res.setHeader(`Referrer-Policy`, `strict-origin-when-cross-origin`);// [?]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy
+              res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains;');// [?]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security
+              res.setHeader(`Permissions-Policy`, `camera=(), microphone=(), usb=()`);// [?]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy
             }//ﬁ
 
             // Check for query parameters set by ad clicks.
@@ -195,8 +202,8 @@ will be disabled and/or hidden in the UI.
             // (This makes the experience simpler and less confusing for people, prioritizing showing things that matter for them)
             // [?] https://en.wikipedia.org/wiki/UTM_parameters
             // e.g.
-            //   https://fleetdm.com/device-management?utm_content=mdm
-            if (['clear','eo-security', 'eo-it', 'mdm', 'vm'].includes(req.param('utm_content'))) {
+            //   https://fleetdm.com/device-management?utm_content=it-major-mdm
+            if (['clear', 'security-misc', 'security-vm', 'it-major-mdm', 'it-gap-filler-mdm', 'it-misc'].includes(req.param('utm_content'))) {
               req.session.primaryBuyingSituation = req.param('utm_content') === 'clear' ? undefined : req.param('utm_content');
               // FUTURE: reimplement the following (auto-redirect without querystring to make it prettier in the URL bar), but do it in the client-side JS
               // using whatever that poppushstateblah thing is that makes it so you can change the URL bar from the browser-side code without screwing up
@@ -342,7 +349,7 @@ will be disabled and/or hidden in the UI.
                       contactSource: 'Website - Sign up',// Note: this is only set on new contacts.
                     });
                     let websiteVisitReason;
-                    if(req.session.adAttributionString && this.req.session.visitedSiteFromAdAt) {
+                    if(req.session.adAttributionString && req.session.visitedSiteFromAdAt) {
                       let thirtyMinutesAgoAt = Date.now() - (1000 * 60 * 30);
                       // If this user visited the website from an ad, set the websiteVisitReason to be the adAttributionString stored in their session.
                       if(req.session.visitedSiteFromAdAt > thirtyMinutesAgoAt) {

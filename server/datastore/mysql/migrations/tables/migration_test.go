@@ -20,6 +20,7 @@ package tables
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,8 +41,18 @@ import (
 const (
 	testUsername = "root"
 	testPassword = "toor"
-	testAddress  = "localhost:3307"
 )
+
+var (
+	testAddress = getTestAddress()
+)
+
+func getTestAddress() string {
+	if port := os.Getenv("FLEET_MYSQL_TEST_PORT"); port != "" {
+		return "localhost:" + port
+	}
+	return "localhost:3307"
+}
 
 func newDBConnForTests(t *testing.T) *sqlx.DB {
 	db, err := sqlx.Open(
@@ -49,6 +60,11 @@ func newDBConnForTests(t *testing.T) *sqlx.DB {
 		fmt.Sprintf("%s:%s@tcp(%s)/?charset=utf8mb4&parseTime=true&loc=UTC&multiStatements=true", testUsername, testPassword, testAddress),
 	)
 	require.NoError(t, err)
+
+	// Check if MySQL is available, skip if not
+	if err := db.Ping(); err != nil {
+		t.Skipf("Skipping test: MySQL not available at %s: %v", testAddress, err)
+	}
 
 	name := strings.ReplaceAll(strings.ReplaceAll(t.Name(), "/", "_"), " ", "_")
 	_, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s; CREATE DATABASE %s; USE %s;", name, name, name))

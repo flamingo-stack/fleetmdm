@@ -2,10 +2,6 @@ version: 2
 
 project_name: fleet
 
-monorepo:
-  tag_prefix: fleet-
-  dir: .
-
 before:
   hooks:
     - make deps
@@ -36,43 +32,16 @@ builds:
       - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
       - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
 
-  - id: fleetctl
-    dir: ./cmd/fleetctl/
-    binary: fleetctl
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-    goarch:
-      - amd64
-    flags:
-      - -trimpath
-    ldflags:
-      - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
-      - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
-      - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
-      - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
-
 dockers:
   - goos: linux
     goarch: amd64
     ids:
       - fleet
-      - fleetctl
     dockerfile: tools/fleet-docker/Dockerfile
-    image_templates:
-      - 'fleetdm/fleet:{{ .ShortCommit }}'
-
-  - goos: linux
-    goarch: amd64
-    ids:
-      - fleetctl
-    dockerfile: tools/fleetctl-docker/Dockerfile
+    use: docker
     build_flag_templates:
-      - "--build-arg=binpath=fleetctl"
+      - "--no-cache"
+      - "--pull"
     image_templates:
-      - 'fleetdm/fleetctl:{{ .ShortCommit }}'
-
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .ShortCommit }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"

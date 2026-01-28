@@ -2,10 +2,6 @@ version: 2
 
 project_name: fleet
 
-monorepo:
-  tag_prefix: fleet-
-  dir: .
-
 before:
   hooks:
     - make deps
@@ -24,6 +20,7 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     flags:
       - -tags=full,fts5,netgo
       - -trimpath
@@ -35,103 +32,22 @@ builds:
       - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
       - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
       - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
-  - id: fleetctl
-    dir: ./cmd/fleetctl/
-    binary: fleetctl
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    flags:
-      - -trimpath
-    ldflags:
-      - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
-      - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
-      - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
-      - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
-  - id: fleetctl-macos
-    dir: ./cmd/fleetctl/
-    binary: fleetctl
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    flags:
-      - -trimpath
-    ldflags:
-      - -X github.com/fleetdm/fleet/v4/server/version.appName={{ .ArtifactName }}
-      - -X github.com/fleetdm/fleet/v4/server/version.version={{ .Version }}
-      - -X github.com/fleetdm/fleet/v4/server/version.branch={{ .Branch }}
-      - -X github.com/fleetdm/fleet/v4/server/version.revision={{ .FullCommit }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildDate={{ time "2006-01-02" }}
-      - -X github.com/fleetdm/fleet/v4/server/version.buildUser={{ .Env.USER }}
-
-universal_binaries:
-  - id: fleetctl # resulting binary id
-    ids: [fleetctl-macos] # source binaries
-    replace: true
-    name_template: fleetctl # resulting binary name
-    hooks:
-      post:
-        - sh -c "FLEETCTL_BINARY_PATH={{ .Path }} ./tools/sign-fleetctl/main.sh"
+    overrides:
+      - goos: linux
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+          - CC=aarch64-linux-gnu-gcc
 
 archives:
   - id: fleet
     builds:
       - fleet
-    name_template: fleet_v{{.Version}}_{{- if eq .Os "darwin" }}macos{{- else }}{{ .Os }}{{ end }}
+    name_template: fleet_v{{.Version}}_{{- if eq .Os "darwin" }}macos{{- else }}{{ .Os }}{{ end }}_{{ .Arch }}
     format_overrides:
       - goos: windows
         format: zip
     wrap_in_directory: true
-
-  - id: fleetctl
-    builds:
-      - fleetctl
-    # Note -- changing this can break GitOps and other workflows that expect these filenames to be deterministic!
-    name_template: fleetctl_v{{.Version}}_{{- if eq .Os "darwin" }}macos{{- else }}{{ .Os }}_{{.Arch}}{{ end }}
-    wrap_in_directory: true
-
-  - id: fleetctl-zip
-    builds:
-      - fleetctl
-    # Note -- changing this can break GitOps and other workflows that expect these filenames to be deterministic!
-    name_template: fleetctl_v{{.Version}}_{{- if eq .Os "darwin" }}macos{{- else }}{{ .Os }}_{{.Arch}}{{ end }}
-    format: zip
-    wrap_in_directory: true
-
-dockers:
-  - goos: linux
-    goarch: amd64
-    ids:
-      - fleet
-      - fleetctl
-    dockerfile: tools/fleet-docker/Dockerfile
-    image_templates:
-      - "fleetdm/fleet:{{ .Tag }}"
-      - "fleetdm/fleet:v{{ .Major }}"
-
-  - goos: linux
-    goarch: amd64
-    ids:
-      - fleetctl
-    dockerfile: tools/fleetctl-docker/Dockerfile
-    build_flag_templates:
-      - "--build-arg=binpath=fleetctl"
-    image_templates:
-      - "fleetdm/fleetctl:{{ .Tag }}"
-      - "fleetdm/fleetctl:v{{ .Major }}"
 
 checksum:
   name_template: "checksums.txt"
@@ -143,8 +59,36 @@ changelog:
   disable: true
 
 release:
-  github:
-    owner: fleetdm
-    name: fleet
-  draft: true
-  prerelease: auto
+  # Disable goreleaser release - using softprops/action-gh-release instead
+  disable: true
+
+dockers:
+  - id: fleet-amd64
+    goos: linux
+    goarch: amd64
+    ids: [fleet]
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    skip_push: "{{ if eq .Env.DOCKER_PUSH \"false\" }}true{{ else }}false{{ end }}"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+
+  - id: fleet-arm64
+    goos: linux
+    goarch: arm64
+    ids: [fleet]
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    skip_push: "{{ if eq .Env.DOCKER_PUSH \"false\" }}true{{ else }}false{{ end }}"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY }}/fleet:{{ .Env.DOCKER_TAG }}-arm64"

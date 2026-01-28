@@ -29,22 +29,42 @@ const PKG_TYPE_TO_ID_TEXT = {
   rpm: "package name",
   msi: "product code",
   exe: "software name",
+  zip: "software name",
+  sh: "package name",
+  ps1: "package name",
+  ipa: "software name",
 } as const;
 
 const getInstallScriptTooltip = (pkgType: PackageType) => {
-  if (
-    !isFleetMaintainedPackageType(pkgType) &&
-    (pkgType === "exe" || pkgType === "tar.gz")
-  ) {
-    return `Required for ${
-      pkgType === "exe" ? ".exe packages" : ".tar.gz archives"
-    }.`;
+  if (pkgType === "exe" || pkgType === "tar.gz") {
+    if (pkgType === "exe") {
+      return "Required for .exe packages.";
+    }
+    return "Required for .tar.gz archives.";
+  }
+  if (pkgType === "zip" && isWindowsPackageType(pkgType)) {
+    return "Required for .zip packages.";
   }
   return undefined;
 };
 
 const getInstallHelpText = (pkgType: PackageType) => {
   if (pkgType === "exe") {
+    return (
+      <>
+        For Windows, Fleet only creates install scripts for .msi packages. Use
+        the $INSTALLER_PATH variable to point to the installer.{" "}
+        {getSupportedScriptTypeText(pkgType)}{" "}
+        <CustomLink
+          url={`${LEARN_MORE_ABOUT_BASE_LINK}/exe-install-scripts`}
+          text="Learn more"
+          newTab
+        />
+      </>
+    );
+  }
+
+  if (pkgType === "zip") {
     return (
       <>
         For Windows, Fleet only creates install scripts for .msi packages. Use
@@ -77,20 +97,37 @@ const getPostInstallHelpText = (pkgType: PackageType) => {
 };
 
 const getUninstallScriptTooltip = (pkgType: PackageType) => {
-  if (
-    !isFleetMaintainedPackageType(pkgType) &&
-    (pkgType === "exe" || pkgType === "tar.gz")
-  ) {
-    return `Required for ${
-      pkgType === "exe" ? ".exe packages" : ".tar.gz archives"
-    }.`;
+  if (pkgType === "exe" || pkgType === "tar.gz") {
+    if (pkgType === "exe") {
+      return "Required for .exe packages.";
+    }
+    return "Required for .tar.gz archives.";
+  }
+  if (pkgType === "zip" && isWindowsPackageType(pkgType)) {
+    return "Required for .zip packages.";
   }
   return undefined;
 };
 
 const getUninstallHelpText = (pkgType: PackageType) => {
+  // Check for Windows zip files first (before isFleetMaintainedPackageType check)
+  if (pkgType === "zip" && isWindowsPackageType(pkgType)) {
+    return (
+      <>
+        For Windows, Fleet only creates uninstall scripts for .msi packages.
+        $PACKAGE_ID will be populated with the software name from the .zip file
+        after it&apos;s added. {getSupportedScriptTypeText(pkgType)}{" "}
+        <CustomLink
+          url={`${LEARN_MORE_ABOUT_BASE_LINK}/exe-install-scripts`}
+          text="Learn more"
+          newTab
+        />
+      </>
+    );
+  }
+
   if (isFleetMaintainedPackageType(pkgType)) {
-    return "Currently, shell scripts are supported.";
+    return "Currently, only shell scripts are supported.";
   }
 
   if (pkgType === "exe") {
@@ -98,8 +135,7 @@ const getUninstallHelpText = (pkgType: PackageType) => {
       <>
         For Windows, Fleet only creates uninstall scripts for .msi packages.
         $PACKAGE_ID will be populated with the software name from the .exe file
-        after it&apos;s added.
-        {getSupportedScriptTypeText(pkgType)}{" "}
+        after it&apos;s added. {getSupportedScriptTypeText(pkgType)}{" "}
         <CustomLink
           url={`${LEARN_MORE_ABOUT_BASE_LINK}/exe-install-scripts`}
           text="Learn more"
@@ -112,7 +148,22 @@ const getUninstallHelpText = (pkgType: PackageType) => {
   if (pkgType === "tar.gz") {
     return (
       <>
-        Currently, shell scripts are supported.{" "}
+        Currently, only shell scripts are supported.{" "}
+        <CustomLink
+          url={`${LEARN_MORE_ABOUT_BASE_LINK}/uninstall-scripts`}
+          text="Learn more about uninstall scripts"
+          newTab
+        />
+      </>
+    );
+  }
+
+  if (pkgType === "msi") {
+    return (
+      <>
+        $UPGRADE_CODE will be populated with the .msi&apos;s upgrade code if
+        available, and $PACKAGE_ID will be populated with its product code,
+        after the software is added. {getSupportedScriptTypeText(pkgType)}{" "}
         <CustomLink
           url={`${LEARN_MORE_ABOUT_BASE_LINK}/uninstall-scripts`}
           text="Learn more about uninstall scripts"
@@ -200,6 +251,9 @@ const PackageAdvancedOptions = ({
     );
   };
 
+  const requiresAdvancedOptions =
+    ext === "exe" || ext === "zip" || ext === "tar.gz";
+
   return (
     <div className={baseClass}>
       <RevealButton
@@ -209,15 +263,22 @@ const PackageAdvancedOptions = ({
         hideText="Advanced options"
         caretPosition="after"
         onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-        disabled={!selectedPackage}
+        disabled={!selectedPackage || requiresAdvancedOptions}
         disabledTooltipContent={
-          <>
-            Choose a file to modify <br />
-            advanced options.
-          </>
+          requiresAdvancedOptions ? (
+            <>Install and uninstall scripts are required for .{ext} packages.</>
+          ) : (
+            <>
+              Choose a file to modify <br />
+              advanced options.
+            </>
+          )
         }
       />
-      {(showAdvancedOptions || ext === "exe" || ext === "tar.gz") &&
+      {(showAdvancedOptions ||
+        ext === "exe" ||
+        ext === "zip" ||
+        ext === "tar.gz") &&
         !!selectedPackage &&
         renderAdvancedOptions()}
     </div>

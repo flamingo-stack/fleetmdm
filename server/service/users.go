@@ -433,11 +433,12 @@ func (svc *Service) ModifyUser(ctx context.Context, userID uint, p fleet.UserPay
 		if err := svc.authz.Authorize(ctx, user, fleet.ActionWriteRole); err != nil {
 			return nil, err
 		}
-		license, _ := license.FromContext(ctx)
-		if license == nil {
+		licChecker, _ := license.FromContext(ctx)
+		lic, _ := licChecker.(*fleet.LicenseInfo)
+		if lic == nil {
 			return nil, ctxerr.New(ctx, "license not found")
 		}
-		if err := fleet.ValidateUserRoles(false, p, *license); err != nil {
+		if err := fleet.ValidateUserRoles(false, p, *lic); err != nil {
 			return nil, ctxerr.Wrap(ctx, err, "validate role")
 		}
 	}
@@ -937,7 +938,7 @@ func (svc *Service) modifyEmailAddress(ctx context.Context, user *fleet.User, em
 			AssetURL: getAssetURL(),
 		},
 	}
-	return svc.mailService.SendEmail(changeEmail)
+	return svc.mailService.SendEmail(ctx, changeEmail)
 }
 
 // saves user in datastore.
@@ -1202,7 +1203,7 @@ func (svc *Service) RequestPasswordReset(ctx context.Context, email string) erro
 		},
 	}
 
-	err = svc.mailService.SendEmail(resetEmail)
+	err = svc.mailService.SendEmail(ctx, resetEmail)
 	if err != nil {
 		level.Error(svc.logger).Log("err", err, "msg", "failed to send password reset request email")
 	}

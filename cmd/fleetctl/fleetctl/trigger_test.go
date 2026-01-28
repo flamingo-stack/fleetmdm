@@ -52,6 +52,9 @@ func TestTrigger(t *testing.T) {
 	r, w, _ := os.Pipe()
 	oldStdout := os.Stdout
 	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
 
 	_, _ = testing_utils.RunServerWithMockedDS(t, &service.TestServerOpts{
 		Logger: kitlog.NewNopLogger(),

@@ -2,10 +2,7 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +40,7 @@ func (svc *Service) AddFleetMaintainedApp(
 	}
 
 	// validate labels before we do anything else
-	validatedLabels, err := ValidateSoftwareLabels(ctx, svc, labelsIncludeAny, labelsExcludeAny)
+	validatedLabels, err := ValidateSoftwareLabels(ctx, svc, teamID, labelsIncludeAny, labelsExcludeAny)
 	if err != nil {
 		return 0, ctxerr.Wrap(ctx, err, "validating software labels")
 	}
@@ -77,7 +74,6 @@ func (svc *Service) AddFleetMaintainedApp(
 	if v := os.Getenv("FLEET_DEV_MAINTAINED_APPS_INSTALLER_TIMEOUT"); v != "" {
 		timeout, _ = time.ParseDuration(v)
 	}
-
 	client := fleethttp.NewClient(fleethttp.WithTimeout(timeout))
 	installerTFR, filename, err := maintained_apps.DownloadInstaller(ctx, app.InstallerURL, client)
 	if err != nil {
@@ -85,9 +81,10 @@ func (svc *Service) AddFleetMaintainedApp(
 	}
 	defer installerTFR.Close()
 
-	h := sha256.New()
-	_, _ = io.Copy(h, installerTFR) // writes to a Hash can never fail
-	gotHash := hex.EncodeToString(h.Sum(nil))
+	gotHash, err := file.SHA256FromTempFileReader(installerTFR)
+	if err != nil {
+		return 0, ctxerr.Wrap(ctx, err, "calculating SHA256 hash")
+	}
 
 	// Validate the bytes we got are what we expected, if a valid SHA is supplied
 	if app.SHA256 != noCheckHash {
@@ -98,9 +95,6 @@ func (svc *Service) AddFleetMaintainedApp(
 		app.SHA256 = gotHash
 	}
 
-	if err := installerTFR.Rewind(); err != nil {
-		return 0, ctxerr.Wrap(ctx, err, "rewind installer reader")
-	}
 	extension := strings.TrimLeft(filepath.Ext(filename), ".")
 
 	installScript = file.Dos2UnixNewlines(installScript)
@@ -128,17 +122,33 @@ func (svc *Service) AddFleetMaintainedApp(
 		appName = app.Name
 	}
 
+	version := app.Version
+	if version == "latest" { // download URL isn't version-pinned; extract version from installer
+		meta, err := file.ExtractInstallerMetadata(installerTFR)
+		if err != nil {
+			return 0, ctxerr.Wrap(ctx, err, "extracting installer metadata")
+		}
+
+		// reset the reader (it was consumed to extract metadata)
+		if err := installerTFR.Rewind(); err != nil {
+			return 0, ctxerr.Wrap(ctx, err, "resetting installer file reader")
+		}
+
+		version = meta.Version
+	}
+
 	payload := &fleet.UploadSoftwareInstallerPayload{
 		InstallerFile:         installerTFR,
 		Title:                 appName,
 		UserID:                vc.UserID(),
 		TeamID:                teamID,
-		Version:               app.Version,
+		Version:               version,
 		Filename:              filename,
 		Platform:              app.Platform,
 		Source:                app.Source(),
 		Extension:             extension,
 		BundleIdentifier:      app.BundleIdentifier(),
+		UpgradeCode:           app.UpgradeCode,
 		StorageID:             app.SHA256,
 		FleetMaintainedAppID:  maintainedAppID,
 		PreInstallQuery:       preInstallQuery,
@@ -150,6 +160,7 @@ func (svc *Service) AddFleetMaintainedApp(
 		AutomaticInstall:      automaticInstall,
 		AutomaticInstallQuery: app.AutomaticInstallQuery,
 		Categories:            app.Categories,
+		URL:                   app.InstallerURL,
 	}
 
 	payload.Categories = server.RemoveDuplicatesFromSlice(payload.Categories)
@@ -181,7 +192,7 @@ func (svc *Service) AddFleetMaintainedApp(
 	// Create activity
 	var teamName *string
 	if payload.TeamID != nil && *payload.TeamID != 0 {
-		t, err := svc.ds.Team(ctx, *payload.TeamID)
+		t, err := svc.ds.TeamLite(ctx, *payload.TeamID)
 		if err != nil {
 			return 0, ctxerr.Wrap(ctx, err, "getting team")
 		}

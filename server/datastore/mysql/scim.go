@@ -12,6 +12,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/google/go-cmp/cmp"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -30,8 +31,8 @@ func (ds *Datastore) CreateScimUser(ctx context.Context, user *fleet.ScimUser) (
 	err := ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
 		const insertUserQuery = `
 		INSERT INTO scim_users (
-			external_id, user_name, given_name, family_name, active
-		) VALUES (?, ?, ?, ?, ?)`
+			external_id, user_name, given_name, family_name, department, active
+		) VALUES (?, ?, ?, ?, ?, ?)`
 		result, err := tx.ExecContext(
 			ctx,
 			insertUserQuery,
@@ -39,6 +40,7 @@ func (ds *Datastore) CreateScimUser(ctx context.Context, user *fleet.ScimUser) (
 			user.UserName,
 			user.GivenName,
 			user.FamilyName,
+			user.Department,
 			user.Active,
 		)
 		if err != nil {
@@ -70,7 +72,7 @@ func (ds *Datastore) CreateScimUser(ctx context.Context, user *fleet.ScimUser) (
 func (ds *Datastore) ScimUserByID(ctx context.Context, id uint) (*fleet.ScimUser, error) {
 	const query = `
 		SELECT
-			id, external_id, user_name, given_name, family_name, active, updated_at
+			id, external_id, user_name, given_name, family_name, department, active, updated_at
 		FROM scim_users
 		WHERE id = ?
 	`
@@ -108,7 +110,7 @@ func (ds *Datastore) ScimUserByUserName(ctx context.Context, userName string) (*
 func scimUserByUserName(ctx context.Context, q sqlx.QueryerContext, userName string) (*fleet.ScimUser, error) {
 	const query = `
 		SELECT
-			id, external_id, user_name, given_name, family_name, active, updated_at
+			id, external_id, user_name, given_name, family_name, department, active, updated_at
 		FROM scim_users
 		WHERE user_name = ?
 	`
@@ -172,7 +174,7 @@ func scimUserByUserNameOrEmail(ctx context.Context, q sqlx.QueryerContext, logge
 	// Next, to find the user by email
 	const query = `
 		SELECT
-			scim_users.id, external_id, user_name, given_name, family_name, active, scim_users.updated_at
+			scim_users.id, external_id, user_name, given_name, family_name, department, active, scim_users.updated_at
 		FROM scim_users
 		JOIN scim_user_emails ON scim_users.id = scim_user_emails.scim_user_id
 		WHERE scim_user_emails.email = ?
@@ -226,7 +228,7 @@ func (ds *Datastore) ScimUserByHostID(ctx context.Context, hostID uint) (*fleet.
 func getScimUserLiteByHostID(ctx context.Context, q sqlx.QueryerContext, hostID uint) (*fleet.ScimUser, error) {
 	const query = `
 		SELECT
-			su.id, su.external_id, su.user_name, su.given_name, su.family_name, su.active, su.updated_at
+			su.id, su.external_id, su.user_name, su.given_name, su.family_name, su.department, su.active, su.updated_at
 		FROM scim_users su
 		JOIN host_scim_user ON su.id = host_scim_user.scim_user_id
 		WHERE host_scim_user.host_id = ?
@@ -268,14 +270,19 @@ func (ds *Datastore) ReplaceScimUser(ctx context.Context, user *fleet.ScimUser) 
 	emailsNeedUpdate := emailsRequireUpdate(currentEmails, user.Emails)
 
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
-		// load the username before updating the user, to check if it changed
-		var oldUsername string
-		err := sqlx.GetContext(ctx, tx, &oldUsername, `SELECT user_name FROM scim_users WHERE id = ?`, user.ID)
+		// load the username and department before updating the user, to check if it changed
+		old := struct {
+			UserName   string  `db:"user_name"`
+			Department *string `db:"department"`
+			GivenName  *string `db:"given_name"`
+			FamilyName *string `db:"family_name"`
+		}{}
+		err := sqlx.GetContext(ctx, tx, &old, `SELECT user_name, department, given_name, family_name FROM scim_users WHERE id = ?`, user.ID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return notFound("scim user").WithID(user.ID)
 			}
-			return ctxerr.Wrap(ctx, err, "load existing scim username before update")
+			return ctxerr.Wrap(ctx, err, "load existing scim username and department before update")
 		}
 
 		// Update the SCIM user
@@ -285,6 +292,7 @@ func (ds *Datastore) ReplaceScimUser(ctx context.Context, user *fleet.ScimUser) 
 			user_name = ?,
 			given_name = ?,
 			family_name = ?,
+			department = ?,
 			active = ?
 		WHERE id = ?`
 		result, err := tx.ExecContext(
@@ -294,6 +302,7 @@ func (ds *Datastore) ReplaceScimUser(ctx context.Context, user *fleet.ScimUser) 
 			user.UserName,
 			user.GivenName,
 			user.FamilyName,
+			user.Department,
 			user.Active,
 			user.ID,
 		)
@@ -308,7 +317,10 @@ func (ds *Datastore) ReplaceScimUser(ctx context.Context, user *fleet.ScimUser) 
 		if rowsAffected == 0 {
 			return notFound("scim user").WithID(user.ID)
 		}
-		usernameChanged := oldUsername != user.UserName
+
+		usernameChanged := old.UserName != user.UserName
+		departmentChanged := !cmp.Equal(old.Department, user.Department)
+		nameChanged := !cmp.Equal(old.GivenName, user.GivenName) || !cmp.Equal(old.FamilyName, user.FamilyName)
 
 		// Only update emails if they've changed
 		if emailsNeedUpdate {
@@ -337,7 +349,7 @@ func (ds *Datastore) ReplaceScimUser(ctx context.Context, user *fleet.ScimUser) 
 		user.Groups = groups
 
 		// resend profiles that depend on this username if it changed
-		if usernameChanged {
+		if usernameChanged || departmentChanged || nameChanged {
 			err = triggerResendProfilesForIDPUserChange(ctx, tx, user.ID)
 			if err != nil {
 				return err
@@ -424,7 +436,7 @@ func (ds *Datastore) ListScimUsers(ctx context.Context, opts fleet.ScimUsersList
 	// Build the base query
 	baseQuery := `
 		SELECT DISTINCT
-			scim_users.id, external_id, user_name, given_name, family_name, active, scim_users.updated_at
+			scim_users.id, external_id, user_name, given_name, family_name, department, active, scim_users.updated_at
 		FROM scim_users
 	`
 
@@ -605,6 +617,9 @@ func validateScimUserFields(user *fleet.ScimUser) error {
 	if user.FamilyName != nil && len(*user.FamilyName) > fleet.SCIMMaxFieldLength {
 		return fmt.Errorf("family_name exceeds maximum length of %d characters", fleet.SCIMMaxFieldLength)
 	}
+	if user.Department != nil && len(*user.Department) > fleet.SCIMMaxFieldLength {
+		return fmt.Errorf("department exceeds maximum length of %d characters", fleet.SCIMMaxFieldLength)
+	}
 	return nil
 }
 
@@ -670,12 +685,15 @@ func insertScimGroupUsers(ctx context.Context, tx sqlx.ExtContext, groupID uint,
 		return nil
 	}
 
+	// TODO: We could consider using string interpolation without placeholders for better performance
+	// to the extent these queries are dependent only on the group ID and user IDs, which are integers.
+	// See https://github.com/fleetdm/fleet/pull/30264
+
 	batchSize := 10000
 	return common_mysql.BatchProcessSimple(userIDs, batchSize, func(userIDsInBatch []uint) error {
 		// Build the batch insert query
 		valueStrings := make([]string, 0, len(userIDsInBatch))
 		valueArgs := make([]interface{}, 0, len(userIDsInBatch)*2)
-
 		for _, userID := range userIDsInBatch {
 			valueStrings = append(valueStrings, "(?, ?)")
 			valueArgs = append(valueArgs, userID, groupID)
@@ -685,7 +703,8 @@ func insertScimGroupUsers(ctx context.Context, tx sqlx.ExtContext, groupID uint,
 		insertQuery := `
 		INSERT INTO scim_user_group (
 			scim_user_id, group_id
-		) VALUES ` + strings.Join(valueStrings, ",")
+		) VALUES ` + strings.Join(valueStrings, ",") + `
+		ON DUPLICATE KEY UPDATE created_at = scim_user_group.created_at` // no-op update to avoid duplicate key errors
 
 		// Execute the batch insert
 		_, err := tx.ExecContext(ctx, insertQuery, valueArgs...)
@@ -1157,7 +1176,12 @@ func triggerResendProfilesForIDPUserChange(ctx context.Context, tx sqlx.ExtConte
 		return err
 	}
 	return triggerResendProfilesUsingVariables(ctx, tx, hostIDs,
-		[]string{fleet.FleetVarHostEndUserIDPUsername, fleet.FleetVarHostEndUserIDPUsernameLocalPart})
+		[]fleet.FleetVarName{
+			fleet.FleetVarHostEndUserIDPUsername,
+			fleet.FleetVarHostEndUserIDPUsernameLocalPart,
+			fleet.FleetVarHostEndUserIDPDepartment,
+			fleet.FleetVarHostEndUserIDPFullname,
+		})
 }
 
 func triggerResendProfilesForIDPUserDeleted(ctx context.Context, tx sqlx.ExtContext, deletedScimUserID uint) error {
@@ -1166,7 +1190,13 @@ func triggerResendProfilesForIDPUserDeleted(ctx context.Context, tx sqlx.ExtCont
 		return err
 	}
 	return triggerResendProfilesUsingVariables(ctx, tx, hostIDs,
-		[]string{fleet.FleetVarHostEndUserIDPUsername, fleet.FleetVarHostEndUserIDPUsernameLocalPart, fleet.FleetVarHostEndUserIDPGroups})
+		[]fleet.FleetVarName{
+			fleet.FleetVarHostEndUserIDPUsername,
+			fleet.FleetVarHostEndUserIDPUsernameLocalPart,
+			fleet.FleetVarHostEndUserIDPGroups,
+			fleet.FleetVarHostEndUserIDPDepartment,
+			fleet.FleetVarHostEndUserIDPFullname,
+		})
 }
 
 func triggerResendProfilesForIDPGroupChange(ctx context.Context, tx sqlx.ExtContext, updatedScimGroupID uint) error {
@@ -1185,7 +1215,7 @@ func triggerResendProfilesForIDPGroupChange(ctx context.Context, tx sqlx.ExtCont
 		return err
 	}
 	return triggerResendProfilesUsingVariables(ctx, tx, hostIDs,
-		[]string{fleet.FleetVarHostEndUserIDPGroups})
+		[]fleet.FleetVarName{fleet.FleetVarHostEndUserIDPGroups})
 }
 
 func triggerResendProfilesForIDPGroupChangeByUsers(ctx context.Context, tx sqlx.ExtContext, scimUserIDs []uint) error {
@@ -1198,7 +1228,7 @@ func triggerResendProfilesForIDPGroupChangeByUsers(ctx context.Context, tx sqlx.
 		return err
 	}
 	return triggerResendProfilesUsingVariables(ctx, tx, hostIDs,
-		[]string{fleet.FleetVarHostEndUserIDPGroups})
+		[]fleet.FleetVarName{fleet.FleetVarHostEndUserIDPGroups})
 }
 
 func triggerResendProfilesForIDPUserAddedToHost(ctx context.Context, tx sqlx.ExtContext, hostID, updatedScimUserID uint) error {
@@ -1213,10 +1243,16 @@ func triggerResendProfilesForIDPUserAddedToHost(ctx context.Context, tx sqlx.Ext
 		return nil
 	}
 	return triggerResendProfilesUsingVariables(ctx, tx, []uint{hostID},
-		[]string{fleet.FleetVarHostEndUserIDPUsername, fleet.FleetVarHostEndUserIDPUsernameLocalPart, fleet.FleetVarHostEndUserIDPGroups})
+		[]fleet.FleetVarName{
+			fleet.FleetVarHostEndUserIDPUsername,
+			fleet.FleetVarHostEndUserIDPUsernameLocalPart,
+			fleet.FleetVarHostEndUserIDPDepartment,
+			fleet.FleetVarHostEndUserIDPGroups,
+			fleet.FleetVarHostEndUserIDPFullname,
+		})
 }
 
-func triggerResendProfilesUsingVariables(ctx context.Context, tx sqlx.ExtContext, hostIDs []uint, affectedVars []string) error {
+func triggerResendProfilesUsingVariables(ctx context.Context, tx sqlx.ExtContext, hostIDs []uint, affectedVars []fleet.FleetVarName) error {
 	if len(hostIDs) == 0 || len(affectedVars) == 0 {
 		return nil
 	}
@@ -1232,7 +1268,7 @@ func triggerResendProfilesUsingVariables(ctx context.Context, tx sqlx.ExtContext
 	// installed on the affected hosts. ReconcileAppleProfiles will take care of
 	// resending as appropriate based on label membershup and all at the time it
 	// runs.
-	const updateStatusQuery = `
+	const appleUpdateStatusQuery = `
 	UPDATE
 		host_mdm_apple_profiles hmap
 		JOIN hosts h
@@ -1245,36 +1281,63 @@ func triggerResendProfilesUsingVariables(ctx context.Context, tx sqlx.ExtContext
 		JOIN fleet_variables fv
 			ON mcpv.fleet_variable_id = fv.id
 	SET
-		hmap.status = NULL
+		hmap.status = NULL,
+		hmap.command_uuid = ''
 	WHERE
 		h.id IN (:host_ids) AND
 		hmap.operation_type = :operation_type_install AND
 		hmap.status IS NOT NULL AND
 		fv.name IN (:affected_vars)
 `
+
+	const windowsUpdateStatusQuery = `
+	UPDATE
+		host_mdm_windows_profiles hmwp
+		JOIN hosts h
+			ON h.uuid = hmwp.host_uuid
+		JOIN mdm_windows_configuration_profiles mwcp
+			ON (mwcp.team_id = h.team_id OR (COALESCE(mwcp.team_id, 0) = 0 AND h.team_id IS NULL)) AND
+				 mwcp.profile_uuid = hmwp.profile_uuid
+		JOIN mdm_configuration_profile_variables mcpv
+			ON mcpv.windows_profile_uuid = mwcp.profile_uuid
+		JOIN fleet_variables fv
+			ON mcpv.fleet_variable_id = fv.id
+	SET
+		hmwp.status = NULL,
+		hmwp.command_uuid = ''
+	WHERE
+		h.id IN (:host_ids) AND
+		hmwp.operation_type = :operation_type_install AND
+		hmwp.status IS NOT NULL AND
+		fv.name IN (:affected_vars)
+`
+
 	vars := make([]any, len(affectedVars))
 	for i, v := range affectedVars {
-		vars[i] = "FLEET_VAR_" + v
+		vars[i] = "FLEET_VAR_" + string(v)
 	}
 
-	stmt, args, err := sqlx.Named(updateStatusQuery, map[string]any{
-		"host_ids":               hostIDs,
-		"operation_type_install": fleet.MDMOperationTypeInstall,
-		"affected_vars":          vars,
-	})
-	if err != nil {
-		return ctxerr.Wrap(ctx, err, "prepare resend profiles replace names")
+	for _, query := range []string{appleUpdateStatusQuery, windowsUpdateStatusQuery} {
+		updateStmt, args, err := sqlx.Named(query, map[string]any{
+			"host_ids":               hostIDs,
+			"operation_type_install": fleet.MDMOperationTypeInstall,
+			"affected_vars":          vars,
+		})
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "prepare resend profiles replace names")
+		}
+
+		updateStmt, args, err = sqlx.In(updateStmt, args...)
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "prepare resend profiles arguments")
+		}
+
+		_, err = tx.ExecContext(ctx, updateStmt, args...)
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "execute resend profiles")
+		}
 	}
 
-	stmt, args, err = sqlx.In(stmt, args...)
-	if err != nil {
-		return ctxerr.Wrap(ctx, err, "prepare resend profiles arguments")
-	}
-
-	_, err = tx.ExecContext(ctx, stmt, args...)
-	if err != nil {
-		return ctxerr.Wrap(ctx, err, "execute resend profiles")
-	}
 	return nil
 }
 

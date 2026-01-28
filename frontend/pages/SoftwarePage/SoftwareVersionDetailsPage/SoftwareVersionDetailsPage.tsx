@@ -22,8 +22,10 @@ import {
   ISoftwareVersion,
   formatSoftwareType,
   isIpadOrIphoneSoftwareSource,
+  isAndroidSoftwareSource,
 } from "interfaces/software";
 import { ignoreAxiosError } from "interfaces/errors";
+import { DisplayPlatform } from "interfaces/platform";
 
 import { DEFAULT_USE_QUERY_OPTIONS } from "utilities/constants";
 
@@ -49,12 +51,21 @@ type ISoftwareTitleDetailsPageProps = RouteComponentProps<
   ISoftwareVersionDetailsRouteParams
 >;
 
+const getVulnUnsupportedSourceText = (
+  source: string
+): DisplayPlatform | undefined => {
+  if (isAndroidSoftwareSource(source)) return "Android";
+  if (isIpadOrIphoneSoftwareSource(source)) {
+    return source === "ios_apps" ? "iOS" : "iPadOS";
+  }
+};
+
 const SoftwareVersionDetailsPage = ({
   routeParams,
   router,
   location,
 }: ISoftwareTitleDetailsPageProps) => {
-  const { isPremiumTier, isOnGlobalTeam } = useContext(AppContext);
+  const { isPremiumTier, isOnGlobalTeam, config } = useContext(AppContext);
   const handlePageError = useErrorHandler();
 
   const versionId = parseInt(routeParams.id, 10);
@@ -118,10 +129,14 @@ const SoftwareVersionDetailsPage = ({
   );
 
   const renderVulnTable = (swVersion: ISoftwareVersion) => {
-    if (isIpadOrIphoneSoftwareSource(swVersion.source)) {
-      const platformText = swVersion.source === "ios_apps" ? "iOS" : "iPadOS";
-      return <VulnsNotSupported platformText={platformText} />;
+    const vulnUnsupportedSource = getVulnUnsupportedSourceText(
+      swVersion.source
+    );
+
+    if (vulnUnsupportedSource) {
+      return <VulnsNotSupported platformText={vulnUnsupportedSource} />;
     }
+
     return (
       <SoftwareVulnerabilitiesTable
         data={swVersion.vulnerabilities ?? []}
@@ -144,7 +159,7 @@ const SoftwareVersionDetailsPage = ({
 
     return (
       <>
-        {isPremiumTier && (
+        {isPremiumTier && !config?.partnerships?.enable_primo && (
           <TeamsHeader
             isOnGlobalTeam={isOnGlobalTeam}
             currentTeamId={currentTeamId}
@@ -161,13 +176,14 @@ const SoftwareVersionDetailsPage = ({
           <>
             <Card
               borderRadiusSize="xxlarge"
-              includeShadow
               className={`${baseClass}__summary-section`}
             >
               <SoftwareDetailsSummary
-                title={`${softwareVersion.name}, ${softwareVersion.version}`}
+                displayName={`${
+                  softwareVersion.display_name || softwareVersion.name
+                }, ${softwareVersion.version}`}
                 type={formatSoftwareType(softwareVersion)}
-                hosts={hostsCount ?? 0}
+                hostCount={hostsCount}
                 queryParams={{
                   software_version_id: softwareVersion.id,
                   team_id: teamIdForApi,
@@ -178,7 +194,6 @@ const SoftwareVersionDetailsPage = ({
             </Card>
             <Card
               borderRadiusSize="xxlarge"
-              includeShadow
               className={`${baseClass}__vulnerabilities-section`}
             >
               <h2 className="section__header">Vulnerabilities</h2>

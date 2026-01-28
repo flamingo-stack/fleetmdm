@@ -98,6 +98,8 @@ func setupMockDatastorePremiumService(t testing.TB) (*mock.Store, *eeservice.Ser
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		panic(err)
@@ -110,6 +112,11 @@ func setupMockDatastorePremiumService(t testing.TB) (*mock.Store, *eeservice.Ser
 		nil,
 		clock.C,
 		depStorage,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -130,7 +137,6 @@ func TestGetOrCreatePreassignTeam(t *testing.T) {
 	ssoSettings := fleet.SSOProviderSettings{
 		EntityID:    "foo",
 		MetadataURL: "https://example.com/metadata.xml",
-		IssuerURI:   "https://example.com",
 	}
 	appConfig := &fleet.AppConfig{MDM: fleet.MDM{
 		EnabledAndConfigured:  true,
@@ -192,7 +198,7 @@ func TestGetOrCreatePreassignTeam(t *testing.T) {
 			}
 			return nil, ctxerr.Wrap(ctx, &eeservice.NotFoundError{})
 		}
-		ds.TeamFunc = func(ctx context.Context, id uint) (*fleet.Team, error) {
+		ds.TeamWithExtrasFunc = func(ctx context.Context, id uint) (*fleet.Team, error) {
 			tm, ok := teamStore[id]
 			if !ok {
 				return nil, errors.New("team id not found")
@@ -209,7 +215,7 @@ func TestGetOrCreatePreassignTeam(t *testing.T) {
 		ds.SaveTeamFunc = func(ctx context.Context, team *fleet.Team) (*fleet.Team, error) {
 			return nil, errors.New("not implemented")
 		}
-		ds.NewMDMAppleConfigProfileFunc = func(ctx context.Context, profile fleet.MDMAppleConfigProfile, vars []string) (*fleet.MDMAppleConfigProfile, error) {
+		ds.NewMDMAppleConfigProfileFunc = func(ctx context.Context, profile fleet.MDMAppleConfigProfile, vars []fleet.FleetVarName) (*fleet.MDMAppleConfigProfile, error) {
 			return nil, errors.New("not implemented")
 		}
 		ds.DeleteMDMAppleConfigProfileByTeamAndIdentifierFunc = func(ctx context.Context, teamID *uint, profileIdentifier string) error {
@@ -224,7 +230,7 @@ func TestGetOrCreatePreassignTeam(t *testing.T) {
 		ds.GetMDMAppleSetupAssistantFunc = func(ctx context.Context, teamID *uint) (*fleet.MDMAppleSetupAssistant, error) {
 			return nil, errors.New("not implemented")
 		}
-		ds.LabelIDsByNameFunc = func(ctx context.Context, names []string) (map[string]uint, error) {
+		ds.LabelIDsByNameFunc = func(ctx context.Context, names []string, filter fleet.TeamFilter) (map[string]uint, error) {
 			require.Len(t, names, 1)
 			require.ElementsMatch(t, names, []string{fleet.BuiltinLabelMacOS14Plus})
 			return map[string]uint{names[0]: 1}, nil
@@ -329,7 +335,7 @@ func TestGetOrCreatePreassignTeam(t *testing.T) {
 			teamStore[tm.ID] = team
 			return team, nil
 		}
-		ds.NewMDMAppleConfigProfileFunc = func(ctx context.Context, profile fleet.MDMAppleConfigProfile, vars []string) (*fleet.MDMAppleConfigProfile, error) {
+		ds.NewMDMAppleConfigProfileFunc = func(ctx context.Context, profile fleet.MDMAppleConfigProfile, vars []fleet.FleetVarName) (*fleet.MDMAppleConfigProfile, error) {
 			require.Equal(t, lastTeamID, *profile.TeamID)
 			require.Equal(t, mobileconfig.FleetFileVaultPayloadIdentifier, profile.Identifier)
 			return &profile, nil

@@ -25,6 +25,11 @@ import { QueryParams, buildQueryStringFromParams } from "utilities/url";
 import { IHost } from "interfaces/host";
 import { ILabel } from "interfaces/label";
 import { IPack } from "interfaces/pack";
+import type { PerformanceImpactIndicator } from "interfaces/schedulable_query";
+import {
+  PerformanceImpactIndicatorValue,
+  ISchedulableQueryStats,
+} from "interfaces/schedulable_query";
 import {
   IScheduledQuery,
   IPackQueryFormData,
@@ -49,7 +54,6 @@ import {
   PLATFORM_LABEL_DISPLAY_TYPES,
   isPlatformLabelNameFromAPI,
 } from "utilities/constants";
-import { ISchedulableQueryStats } from "interfaces/schedulable_query";
 import { IDropdownOption } from "interfaces/dropdownOption";
 import CustomLink from "components/CustomLink";
 
@@ -658,13 +662,13 @@ export const readableDate = (date: string) => {
 
 export const getPerformanceImpactDescription = (
   scheduledQueryStats: ISchedulableQueryStats
-) => {
+): PerformanceImpactIndicator => {
   if (
     !scheduledQueryStats.total_executions ||
     scheduledQueryStats.total_executions === 0 ||
     scheduledQueryStats.total_executions === null
   ) {
-    return "Undetermined";
+    return PerformanceImpactIndicatorValue.UNDETERMINED;
   }
 
   if (
@@ -675,13 +679,59 @@ export const getPerformanceImpactDescription = (
       scheduledQueryStats.user_time_p50 + scheduledQueryStats.system_time_p50;
 
     if (indicator < 2000) {
-      return "Minimal";
+      return PerformanceImpactIndicatorValue.MINIMAL;
     }
     if (indicator < 4000) {
-      return "Considerable";
+      return PerformanceImpactIndicatorValue.CONSIDERABLE;
     }
   }
-  return "Excessive";
+  return PerformanceImpactIndicatorValue.EXCESSIVE;
+};
+
+export const getPerformanceImpactIndicatorTooltip = (
+  indicator: PerformanceImpactIndicator,
+  isHostSpecific = false
+) => {
+  switch (indicator) {
+    case PerformanceImpactIndicatorValue.MINIMAL:
+      return (
+        <>
+          Running this query very frequently has little to no <br /> impact on
+          your device&apos;s performance.
+        </>
+      );
+    case PerformanceImpactIndicatorValue.CONSIDERABLE:
+      return (
+        <>
+          Running this query frequently can have a noticeable <br />
+          impact on your device&apos;s performance.
+        </>
+      );
+    case PerformanceImpactIndicatorValue.EXCESSIVE:
+      return (
+        <>
+          Running this query, even infrequently, can have a <br />
+          significant impact on your device&apos;s performance.
+        </>
+      );
+    case PerformanceImpactIndicatorValue.DENYLISTED:
+      return (
+        <>
+          This query has been <br /> stopped from running <br /> because of
+          excessive <br /> resource consumption.
+        </>
+      );
+    case PerformanceImpactIndicatorValue.UNDETERMINED:
+      return (
+        <>
+          Performance impact will be available when{" "}
+          {isHostSpecific ? "the" : "this"} <br />
+          query runs{isHostSpecific && " on this host"}.
+        </>
+      );
+    default:
+      return null;
+  }
 };
 
 export const secondsToDhms = (s: number): string => {
@@ -896,16 +946,31 @@ export function getCustomDropdownOptions(
       ];
 }
 
-export const getGitOpsModeTipContent = (repoURL: string) => (
-  <>
-    <span>
-      Manage in{" "}
-      <CustomLink newTab text="YAML" variant="tooltip-link" url={repoURL} />
-      <br />
-    </span>
-    <span>GitOps mode enabled</span>
-  </>
-);
+export const getGitOpsModeTipContent = (repoURL: string) => {
+  let url = "";
+  try {
+    url = new URL(repoURL).toString();
+  } catch {
+    // Invalid URL submitted before validation was required, missing protocol
+    url = `https://${repoURL}`;
+  }
+  return (
+    <>
+      <span>
+        Manage in{" "}
+        <CustomLink newTab text="YAML" variant="tooltip-link" url={url} />
+        <br />
+      </span>
+      <span>(GitOps mode enabled)</span>
+    </>
+  );
+};
+
+/** Returns true if the passed in ISO 8601 date-time string represents a date and time in the past,
+ * false otherwise */
+export const isDateTimePast = (dt: string) => {
+  return new Date(dt) < new Date();
+};
 
 export default {
   addGravatarUrlToResource,
@@ -949,4 +1014,5 @@ export default {
   normalizeEmptyValues,
   wait,
   wrapFleetHelper,
+  isDateTimePast,
 };

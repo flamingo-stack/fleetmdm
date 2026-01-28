@@ -41,12 +41,14 @@ interface ICustomSetting {
 export interface IAppleDeviceUpdates {
   minimum_version: string;
   deadline: string;
+  update_new_hosts?: boolean;
 }
 
 export interface IMdmConfig {
   /** Update this URL if you're self-hosting Fleet and you want your hosts to talk to a different URL for MDM features. (If not configured, hosts will use the base URL of the Fleet instance.) */
   apple_server_url: string;
   enable_disk_encryption: boolean;
+  windows_require_bitlocker_pin: boolean;
   /** `enabled_and_configured` only tells us if Apples MDM has been enabled and
   configured correctly. The naming is slightly confusing but at one point we
   only supported apple mdm, so thats why it's name the way it is. */
@@ -60,6 +62,7 @@ export interface IMdmConfig {
   apple_bm_terms_expired: boolean;
   apple_bm_enabled_and_configured: boolean;
   windows_enabled_and_configured: boolean;
+  enable_turn_on_windows_mdm_manually: boolean;
   windows_migration_enabled: boolean;
   android_enabled_and_configured: boolean;
   end_user_authentication: IEndUserAuthentication;
@@ -76,6 +79,7 @@ export interface IMdmConfig {
     macos_setup_assistant: string | null;
     enable_release_device_manually: boolean | null;
     manual_agent_install: boolean | null;
+    require_all_software_macos: boolean | null;
   };
   macos_migration: IMacOsMigrationSettings;
   windows_updates: {
@@ -88,7 +92,10 @@ export interface IMdmConfig {
 // values if the device is assigned to a team, e.g., features.enable_software_inventory reflects the
 // team config, if applicable, rather than the global config.
 export interface IDeviceGlobalConfig {
-  mdm: Pick<IMdmConfig, "enabled_and_configured">;
+  mdm: {
+    enabled_and_configured: boolean;
+    require_all_software_macos: boolean | null;
+  };
   features: Pick<IConfigFeatures, "enable_software_inventory">;
 }
 
@@ -135,7 +142,7 @@ export interface IConfig {
     verify_ssl_certs: boolean;
     enable_start_tls: boolean;
   };
-  sso_settings: {
+  sso_settings?: {
     entity_id: string;
     issuer_uri: string;
     idp_image_url: string;
@@ -146,12 +153,19 @@ export interface IConfig {
     enable_sso_idp_login: boolean;
     enable_jit_provisioning: boolean;
     enable_jit_role_sync: boolean;
+    sso_server_url?: string;
   };
   // configuration details for conditional access. For enabled/disabled status per team, see
   // subfields under `integrations`
   conditional_access?: {
+    // Microsoft Entra
     microsoft_entra_tenant_id: string;
     microsoft_entra_connection_configured: boolean;
+    // Okta
+    okta_idp_id: string;
+    okta_assertion_consumer_service_url: string;
+    okta_audience_uri: string;
+    okta_certificate: string;
   };
   host_expiry_settings: {
     host_expiry_enabled: boolean;
@@ -215,7 +229,8 @@ export type LogDestination =
   | "kinesis"
   | "lambda"
   | "pubsub"
-  | "kafta"
+  | "kafka"
+  | "nats"
   | "stdout"
   | "webhook"
   | "";
@@ -225,7 +240,7 @@ export interface ILoggingConfig {
   json: boolean;
   result: {
     plugin: LogDestination;
-    config: {
+    config?: {
       status_log_file: string;
       result_log_file: string;
       enable_log_rotation: boolean;
@@ -234,7 +249,7 @@ export interface ILoggingConfig {
       result_url?: string;
     };
   };
-  status: {
+  status?: {
     plugin: string;
     config: {
       status_log_file: string;
@@ -258,3 +273,35 @@ export interface IGitOpsModeConfig {
   gitops_mode_enabled: boolean;
   repository_url: string;
 }
+
+/** Check if Okta conditional access is configured (all 4 fields must be present) */
+export const isOktaConditionalAccessConfigured = (
+  config: IConfig | null | undefined
+): boolean => {
+  const ca = config?.conditional_access;
+  return !!(
+    ca?.okta_idp_id &&
+    ca?.okta_assertion_consumer_service_url &&
+    ca?.okta_audience_uri &&
+    ca?.okta_certificate
+  );
+};
+
+/** Check if Microsoft Entra conditional access is configured */
+export const isEntraConditionalAccessConfigured = (
+  config: IConfig | null | undefined
+): boolean => {
+  return (
+    config?.conditional_access?.microsoft_entra_connection_configured ?? false
+  );
+};
+
+/** Check if any conditional access provider is configured (Okta or Entra) */
+export const isConditionalAccessConfigured = (
+  config: IConfig | null | undefined
+): boolean => {
+  return (
+    isOktaConditionalAccessConfigured(config) ||
+    isEntraConditionalAccessConfigured(config)
+  );
+};

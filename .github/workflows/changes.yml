@@ -1,0 +1,39 @@
+name: Generate Changes
+
+on:
+  workflow_call:
+    outputs:
+      server:
+        value: ${{ jobs.changes.outputs.server }}
+      client:
+        value: ${{ jobs.changes.outputs.client }}
+
+jobs:
+  changes:
+    name: Detect Changes
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      client: ${{ steps.filter.outputs.client }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'server/**'
+              - 'cmd/**'
+              - 'pkg/**'
+              - 'ee/**'
+              - 'go.mod'
+              - 'go.sum'
+            client:
+              - 'orbit/**'
+              - 'go.mod'
+              - 'go.sum'

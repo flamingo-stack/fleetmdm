@@ -16,15 +16,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/fleetdm/fleet/v4/server/contexts/host"
-	"github.com/fleetdm/fleet/v4/server/contexts/viewer"
-	"github.com/fleetdm/fleet/v4/server/fleet"
+	platform_http "github.com/fleetdm/fleet/v4/server/platform/http"
 	"github.com/getsentry/sentry-go"
 	"go.elastic.co/apm/v2"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type key int
@@ -118,21 +120,9 @@ func setMetadata(ctx context.Context, data map[string]interface{}) map[string]in
 
 	data["timestamp"] = nowFn().Format(time.RFC3339)
 
-	if h, ok := host.FromContext(ctx); ok {
-		data["host"] = map[string]interface{}{
-			"platform":        h.Platform,
-			"osquery_version": h.OsqueryVersion,
-		}
-	}
-
-	if v, ok := viewer.FromContext(ctx); ok {
-		vdata := map[string]interface{}{}
-		data["viewer"] = vdata
-		vdata["is_logged_in"] = v.IsLoggedIn()
-
-		if v.User != nil {
-			vdata["sso_enabled"] = v.User.SSOEnabled
-		}
+	// Get diagnostic context from all registered providers
+	for _, provider := range getErrorContextProviders(ctx) {
+		maps.Copy(data, provider.GetDiagnosticContext())
 	}
 
 	return data
@@ -212,7 +202,7 @@ func Wrapf(ctx context.Context, cause error, format string, args ...interface{})
 
 // Cause returns the root error in err's chain.
 func Cause(err error) error {
-	return fleet.Cause(err)
+	return platform_http.Cause(err)
 }
 
 // FleetCause is similar to Cause, but returns the root-most
@@ -291,20 +281,70 @@ func FromContext(ctx context.Context) Handler {
 
 // Handle handles err by passing it to the registered error handler,
 // deduplicating it and storing it for a configured duration. It also takes
-// care of sending it to the configured APM, if any.
+// care of sending it to the configured OpenTelemetry/APM/Sentry, if any.
 func Handle(ctx context.Context, err error) {
+	if err == nil {
+		return
+	}
+
 	// as a last resource, wrap the error if there isn't
 	// a FleetError in the chain
 	var ferr *FleetError
 	if !errors.As(err, &ferr) {
-		err = Wrap(ctx, err, "missing FleetError in chain")
+		wrapped := wrapError(ctx, "missing FleetError in chain", err, nil)
+		if wrapped == nil {
+			return // shouldn't happen since err is not nil, but be safe
+		}
+		// wrapError returns an error interface, but we know it's a *FleetError
+		ferr = wrapped.(*FleetError)
 	}
 
-	cause := err
-	if ferr := FleetCause(err); ferr != nil {
+	cause := ferr
+	if rootCause := FleetCause(ferr); rootCause != nil {
 		// use the FleetCause error so we send the most relevant stacktrace to APM
 		// (the one from the initial New/Wrap call).
-		cause = ferr
+		cause = rootCause
+	}
+
+	// Collect telemetry context from registered providers
+	telemetryAttrs := collectTelemetryContext(ctx)
+
+	// send to OpenTelemetry if there's an active span
+	if span := trace.SpanFromContext(ctx); span != nil && span.IsRecording() {
+		// Mark the current span as failed by setting the error status.
+		// This status can be overridden if we recovered from the error.
+		exceptionType := fmt.Sprintf("%T", Cause(cause)) // type of root error
+		span.SetStatus(codes.Error, exceptionType)       // low-cardinality identifier
+
+		// Build attributes for the exception event
+		attrs := []attribute.KeyValue{
+			attribute.String("exception.type", exceptionType),
+			attribute.String("exception.message", cause.Error()),
+			attribute.String("exception.stacktrace", strings.Join(cause.Stack(), "\n")),
+		}
+
+		// Add contextual information from telemetry providers.
+		// OpenTelemetry requires typed attributes, so we convert the values to the appropriate type.
+		for k, v := range telemetryAttrs {
+			switch val := v.(type) {
+			case string:
+				attrs = append(attrs, attribute.String(k, val))
+			case int:
+				attrs = append(attrs, attribute.Int64(k, int64(val)))
+			case int64:
+				attrs = append(attrs, attribute.Int64(k, val))
+			case uint:
+				attrs = append(attrs, attribute.Int64(k, int64(val))) //nolint:gosec
+			case uint64:
+				attrs = append(attrs, attribute.Int64(k, int64(val))) //nolint:gosec
+			case bool:
+				attrs = append(attrs, attribute.Bool(k, val))
+			default:
+				attrs = append(attrs, attribute.String(k, fmt.Sprint(val)))
+			}
+		}
+
+		span.AddEvent("exception", trace.WithAttributes(attrs...))
 	}
 
 	// send to elastic APM
@@ -312,25 +352,14 @@ func Handle(ctx context.Context, err error) {
 
 	// if Sentry is configured, capture the error there
 	if sentryClient := sentry.CurrentHub().Client(); sentryClient != nil {
-		// sentry is configured, add contextual information if available
-		v, _ := viewer.FromContext(ctx)
-		h, _ := host.FromContext(ctx)
-
-		if v.User != nil || h != nil {
-			// we have a viewer (user) or a host in the context, use this to
-			// enrich the error with more context
+		if len(telemetryAttrs) > 0 {
+			// we have contextual information, use it to enrich the error
 			ctxHub := sentry.CurrentHub().Clone()
-			if v.User != nil {
-				ctxHub.ConfigureScope(func(scope *sentry.Scope) {
-					scope.SetTag("email", v.User.Email)
-					scope.SetTag("user_id", fmt.Sprint(v.User.ID))
-				})
-			} else if h != nil {
-				ctxHub.ConfigureScope(func(scope *sentry.Scope) {
-					scope.SetTag("hostname", h.Hostname)
-					scope.SetTag("host_id", fmt.Sprint(h.ID))
-				})
-			}
+			ctxHub.ConfigureScope(func(scope *sentry.Scope) {
+				for k, v := range telemetryAttrs {
+					scope.SetTag(k, fmt.Sprint(v))
+				}
+			})
 			ctxHub.CaptureException(cause)
 		} else {
 			sentry.CaptureException(cause)
@@ -338,8 +367,19 @@ func Handle(ctx context.Context, err error) {
 	}
 
 	if eh := FromContext(ctx); eh != nil {
-		eh.Store(err)
+		eh.Store(ferr)
 	}
+}
+
+// collectTelemetryContext gathers telemetry context from all registered providers.
+func collectTelemetryContext(ctx context.Context) map[string]any {
+	attrs := make(map[string]any)
+	for _, provider := range getErrorContextProviders(ctx) {
+		if telemetry := provider.GetTelemetryContext(); telemetry != nil {
+			maps.Copy(attrs, telemetry)
+		}
+	}
+	return attrs
 }
 
 // Retrieve retrieves an error from the registered error handler

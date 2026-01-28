@@ -6,6 +6,8 @@ import { ILabel, ILabelSummary } from "interfaces/label";
 import { IDynamicLabelFormData } from "pages/labels/components/DynamicLabelForm/DynamicLabelForm";
 import { IManualLabelFormData } from "pages/labels/components/ManualLabelForm/ManualLabelForm";
 import { IHost } from "interfaces/host";
+import { INewLabelFormData } from "pages/labels/NewLabelPage/NewLabelPage";
+import { buildQueryStringFromParams } from "utilities/url";
 
 export interface ILabelsResponse {
   labels: ILabel[];
@@ -19,7 +21,7 @@ export interface ICreateLabelResponse {
   label: ILabel;
 }
 export type IUpdateLabelResponse = ICreateLabelResponse;
-export type IGetLabelResonse = ICreateLabelResponse;
+export type IGetLabelResponse = ICreateLabelResponse;
 
 export interface IGetHostsInLabelResponse {
   hosts: IHost[];
@@ -31,7 +33,7 @@ const isManualLabelFormData = (
   return "targetedHosts" in formData;
 };
 
-const generateCreateLabelBody = (
+const generateUpdateLabelBody = (
   formData: IDynamicLabelFormData | IManualLabelFormData
 ) => {
   // we need to prepare the post body for only manual labels.
@@ -45,7 +47,34 @@ const generateCreateLabelBody = (
   return formData;
 };
 
-const generateUpdateLabelBody = generateCreateLabelBody;
+const generateCreateLabelBody = (formData: INewLabelFormData) => {
+  switch (formData.type) {
+    case "manual":
+      return {
+        name: formData.name,
+        description: formData.description,
+        host_ids: formData.targetedHosts.map((host) => host.id),
+      };
+    case "dynamic":
+      return {
+        name: formData.name,
+        description: formData.description,
+        query: formData.labelQuery,
+        platform: formData.platform,
+      };
+    case "host_vitals":
+      return {
+        name: formData.name,
+        description: formData.description,
+        criteria: {
+          vital: formData.vital,
+          value: formData.vitalValue,
+        },
+      };
+    default:
+      throw new Error(`Unknown label type: ${formData.type}`);
+  }
+};
 
 /** gets the custom label and returns them in case-insensitive alphabetical
  * ascending order by label name. (e.g. [A, B, C, a, b, c] => [A, a, B, b, C, c])
@@ -70,12 +99,9 @@ export const getCustomLabels = <T extends { label_type: string; name: string }>(
 };
 
 export default {
-  create: (
-    formData: IDynamicLabelFormData | IManualLabelFormData
-  ): Promise<ICreateLabelResponse> => {
+  create: (formData: INewLabelFormData): Promise<ICreateLabelResponse> => {
     const { LABELS } = endpoints;
-    const postBody = generateCreateLabelBody(formData);
-    return sendRequest("POST", LABELS, postBody);
+    return sendRequest("POST", LABELS, generateCreateLabelBody(formData));
   },
 
   destroy: (label: ILabel) => {
@@ -84,22 +110,52 @@ export default {
 
     return sendRequest("DELETE", path);
   },
-  // TODO: confirm this still works
-  loadAll: async (): Promise<ILabelsResponse> => {
+  loadAll: async (teamID: number | null = null): Promise<ILabelsResponse> => {
     const { LABELS } = endpoints;
 
+    const queryStringParams = {
+      include_host_counts: false,
+      team_id: null as null | number | string,
+    };
+    if (teamID === 0) {
+      queryStringParams.team_id = "global";
+    } else if (teamID !== null && teamID > 0) {
+      // filter out "all teams" -1
+      queryStringParams.team_id = teamID;
+    }
+
+    const queryString = buildQueryStringFromParams(queryStringParams);
+    const path = `${LABELS}?${queryString}`;
+
     try {
-      const response = await sendRequest("GET", LABELS);
+      const response = await sendRequest("GET", path);
       return Promise.resolve({ labels: helpers.formatLabelResponse(response) });
     } catch (error) {
       console.error(error);
       return Promise.reject(error);
     }
   },
-  summary: (): Promise<ILabelsSummaryResponse> => {
+  summary: (
+    teamID: number | null = null,
+    treatAllTeamsAsGlobalOnly = false
+  ): Promise<ILabelsSummaryResponse> => {
     const { LABELS_SUMMARY } = endpoints;
 
-    return sendRequest("GET", LABELS_SUMMARY);
+    const queryStringParams = {
+      team_id: null as null | number | string,
+    };
+    if (teamID === 0 || (teamID === -1 && treatAllTeamsAsGlobalOnly)) {
+      queryStringParams.team_id = "global";
+    } else if (teamID !== null && teamID > 0) {
+      queryStringParams.team_id = teamID;
+    }
+
+    const queryString = buildQueryStringFromParams(queryStringParams);
+
+    return sendRequest(
+      "GET",
+      queryString ? `${LABELS_SUMMARY}?${queryString}` : LABELS_SUMMARY
+    );
   },
 
   update: async (
@@ -117,7 +173,7 @@ export default {
     return sendRequest("GET", path);
   },
 
-  getLabel: (labelId: number): Promise<IGetLabelResonse> => {
+  getLabel: (labelId: number): Promise<IGetLabelResponse> => {
     const { LABEL } = endpoints;
     return sendRequest("GET", LABEL(labelId));
   },

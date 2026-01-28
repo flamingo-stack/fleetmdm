@@ -52,6 +52,10 @@ const SoftwareCustomPackage = ({
     showPreviewEndUserExperience,
     setShowPreviewEndUserExperience,
   ] = useState(false);
+  const [
+    isIpadOrIphoneSoftwareSource,
+    setIsIpadOrIphoneSoftwareSource,
+  ] = useState(false);
 
   const {
     data: labels,
@@ -59,7 +63,10 @@ const SoftwareCustomPackage = ({
     isError: isErrorLabels,
   } = useQuery<ILabelSummary[], Error>(
     ["custom_labels"],
-    () => labelsAPI.summary().then((res) => getCustomLabels(res.labels)),
+    () =>
+      labelsAPI
+        .summary(currentTeamId)
+        .then((res) => getCustomLabels(res.labels)),
     {
       ...DEFAULT_USE_QUERY_OPTIONS,
       enabled: isPremiumTier,
@@ -87,8 +94,9 @@ const SoftwareCustomPackage = ({
     };
   }, [uploadDetails]);
 
-  const onClickPreviewEndUserExperience = () => {
+  const onClickPreviewEndUserExperience = (isIosOrIpadosApp = false) => {
     setShowPreviewEndUserExperience(!showPreviewEndUserExperience);
+    setIsIpadOrIphoneSoftwareSource(isIosOrIpadosApp);
   };
 
   const onCancel = () => {
@@ -116,7 +124,7 @@ const SoftwareCustomPackage = ({
       return;
     }
 
-    setUploadDetails(getFileDetails(formData.software));
+    setUploadDetails(getFileDetails(formData.software, true));
 
     // Note: This TODO is copied to onSaveSoftwareChanges in EditSoftwareModal
     // TODO: confirm we are deleting the second sentence (not modifying it) for non-self-service installers
@@ -191,6 +199,7 @@ const SoftwareCustomPackage = ({
         {showPreviewEndUserExperience && (
           <CategoriesEndUserExperienceModal
             onCancel={onClickPreviewEndUserExperience}
+            isIosOrIpadosApp={isIpadOrIphoneSoftwareSource}
           />
         )}
       </>

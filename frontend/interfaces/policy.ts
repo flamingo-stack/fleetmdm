@@ -13,7 +13,7 @@ export default PropTypes.shape({
   id: PropTypes.number.isRequired,
   name: PropTypes.string.isRequired,
   query: PropTypes.string.isRequired,
-  resoluton: PropTypes.string.isRequired,
+  resolution: PropTypes.string.isRequired,
   critical: PropTypes.bool,
   response: PropTypes.string,
   team_id: PropTypes.number,
@@ -51,6 +51,7 @@ export interface IPolicy {
 }
 export interface IPolicySoftwareToInstall {
   name: string;
+  display_name?: string;
   software_title_id: number;
 }
 

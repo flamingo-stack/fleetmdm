@@ -673,6 +673,11 @@ func getLabelsCommand() *cli.Command {
 			configFlag(),
 			contextFlag(),
 			debugFlag(),
+			&cli.UintFlag{
+				Name:  teamFlagName,
+				Usage: "Return labels specific to this team ID; default global labels only when viewing multiple labels",
+				Value: 0,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			client, err := clientFromCLI(c)
@@ -682,9 +687,9 @@ func getLabelsCommand() *cli.Command {
 
 			name := c.Args().First()
 
-			// if name wasn't provided, list all labels
+			// if name wasn't provided, list all labels, either globally or on a team
 			if name == "" {
-				labels, err := client.GetLabels()
+				labels, err := client.GetLabels(c.Uint(teamFlagName))
 				if err != nil {
 					return fmt.Errorf("could not list labels: %w", err)
 				}
@@ -717,6 +722,8 @@ func getLabelsCommand() *cli.Command {
 				printTable(c, columns, data)
 
 				return nil
+			} else if c.Uint(teamFlagName) != 0 {
+				return errors.New("cannot provide both a team ID and a label name")
 			}
 
 			// Label name was specified
@@ -807,7 +814,7 @@ func getAppConfigCommand() *cli.Command {
 func getHostsCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "hosts",
-		Aliases: []string{"host", "h"},
+		Aliases: []string{"host", "H"},
 		Usage:   "List information about hosts",
 		Flags: []cli.Flag{
 			&cli.UintFlag{
@@ -1135,15 +1142,6 @@ func printTable(c *cli.Context, columns []string, data [][]string) {
 func printKeyValueTable(c *cli.Context, rows [][]string) {
 	table := borderlessTabularTable(c.App.Writer)
 	table.AppendBulk(rows)
-	table.Render()
-}
-
-func printTableWithXML(c *cli.Context, columns []string, data [][]string) {
-	table := defaultTable(c.App.Writer)
-	table.SetHeader(columns)
-	table.SetReflowDuringAutoWrap(false)
-	table.SetAutoWrapText(false)
-	table.AppendBulk(data)
 	table.Render()
 }
 
@@ -1482,6 +1480,7 @@ func getMDMCommandResultsCommand() *cli.Command {
 				Usage:    "Filter MDM commands by ID.",
 				Required: true,
 			},
+			byHostIdentifier(),
 		},
 		Action: func(c *cli.Context) error {
 			client, err := clientFromCLI(c)
@@ -1494,10 +1493,10 @@ func getMDMCommandResultsCommand() *cli.Command {
 				return err
 			}
 
-			res, err := client.MDMGetCommandResults(c.String("id"))
+			res, err := client.MDMGetCommandResults(c.String("id"), c.String("host"))
 			if err != nil {
 				var nfe service.NotFoundErr
-				if errors.As(err, &nfe) {
+				if errors.As(err, &nfe) && c.String("host") == "" {
 					return errors.New("The command doesn't exist. Please provide a valid command ID. To see a list of commands that were run, run `fleetctl get mdm-commands`.")
 				}
 
@@ -1511,7 +1510,7 @@ func getMDMCommandResultsCommand() *cli.Command {
 			}
 
 			// print the results as a table
-			data := [][]string{}
+			data := []string{}
 			for _, r := range res {
 				formattedResult, err := formatXML(r.Result)
 				// if we get an error, just log it and use the
@@ -1535,18 +1534,32 @@ func getMDMCommandResultsCommand() *cli.Command {
 				if len(reqType) == 0 {
 					reqType = "InstallProfile"
 				}
-				data = append(data, []string{
-					r.CommandUUID,
-					r.UpdatedAt.Format(time.RFC3339),
-					reqType,
-					r.Status,
-					r.Hostname,
-					string(formattedPayload),
-					string(formattedResult),
-				})
+
+				idField := strings.Join([]string{"ID:", r.CommandUUID}, "\n")
+				timeField := strings.Join([]string{"TIME:", r.UpdatedAt.Format(time.RFC3339)}, "\n")
+				typeField := strings.Join([]string{"TYPE:", reqType}, "\n")
+				statusField := strings.Join([]string{"STATUS:", r.Status}, "\n")
+				payloadField := strings.Join([]string{"PAYLOAD:", string(formattedPayload)}, "\n")
+				resultsField := strings.Join([]string{"RESULTS:", string(formattedResult)}, "\n")
+				hostnameField := strings.Join([]string{"HOSTNAME:", r.Hostname}, "\n")
+
+				data = append(data, strings.Join([]string{
+					idField,
+					timeField,
+					typeField,
+					statusField,
+					hostnameField,
+					payloadField,
+					resultsField,
+				}, "\n\n"))
 			}
-			columns := []string{"ID", "TIME", "TYPE", "STATUS", "HOSTNAME", "PAYLOAD", "RESULTS"}
-			printTableWithXML(c, columns, data)
+
+			if len(data) == 0 {
+				fmt.Fprint(c.App.Writer, "No results received. Please check again later.\n")
+				return nil
+			}
+
+			fmt.Fprint(c.App.Writer, strings.Join(data, "\n---\n\n"))
 
 			return nil
 		},
@@ -1564,6 +1577,7 @@ func getMDMCommandsCommand() *cli.Command {
 			debugFlag(),
 			byHostIdentifier(),
 			byMDMCommandRequestType(),
+			withMDMCommandStatusFilter(),
 		},
 		Action: func(c *cli.Context) error {
 			client, err := clientFromCLI(c)
@@ -1576,10 +1590,18 @@ func getMDMCommandsCommand() *cli.Command {
 				return err
 			}
 
+			commandStatuses := []fleet.MDMCommandStatusFilter{}
+			if c.IsSet("command_status") {
+				for val := range strings.SplitSeq(c.String("command_status"), ",") {
+					commandStatuses = append(commandStatuses, fleet.MDMCommandStatusFilter(val))
+				}
+			}
+
 			opts := fleet.MDMCommandListOptions{
 				Filters: fleet.MDMCommandFilters{
-					HostIdentifier: c.String("host"),
-					RequestType:    c.String("type"),
+					HostIdentifier:  c.String("host"),
+					RequestType:     c.String("type"),
+					CommandStatuses: commandStatuses,
 				},
 			}
 
@@ -1590,7 +1612,13 @@ func getMDMCommandsCommand() *cli.Command {
 				}
 				return err
 			}
-			if len(results) == 0 && opts.Filters.HostIdentifier == "" && opts.Filters.RequestType == "" {
+
+			if len(results) == 0 {
+				if opts.Filters.HostIdentifier != "" {
+					log(c, "No MDM commands have been run on this host.\n")
+					return nil
+				}
+
 				log(c, "You haven't run any MDM commands. Run MDM commands with the `fleetctl mdm run-command` command.\n")
 				return nil
 			}

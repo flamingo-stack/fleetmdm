@@ -37,10 +37,10 @@ func TestHostsTransferByHosts(t *testing.T) {
 		return &fleet.Team{ID: 99, Name: "team1"}, nil
 	}
 
-	ds.AddHostsToTeamFunc = func(ctx context.Context, teamID *uint, hostIDs []uint) error {
-		require.NotNil(t, teamID)
-		require.Equal(t, uint(99), *teamID)
-		require.Equal(t, []uint{42}, hostIDs)
+	ds.AddHostsToTeamFunc = func(ctx context.Context, params *fleet.AddHostsToTeamParams) error {
+		require.NotNil(t, params.TeamID)
+		require.Equal(t, uint(99), *params.TeamID)
+		require.Equal(t, []uint{42}, params.HostIDs)
 		return nil
 	}
 
@@ -53,8 +53,8 @@ func TestHostsTransferByHosts(t *testing.T) {
 		return nil, nil
 	}
 
-	ds.TeamFunc = func(ctx context.Context, tid uint) (*fleet.Team, error) {
-		return &fleet.Team{ID: tid, Name: "team1"}, nil
+	ds.TeamLiteFunc = func(ctx context.Context, tid uint) (*fleet.TeamLite, error) {
+		return &fleet.TeamLite{ID: tid, Name: "team1"}, nil
 	}
 
 	ds.NewActivityFunc = func(
@@ -67,15 +67,18 @@ func TestHostsTransferByHosts(t *testing.T) {
 	ds.ListHostsLiteByIDsFunc = func(ctx context.Context, ids []uint) ([]*fleet.Host, error) {
 		return nil, nil
 	}
+	ds.ListMDMAndroidUUIDsToHostIDsFunc = func(ctx context.Context, hostIDs []uint) (map[string]uint, error) {
+		return map[string]uint{}, nil
+	}
 
 	assert.Equal(t, "", RunAppForTest(t, []string{"hosts", "transfer", "--team", "team1", "--hosts", "host1"}))
 	assert.True(t, ds.AddHostsToTeamFuncInvoked)
 	assert.True(t, ds.NewActivityFuncInvoked)
 
 	// Now, transfer out of the team.
-	ds.AddHostsToTeamFunc = func(ctx context.Context, teamID *uint, hostIDs []uint) error {
-		assert.Nil(t, teamID)
-		assert.Equal(t, []uint{42}, hostIDs)
+	ds.AddHostsToTeamFunc = func(ctx context.Context, params *fleet.AddHostsToTeamParams) error {
+		assert.Nil(t, params.TeamID)
+		assert.Equal(t, []uint{42}, params.HostIDs)
 		return nil
 	}
 	ds.NewActivityFuncInvoked = false
@@ -98,8 +101,8 @@ func TestHostsTransferByLabel(t *testing.T) {
 		return &fleet.Team{ID: 99, Name: "team1"}, nil
 	}
 
-	ds.LabelIDsByNameFunc = func(ctx context.Context, labels []string) (map[string]uint, error) {
-		require.Equal(t, []string{"label1"}, labels)
+	ds.LabelIDsByNameFunc = func(ctx context.Context, names []string, filter fleet.TeamFilter) (map[string]uint, error) {
+		require.Equal(t, []string{"label1"}, names)
 		return map[string]uint{"label1": uint(11)}, nil
 	}
 
@@ -109,10 +112,10 @@ func TestHostsTransferByLabel(t *testing.T) {
 		return []*fleet.Host{{ID: 32}, {ID: 12}}, nil
 	}
 
-	ds.AddHostsToTeamFunc = func(ctx context.Context, teamID *uint, hostIDs []uint) error {
-		require.NotNil(t, teamID)
-		require.Equal(t, uint(99), *teamID)
-		require.Equal(t, []uint{32, 12}, hostIDs)
+	ds.AddHostsToTeamFunc = func(ctx context.Context, params *fleet.AddHostsToTeamParams) error {
+		require.NotNil(t, params.TeamID)
+		require.Equal(t, uint(99), *params.TeamID)
+		require.Equal(t, []uint{32, 12}, params.HostIDs)
 		return nil
 	}
 
@@ -125,8 +128,8 @@ func TestHostsTransferByLabel(t *testing.T) {
 		return nil, nil
 	}
 
-	ds.TeamFunc = func(ctx context.Context, tid uint) (*fleet.Team, error) {
-		return &fleet.Team{ID: tid, Name: "team1"}, nil
+	ds.TeamLiteFunc = func(ctx context.Context, tid uint) (*fleet.TeamLite, error) {
+		return &fleet.TeamLite{ID: tid, Name: "team1"}, nil
 	}
 
 	ds.NewActivityFunc = func(
@@ -145,9 +148,9 @@ func TestHostsTransferByLabel(t *testing.T) {
 	assert.True(t, ds.AddHostsToTeamFuncInvoked)
 
 	// Now, transfer out of the team.
-	ds.AddHostsToTeamFunc = func(ctx context.Context, teamID *uint, hostIDs []uint) error {
-		assert.Nil(t, teamID)
-		require.Equal(t, []uint{32, 12}, hostIDs)
+	ds.AddHostsToTeamFunc = func(ctx context.Context, params *fleet.AddHostsToTeamParams) error {
+		assert.Nil(t, params.TeamID)
+		require.Equal(t, []uint{32, 12}, params.HostIDs)
 		return nil
 	}
 	ds.NewActivityFuncInvoked = false
@@ -170,8 +173,8 @@ func TestHostsTransferByStatus(t *testing.T) {
 		return &fleet.Team{ID: 99, Name: "team1"}, nil
 	}
 
-	ds.LabelIDsByNameFunc = func(ctx context.Context, labels []string) (map[string]uint, error) {
-		require.Equal(t, []string{"label1"}, labels)
+	ds.LabelIDsByNameFunc = func(ctx context.Context, names []string, filter fleet.TeamFilter) (map[string]uint, error) {
+		require.Equal(t, []string{"label1"}, names)
 		return map[string]uint{"label1": uint(11)}, nil
 	}
 
@@ -180,10 +183,10 @@ func TestHostsTransferByStatus(t *testing.T) {
 		return []*fleet.Host{{ID: 32}, {ID: 12}}, nil
 	}
 
-	ds.AddHostsToTeamFunc = func(ctx context.Context, teamID *uint, hostIDs []uint) error {
-		require.NotNil(t, teamID)
-		require.Equal(t, uint(99), *teamID)
-		require.Equal(t, []uint{32, 12}, hostIDs)
+	ds.AddHostsToTeamFunc = func(ctx context.Context, params *fleet.AddHostsToTeamParams) error {
+		require.NotNil(t, params.TeamID)
+		require.Equal(t, uint(99), *params.TeamID)
+		require.Equal(t, []uint{32, 12}, params.HostIDs)
 		return nil
 	}
 
@@ -196,8 +199,8 @@ func TestHostsTransferByStatus(t *testing.T) {
 		return nil, nil
 	}
 
-	ds.TeamFunc = func(ctx context.Context, tid uint) (*fleet.Team, error) {
-		return &fleet.Team{ID: tid, Name: "team1"}, nil
+	ds.TeamLiteFunc = func(ctx context.Context, tid uint) (*fleet.TeamLite, error) {
+		return &fleet.TeamLite{ID: tid, Name: "team1"}, nil
 	}
 
 	ds.NewActivityFunc = func(
@@ -229,8 +232,8 @@ func TestHostsTransferByStatusAndSearchQuery(t *testing.T) {
 		return &fleet.Team{ID: 99, Name: "team1"}, nil
 	}
 
-	ds.LabelIDsByNameFunc = func(ctx context.Context, labels []string) (map[string]uint, error) {
-		require.Equal(t, []string{"label1"}, labels)
+	ds.LabelIDsByNameFunc = func(ctx context.Context, names []string, filter fleet.TeamFilter) (map[string]uint, error) {
+		require.Equal(t, []string{"label1"}, names)
 		return map[string]uint{"label1": uint(11)}, nil
 	}
 
@@ -240,10 +243,10 @@ func TestHostsTransferByStatusAndSearchQuery(t *testing.T) {
 		return []*fleet.Host{{ID: 32}, {ID: 12}}, nil
 	}
 
-	ds.AddHostsToTeamFunc = func(ctx context.Context, teamID *uint, hostIDs []uint) error {
-		require.NotNil(t, teamID)
-		require.Equal(t, uint(99), *teamID)
-		require.Equal(t, []uint{32, 12}, hostIDs)
+	ds.AddHostsToTeamFunc = func(ctx context.Context, params *fleet.AddHostsToTeamParams) error {
+		require.NotNil(t, params.TeamID)
+		require.Equal(t, uint(99), *params.TeamID)
+		require.Equal(t, []uint{32, 12}, params.HostIDs)
 		return nil
 	}
 
@@ -256,8 +259,8 @@ func TestHostsTransferByStatusAndSearchQuery(t *testing.T) {
 		return nil, nil
 	}
 
-	ds.TeamFunc = func(ctx context.Context, tid uint) (*fleet.Team, error) {
-		return &fleet.Team{ID: tid, Name: "team1"}, nil
+	ds.TeamLiteFunc = func(ctx context.Context, tid uint) (*fleet.TeamLite, error) {
+		return &fleet.TeamLite{ID: tid, Name: "team1"}, nil
 	}
 
 	ds.NewActivityFunc = func(
