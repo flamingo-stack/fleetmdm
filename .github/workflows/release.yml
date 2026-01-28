@@ -14,7 +14,7 @@ permissions:
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/rebased-main]
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
@@ -149,10 +149,6 @@ jobs:
         with:
           install-only: true
 
-      - name: Create local tag for release build
-        if: github.event_name == 'workflow_dispatch'
-        run: git tag -f ${{ inputs.version }}
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -166,6 +162,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create local tag for release build
+        if: github.event_name == 'workflow_dispatch'
+        run: git tag -f ${{ inputs.version }}
+
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -177,48 +177,29 @@ jobs:
             goreleaser release --clean --snapshot
           fi
 
-      - name: Push latest tag on push
-        if: github.event_name == 'push'
+      - name: Build and push Docker image
         run: |
-          SNAPSHOT_VERSION=$(cat dist/metadata.json | jq -r '.version')
           IMAGE_BASE="${{ env.REGISTRY }}/${{ github.repository_owner }}/fleet"
 
-          # Push arch-specific images
-          docker push "${IMAGE_BASE}:${SNAPSHOT_VERSION}-amd64"
-          docker push "${IMAGE_BASE}:${SNAPSHOT_VERSION}-arm64"
-
-          # Create and push latest manifest
-          docker manifest create "${IMAGE_BASE}:latest" \
-            "${IMAGE_BASE}:${SNAPSHOT_VERSION}-amd64" \
-            "${IMAGE_BASE}:${SNAPSHOT_VERSION}-arm64"
-          docker manifest push "${IMAGE_BASE}:latest"
-
-          # Save version for cleanup step
-          echo "IMAGE_VERSION=${SNAPSHOT_VERSION}" >> $GITHUB_ENV
-
-      - name: Set image version for cleanup
-        if: github.event_name == 'workflow_dispatch'
-        run: echo "IMAGE_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
-
-      - name: Delete arch-specific image tags
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ORG="${{ github.repository_owner }}"
-          for arch in amd64 arm64; do
-            TAG="${IMAGE_VERSION}-${arch}"
-            echo "Deleting tag: ${TAG}"
-            # Get version ID by tag
-            VERSION_ID=$(gh api "/orgs/${ORG}/packages/container/fleet/versions" \
-              --jq ".[] | select(.metadata.container.tags[] == \"${TAG}\") | .id" 2>/dev/null || \
-              gh api "/users/${ORG}/packages/container/fleet/versions" \
-              --jq ".[] | select(.metadata.container.tags[] == \"${TAG}\") | .id" 2>/dev/null || echo "")
-            if [[ -n "${VERSION_ID}" ]]; then
-              gh api --method DELETE "/orgs/${ORG}/packages/container/fleet/versions/${VERSION_ID}" 2>/dev/null || \
-              gh api --method DELETE "/users/${ORG}/packages/container/fleet/versions/${VERSION_ID}" 2>/dev/null || true
-              echo "Deleted ${TAG}"
-            fi
-          done
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --push \
+              -t "${IMAGE_BASE}:${VERSION}" \
+              -t "${IMAGE_BASE}:latest" \
+              -f tools/fleet-docker/Dockerfile \
+              .
+          else
+            SNAPSHOT_VERSION=$(cat dist/metadata.json | jq -r '.version')
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --push \
+              -t "${IMAGE_BASE}:${SNAPSHOT_VERSION}" \
+              -t "${IMAGE_BASE}:latest" \
+              -f tools/fleet-docker/Dockerfile \
+              .
+          fi
 
   release:
     name: "Create Release"
@@ -270,7 +251,6 @@ jobs:
           name: "🦩 ${{ inputs.version }}"
           draft: false
           prerelease: false
-          generate_release_notes: true
           body_path: RELEASE_HEADER.md
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |

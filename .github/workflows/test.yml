@@ -33,29 +33,6 @@ jobs:
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft
 
-  unit_tests:
-    name: "Unit Tests (${{ matrix.os }})"
-    needs: [changes]
-    runs-on: ${{ matrix.os }}
-    if: |
-      github.event_name == 'pull_request' &&
-      !github.event.pull_request.draft &&
-      needs.changes.outputs.client == 'true'
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Run Go tests
-        run: go test -race -coverprofile=coverage.out ./...
-
   test_client:
     name: "Test Client (${{ matrix.name }})"
     needs: [changes]
@@ -88,6 +65,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
+
+      - name: Run Go tests
+        run: go test -race -coverprofile=coverage.out ./orbit/...
 
       - name: Compile Client for ${{ matrix.go_os }}
         shell: bash
