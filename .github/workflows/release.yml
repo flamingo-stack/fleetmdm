@@ -14,7 +14,7 @@ permissions:
 
 on:
   push:
-    branches: [main, feature/rebased-main]
+    branches: [main]
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
