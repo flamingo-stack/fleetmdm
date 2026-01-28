@@ -78,11 +78,13 @@ dockers:
 
 docker_manifests:
   - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}"
+    skip_push: false
     image_templates:
       - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
       - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
 
   - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
+    skip_push: false
     image_templates:
       - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
       - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
