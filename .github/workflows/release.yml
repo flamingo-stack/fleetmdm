@@ -34,11 +34,20 @@ env:
 # =============================================================================
 
 jobs:
+  changes:
+    name: Detect Changes
+    uses: ./.github/workflows/changes.yml
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      github.event_name == 'push'
+
+
   build_client:
     name: "Build Client (${{ matrix.os }})"
+    needs: [changes]
     runs-on: ${{ matrix.os }}
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'push' && needs.changes.outputs.client == 'true') ||
       (github.event_name == 'workflow_dispatch' && inputs.version != '')
     defaults:
       run:
@@ -128,9 +137,10 @@ jobs:
 
   build:
     name: "Build Fleet"
+    needs: [changes]
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'push' && needs.changes.outputs.server == 'true') ||
       (github.event_name == 'workflow_dispatch' && inputs.version != '')
     steps:
       - name: Harden Runner
@@ -198,9 +208,6 @@ jobs:
     name: "Create Release"
     needs: [build, build_client]
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' &&
-      inputs.version != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
