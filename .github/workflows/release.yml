@@ -184,6 +184,7 @@ jobs:
           REGISTRY: ${{ env.REGISTRY }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           DOCKER_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
+          DOCKER_PUSH: "true"
         run: goreleaser release --clean
 
 
