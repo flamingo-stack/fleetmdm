@@ -61,3 +61,41 @@ changelog:
 release:
   # Disable goreleaser release - using softprops/action-gh-release instead
   disable: true
+
+dockers:
+  - id: fleet-amd64
+    goos: linux
+    goarch: amd64
+    ids: [fleet]
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    skip_push: "{{ if .Env.SKIP_DOCKER_PUSH }}true{{ else }}false{{ end }}"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+
+  - id: fleet-arm64
+    goos: linux
+    goarch: arm64
+    ids: [fleet]
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    skip_push: "{{ if .Env.SKIP_DOCKER_PUSH }}true{{ else }}false{{ end }}"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+    skip_push: "{{ .IsSnapshot }}"
+
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+    skip_push: "{{ not .IsSnapshot }}"

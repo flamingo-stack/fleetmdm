@@ -12,13 +12,14 @@ permissions:
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
+    branches: [main, feature/rebased-main]
 
 concurrency:
   group: pr-${{ github.head_ref || github.ref }}
   cancel-in-progress: false
 
 env:
+  REGISTRY: ghcr.io
   BINARY_NAME: fleet
 
 # =============================================================================
@@ -150,10 +151,20 @@ jobs:
       - name: Install ARM64 cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           install-only: true
 
       - name: Build with GoReleaser
-        run: goreleaser build --snapshot --clean
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          SKIP_DOCKER_PUSH: "true"
+        run: goreleaser release --snapshot --clean --skip=publish
