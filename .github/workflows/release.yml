@@ -175,16 +175,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create local tag for release build
-        if: github.event_name == 'workflow_dispatch'
-        run: git tag -f ${{ inputs.version }}
+      - name: Create local tag
+        run: git tag -f ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
 
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ${{ env.REGISTRY }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-        run: goreleaser release --clean ${{ github.event_name != 'workflow_dispatch' && '--snapshot' || '' }}
+        run: goreleaser release --clean
 
 
   release:
