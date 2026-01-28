@@ -176,13 +176,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create local tag
-        run: git tag -f ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
+        run: git tag -f v9.9.9
 
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ${{ env.REGISTRY }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          DOCKER_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'latest' }}
         run: goreleaser release --clean
 
 

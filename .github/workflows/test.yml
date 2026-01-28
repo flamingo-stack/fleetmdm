@@ -167,6 +167,7 @@ jobs:
           REGISTRY: ${{ env.REGISTRY }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           DOCKER_PUSH: "false"
+          DOCKER_TAG: test
         run: goreleaser release --snapshot --clean --skip=publish
 
   all-checks:
