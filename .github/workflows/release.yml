@@ -187,6 +187,12 @@ jobs:
           DOCKER_PUSH: "true"
         run: goreleaser release --clean
 
+      - name: Remove intermediate Docker tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api /user/packages/container/fleet/versions --jq '.[] | select(.metadata.container.tags | any(test("-[a-z0-9]+$"))) | .id' | xargs -I{} gh api --method DELETE /user/packages/container/fleet/versions/{}
+
 
   release:
     name: "Create Release"
