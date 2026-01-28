@@ -191,11 +191,9 @@ jobs:
               -f tools/fleet-docker/Dockerfile \
               .
           else
-            SNAPSHOT_VERSION=$(cat dist/metadata.json | jq -r '.version')
             docker buildx build \
               --platform linux/amd64,linux/arm64 \
               --push \
-              -t "${IMAGE_BASE}:${SNAPSHOT_VERSION}" \
               -t "${IMAGE_BASE}:latest" \
               -f tools/fleet-docker/Dockerfile \
               .
