@@ -51,7 +51,7 @@ archives:
 
 dockers:
   - image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
     dockerfile: tools/fleet-docker/Dockerfile
     use: buildx
     goarch: amd64
@@ -64,7 +64,7 @@ dockers:
       - fleet
 
   - image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
     dockerfile: tools/fleet-docker/Dockerfile
     use: buildx
     goarch: arm64
@@ -77,15 +77,15 @@ dockers:
       - fleet
 
 docker_manifests:
-  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}"
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}"
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
 
-  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:latest"
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-amd64"
+      - "{{ .Env.REGISTRY }}/{{ .Env.GITHUB_REPOSITORY_OWNER }}/fleet:{{ .Version }}-arm64"
 
 checksum:
   name_template: "checksums.txt"

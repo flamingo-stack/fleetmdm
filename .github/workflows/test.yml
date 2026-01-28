@@ -35,6 +35,29 @@ jobs:
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft
 
+  unit_tests:
+    name: "Unit Tests (${{ matrix.os }})"
+    needs: [changes]
+    runs-on: ${{ matrix.os }}
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      needs.changes.outputs.client == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run Go tests
+        run: go test -race -coverprofile=coverage.out ./...
+
   test_client:
     name: "Test Client (${{ matrix.name }})"
     needs: [changes]
@@ -46,18 +69,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: unit-tests
-            os: ubuntu-latest
-            task: test
           - name: macos
             os: macos-latest
-            task: build
             go_os: darwin
             go_arch: ["arm64", "amd64"]
             artifact_name: fleet-mac-universal
           - name: windows
             os: windows-latest
-            task: build
             go_os: windows
             go_arch: amd64
             artifact_name: fleet-windows-amd64.exe
@@ -73,20 +91,7 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Run Go tests
-        if: matrix.task == 'test'
-        run: go test -race -coverprofile=coverage.out ./...
-
-      - name: Upload coverage
-        if: matrix.task == 'test'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.out
-          retention-days: 3
-
       - name: Compile Client for ${{ matrix.go_os }}
-        if: matrix.task == 'build'
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
@@ -113,7 +118,7 @@ jobs:
           fi
 
       - name: Sign MacOS package
-        if: matrix.task == 'build' && runner.os == 'macOS'
+        if: runner.os == 'macOS'
         uses: ./.github/steps/sign-macos-package
         with:
           apple_certificate_p12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
@@ -125,7 +130,6 @@ jobs:
           binary_name: ${{ env.BINARY_NAME }}
 
       - name: Upload client artifact
-        if: matrix.task == 'build'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}-test
@@ -181,5 +185,33 @@ jobs:
 
       - name: Build with GoReleaser
         env:
-          GORELEASER_CURRENT_TAG: test-pr-${{ github.event.pull_request.number }}
+          GORELEASER_CURRENT_TAG: test-${{ github.event.pull_request.number }}
         run: goreleaser build --snapshot --clean
+
+      - name: Cleanup old test images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ORG="${{ github.repository_owner }}"
+          PACKAGE="fleet"
+          KEEP=10
+
+          # Get all versions with test-* tags, sorted by creation date (newest first)
+          VERSIONS=$(gh api "/orgs/${ORG}/packages/container/${PACKAGE}/versions" \
+            --paginate \
+            --jq '[.[] | select(.metadata.container.tags[] | startswith("test-"))] | sort_by(.created_at) | reverse | .[].id' 2>/dev/null || \
+            gh api "/users/${ORG}/packages/container/${PACKAGE}/versions" \
+            --paginate \
+            --jq '[.[] | select(.metadata.container.tags[] | startswith("test-"))] | sort_by(.created_at) | reverse | .[].id' 2>/dev/null || echo "")
+
+          # Skip first KEEP versions, delete the rest
+          COUNT=0
+          for VERSION_ID in $VERSIONS; do
+            COUNT=$((COUNT + 1))
+            if [ $COUNT -gt $KEEP ]; then
+              echo "Deleting version ${VERSION_ID}"
+              gh api --method DELETE "/orgs/${ORG}/packages/container/${PACKAGE}/versions/${VERSION_ID}" 2>/dev/null || \
+              gh api --method DELETE "/users/${ORG}/packages/container/${PACKAGE}/versions/${VERSION_ID}" 2>/dev/null || true
+            fi
+          done
+          echo "Kept ${KEEP} most recent test images, deleted $((COUNT > KEEP ? COUNT - KEEP : 0)) old images"

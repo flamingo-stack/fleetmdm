@@ -14,7 +14,7 @@ permissions:
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/rebased-main]
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
@@ -26,6 +26,7 @@ on:
 
 env:
   BINARY_NAME: fleet
+  REGISTRY: ghcr.io
 
 # =============================================================================
 # JOBS
@@ -161,13 +162,14 @@ jobs:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ env.REGISTRY }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             goreleaser release --clean
@@ -175,15 +177,27 @@ jobs:
             goreleaser release --clean --snapshot
           fi
 
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: fleet-linux
-          path: |
-            dist/fleet_linux_amd64_v1/fleet
-            dist/fleet_linux_arm64_v1/fleet
-          if-no-files-found: error
-          retention-days: 7
+      - name: Delete arch-specific image tags
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          ORG="${{ github.repository_owner }}"
+          for arch in amd64 arm64; do
+            TAG="${VERSION}-${arch}"
+            echo "Deleting tag: ${TAG}"
+            # Get version ID by tag
+            VERSION_ID=$(gh api "/orgs/${ORG}/packages/container/fleet/versions" \
+              --jq ".[] | select(.metadata.container.tags[] == \"${TAG}\") | .id" 2>/dev/null || \
+              gh api "/users/${ORG}/packages/container/fleet/versions" \
+              --jq ".[] | select(.metadata.container.tags[] == \"${TAG}\") | .id" 2>/dev/null || echo "")
+            if [[ -n "${VERSION_ID}" ]]; then
+              gh api --method DELETE "/orgs/${ORG}/packages/container/fleet/versions/${VERSION_ID}" 2>/dev/null || \
+              gh api --method DELETE "/users/${ORG}/packages/container/fleet/versions/${VERSION_ID}" 2>/dev/null || true
+              echo "Deleted ${TAG}"
+            fi
+          done
 
   release:
     name: "Create Release"
@@ -232,8 +246,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: 🦩 ${{ inputs.version }}
+          name: "🦩 ${{ inputs.version }}"
+          draft: false
+          prerelease: false
           generate_release_notes: true
+          body_path: RELEASE_HEADER.md
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             final-artifacts/clients/*
