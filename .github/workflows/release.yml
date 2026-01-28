@@ -241,7 +241,7 @@ jobs:
           VERSION="${{ inputs.version || 'latest' }}"
           cat > RELEASE_HEADER.md <<EOF
           ## Images
-          - \`${{ env.REGISTRY }}/${{ github.repository_owner }}/fleet:${VERSION}\`
+          - \`${{ env.REGISTRY }}/${{ github.repository }}/fleet:${VERSION}\`
 
           ## Fleet Clients
           - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
