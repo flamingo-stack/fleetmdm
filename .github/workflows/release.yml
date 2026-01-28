@@ -223,7 +223,11 @@ jobs:
 
       - name: Generate release header
         run: |
+          VERSION="${{ inputs.version || 'latest' }}"
           cat > RELEASE_HEADER.md <<EOF
+          ## Images
+          \`${{ env.REGISTRY }}/${{ github.repository_owner }}/fleet:${VERSION}\`
+
           ## Fleet Clients
           - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
           - **Windows** (amd64): \`fleet-windows-amd64.zip\`
@@ -232,11 +236,16 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version }}
-          name: "🦩 ${{ inputs.version }}"
+          tag_name: ${{ inputs.version || 'latest' }}
+          name: "🦩 ${{ inputs.version || 'latest' }}"
           draft: false
-          prerelease: false
+          prerelease: ${{ github.event_name == 'push' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           body_path: RELEASE_HEADER.md
           files: |
-            final-artifacts/clients/*
+            final-artifacts/clients/*.zip
+            final-artifacts/clients/*.tar.gz
+
+      - name: Force update latest tag
+        if: ${{ github.event_name == 'push' }}
+        run: git tag -f latest && git push -f origin latest
