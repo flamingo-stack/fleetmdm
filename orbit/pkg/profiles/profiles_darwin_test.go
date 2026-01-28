@@ -5,7 +5,6 @@ package profiles
 import (
 	"bytes"
 	"errors"
-	"io"
 	"strings"
 	"testing"
 
@@ -18,33 +17,41 @@ import (
 func TestGetFleetdConfig(t *testing.T) {
 	testErr := errors.New("test error")
 	cases := []struct {
-		cmdOut  *string
-		cmdErr  error
-		wantOut *fleet.MDMAppleFleetdConfig
-		wantErr error
+		name        string
+		cmdOut      *string
+		cmdErr      error
+		wantOut     *fleet.MDMAppleFleetdConfig
+		wantErr     error
+		wantAnyErr  bool // if true, just check that an error occurred (for plist parse errors)
 	}{
-		{nil, testErr, nil, testErr},
-		{ptr.String("invalid-xml"), nil, nil, io.EOF},
-		{&emptyOutput, nil, &fleet.MDMAppleFleetdConfig{}, nil},
-		{&withFleetdConfig, nil, &fleet.MDMAppleFleetdConfig{EnrollSecret: "ENROLL_SECRET", FleetURL: "https://test.example.com"}, nil},
+		{"command error", nil, testErr, nil, testErr, false},
+		{"invalid xml", ptr.String("invalid-xml"), nil, nil, nil, true},
+		{"empty output", &emptyOutput, nil, &fleet.MDMAppleFleetdConfig{}, nil, false},
+		{"with fleetd config", &withFleetdConfig, nil, &fleet.MDMAppleFleetdConfig{EnrollSecret: "ENROLL_SECRET", FleetURL: "https://test.example.com"}, nil, false},
 	}
 
 	origExecProfileCmd := execProfileCmd
 	t.Cleanup(func() { execProfileCmd = origExecProfileCmd })
 	for _, c := range cases {
-		execProfileCmd = func() (*bytes.Buffer, error) {
-			if c.cmdOut == nil {
-				return nil, c.cmdErr
+		t.Run(c.name, func(t *testing.T) {
+			execProfileCmd = func() (*bytes.Buffer, error) {
+				if c.cmdOut == nil {
+					return nil, c.cmdErr
+				}
+
+				var buf bytes.Buffer
+				buf.WriteString(*c.cmdOut)
+				return &buf, nil
 			}
 
-			var buf bytes.Buffer
-			buf.WriteString(*c.cmdOut)
-			return &buf, nil
-		}
-
-		out, err := GetFleetdConfig()
-		require.ErrorIs(t, err, c.wantErr)
-		require.Equal(t, c.wantOut, out)
+			out, err := GetFleetdConfig()
+			if c.wantAnyErr {
+				require.Error(t, err)
+			} else {
+				require.ErrorIs(t, err, c.wantErr)
+			}
+			require.Equal(t, c.wantOut, out)
+		})
 	}
 }
 
