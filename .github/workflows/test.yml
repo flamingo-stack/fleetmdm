@@ -34,6 +34,22 @@ jobs:
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft
 
+  trivy_scan:
+    name: "Trivy Scan"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && !github.event.pull_request.draft
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Trivy scan (fs + base images)
+        uses: ./.github/steps/trivy
+
   test_client:
     name: "Test Client (${{ matrix.name }})"
     needs: [changes]
@@ -176,7 +192,7 @@ jobs:
 
   all-checks:
     name: "All Checks"
-    needs: [changes, test_client, test, test_helm]
+    needs: [changes, trivy_scan, test_client, test, test_helm]
     runs-on: ubuntu-latest
     if: always()
     steps:
