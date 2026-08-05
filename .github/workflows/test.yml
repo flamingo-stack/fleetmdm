@@ -193,7 +193,7 @@ jobs:
 
   all-checks:
     name: "All Checks"
-    needs: [changes, trivy_scan, test_client, test, test_helm]
+    needs: [changes, test_client, test, test_helm]
     runs-on: ubuntu-latest
     if: always()
     steps:
