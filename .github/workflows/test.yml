@@ -34,13 +34,14 @@ jobs:
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft
 
-  trivy_code:
-    name: "Trivy Code Scan"
+  scan_code:
+    name: "Scan Code"
     runs-on: ubuntu-latest
     needs: [changes]
     permissions:
       contents: read
       packages: read
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,20 +53,6 @@ jobs:
         uses: ./.github/steps/trivy
         with:
           scan: code
-
-  trivy_report:
-    name: "Trivy Report"
-    runs-on: ubuntu-latest
-    needs: [trivy_code]
-    if: always()
-    steps:
-      - name: Merge all scan reports into one artifact
-        continue-on-error: true
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: trivy-${{ github.event.repository.name }}-report
-          pattern: trivy-*-report*
-          delete-merged: true
 
   test_client:
     name: "Test Client (${{ matrix.name }})"
@@ -206,6 +193,20 @@ jobs:
       - name: Helm Template
         run: helm template fleet charts/fleet
 
+
+  report:
+    name: "Report"
+    runs-on: ubuntu-latest
+    needs: [scan_code]
+    if: always() && github.event_name == 'pull_request'
+    steps:
+      - name: Merge code scan report
+        continue-on-error: true
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: scan_code
+          pattern: trivy-*-code-report*
+          delete-merged: true
 
   all-checks:
     name: "All Checks"
