@@ -35,7 +35,7 @@ jobs:
       !github.event.pull_request.draft
 
   scan:
-    name: "Scan"
+    name: "Scan Code"
     runs-on: ubuntu-latest
     needs: [changes]
     permissions:
