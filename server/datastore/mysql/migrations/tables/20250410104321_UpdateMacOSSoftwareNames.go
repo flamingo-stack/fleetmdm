@@ -24,7 +24,8 @@ func Up_20250410104321(tx *sql.Tx) error {
 	}
 
 	dupeIDsStmt := `SELECT GROUP_CONCAT(id) AS ids, MD5(
-			-- simulate new hash
+			-- simulate new hash (note: does not include name, matching the checksum
+			-- recomputation below; verify this matches the live ingestion checksum formula)
 			CONCAT_WS(CHAR(0),
 				version,
 				source,
@@ -89,10 +90,24 @@ WHERE
 	updateHostSoftwareInstalledPathsStmt := `UPDATE host_software_installed_paths SET software_id = ? WHERE software_id IN (?)`
 
 	var allExcludedIDs []uint64
+	addedTempIndex := false
 	if !indexExistsTx(tx, "host_software_installed_paths", "software_id") {
 		if _, err = tx.Exec(`ALTER TABLE host_software_installed_paths ADD INDEX software_id (software_id)`); err != nil {
 			return fmt.Errorf("adding temporary index to host_software_installed_paths: %w", err)
 		}
+		addedTempIndex = true
+	}
+
+	// dropTempIndex ensures the temporary index added above (if any) is removed
+	// before returning from this function, even on error paths, since DDL
+	// statements are not part of the surrounding transaction on MySQL.
+	dropTempIndex := func() error {
+		if addedTempIndex && indexExistsTx(tx, "host_software_installed_paths", "software_id") {
+			if _, err := tx.Exec(`ALTER TABLE host_software_installed_paths DROP INDEX software_id`); err != nil {
+				return fmt.Errorf("removing temporary index from host_software_installed_paths: %w", err)
+			}
+		}
+		return nil
 	}
 
 	for newChecksum, idsToMerge := range idsToMergeByNewChecksum {
@@ -102,19 +117,30 @@ WHERE
 		}
 		selectedID, ok := selectedIDs[newChecksum]
 		if !ok {
+			if dropErr := dropTempIndex(); dropErr != nil {
+				return dropErr
+			}
 			return fmt.Errorf("%v excluded IDs but no selected ID", idsToMerge)
 		}
 
 		stmt, args, err := sqlx.In(getRecordToUpdateStmt, idsToMerge, selectedID)
 		if err != nil {
+			if dropErr := dropTempIndex(); dropErr != nil {
+				return dropErr
+			}
 			return fmt.Errorf("sqlx.In for getting host software records to update for old software IDs %v: %w", idsToMerge, err)
 		}
 
 		if err := txx.Select(&hostIDRecordList, stmt, args...); err != nil {
+			// Note: sqlx's Select into a slice does not return sql.ErrNoRows when
+			// there are no matching rows (it returns nil with an empty slice), so
+			// this branch is not expected to be reached in that case; it is kept
+			// only as a defensive no-op for that specific error.
 			if errors.Is(err, sql.ErrNoRows) {
-				// if there are no rows, this means the host is already pointed at the selected software
-				// ID, so no update needed
 				continue
+			}
+			if dropErr := dropTempIndex(); dropErr != nil {
+				return dropErr
 			}
 			return fmt.Errorf("getting host software record to update for old software IDs %v: %w", idsToMerge, err)
 		}
@@ -130,6 +156,9 @@ WHERE
 				if len(hostSoftwareInsertParams) >= 20_000 { // update up to 10k hosts at a time
 					_, err = tx.Exec(strings.TrimSuffix(hostSoftwareInsertQuery, ","), hostSoftwareInsertParams...)
 					if err != nil {
+						if dropErr := dropTempIndex(); dropErr != nil {
+							return dropErr
+						}
 						return fmt.Errorf("updating host_software.software_id for old software IDs %v: %w", idsToMerge, err)
 					}
 					hostSoftwareInsertQuery = `INSERT IGNORE INTO host_software (host_id, software_id) VALUES `
@@ -140,6 +169,9 @@ WHERE
 			if len(hostSoftwareInsertParams) > 0 { // flush last batch
 				_, err = tx.Exec(strings.TrimSuffix(hostSoftwareInsertQuery, ","), hostSoftwareInsertParams...)
 				if err != nil {
+					if dropErr := dropTempIndex(); dropErr != nil {
+						return dropErr
+					}
 					return fmt.Errorf("updating host_software.software_id for old software IDs %v: %w", idsToMerge, err)
 				}
 			}
@@ -148,18 +180,22 @@ WHERE
 		// repoint host software installed paths to the software ID we're keeping
 		stmt, args, err = sqlx.In(updateHostSoftwareInstalledPathsStmt, selectedID, idsToMerge)
 		if err != nil {
+			if dropErr := dropTempIndex(); dropErr != nil {
+				return dropErr
+			}
 			return fmt.Errorf("sqlx.In for updating host software installed paths records for old software IDs %v: %w", idsToMerge, err)
 		}
 
 		if _, err := tx.Exec(stmt, args...); err != nil {
+			if dropErr := dropTempIndex(); dropErr != nil {
+				return dropErr
+			}
 			return fmt.Errorf("updating host software installed paths records for old software IDs %v: %w", idsToMerge, err)
 		}
 	}
 
-	if indexExistsTx(tx, "host_software_installed_paths", "software_id") {
-		if _, err = tx.Exec(`ALTER TABLE host_software_installed_paths DROP INDEX software_id`); err != nil {
-			return fmt.Errorf("removing temporary index from host_software_installed_paths: %w", err)
-		}
+	if err := dropTempIndex(); err != nil {
+		return err
 	}
 
 	// at this point, every host that needs one has a pointer to the selected ID, so we can delete
