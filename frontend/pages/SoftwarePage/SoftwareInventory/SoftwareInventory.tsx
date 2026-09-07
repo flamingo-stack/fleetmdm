@@ -31,6 +31,7 @@ const QUERY_OPTIONS = {
 
 interface ISoftwareInventoryProps {
   router: InjectedRouter;
+  location: { pathname: string };
   isSoftwareEnabled: boolean;
   query: string;
   perPage: number;
@@ -44,6 +45,7 @@ interface ISoftwareInventoryProps {
 
 const SoftwareInventory = ({
   router,
+  location,
   isSoftwareEnabled,
   query,
   perPage,
