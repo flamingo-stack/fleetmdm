@@ -82,6 +82,10 @@ func main() {
 		log.Fatalf("host count (%d) must match expected team count (%d)", len(hosts), *teamCount)
 	}
 
+	if *teamExtraCount > len(hosts) {
+		log.Fatalf("team_extra_count (%d) exceeds available hosts (%d)", *teamExtraCount, len(hosts))
+	}
+
 	printfAndPrompt("1. Creating %d teams...", *teamCount)
 	start := time.Now()
 
@@ -709,3 +713,4 @@ var newProfile = []byte(`<?xml version="1.0" encoding="UTF-8"?>
                 <integer>1</integer>
         </dict>
 </plist>`)
+
