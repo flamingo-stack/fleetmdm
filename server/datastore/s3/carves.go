@@ -98,7 +98,7 @@ func (c *CarveStore) UpdateCarve(ctx context.Context, metadata *fleet.CarveMetad
 // of keys has been reached; keys are returned in a set-like map
 func (c *CarveStore) listS3Carves(ctx context.Context, lastPrefix string, maxKeys int) (map[string]bool, error) {
 	var err error
-	var continuationToken string
+	var continuationToken *string
 	result := make(map[string]bool)
 	if maxKeys <= 0 {
 		maxKeys = defaultMaxS3Keys
@@ -110,7 +110,7 @@ func (c *CarveStore) listS3Carves(ctx context.Context, lastPrefix string, maxKey
 		carveFilesPage, err := c.s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket:            &c.bucket,
 			Prefix:            &c.prefix,
-			ContinuationToken: &continuationToken,
+			ContinuationToken: continuationToken,
 		})
 		if err != nil {
 			return nil, err
@@ -124,7 +124,7 @@ func (c *CarveStore) listS3Carves(ctx context.Context, lastPrefix string, maxKey
 		if !*carveFilesPage.IsTruncated {
 			break
 		}
-		continuationToken = *carveFilesPage.ContinuationToken
+		continuationToken = carveFilesPage.NextContinuationToken
 	}
 	return result, err
 }
@@ -305,7 +305,7 @@ func (c *CarveStore) GetBlock(ctx context.Context, metadata *fleet.CarveMetadata
 			// The carve does not exists in S3, mark expired
 			metadata.Expired = true
 			if updateErr := c.UpdateCarve(ctx, metadata); updateErr != nil {
-				err = ctxerr.Wrap(ctx, err, updateErr.Error())
+				return nil, errors.Join(ctxerr.Wrap(ctx, err, "s3 carve get block"), ctxerr.Wrap(ctx, updateErr, "marking carve expired"))
 			}
 		}
 		return nil, ctxerr.Wrap(ctx, err, "s3 carve get block")
