@@ -19,6 +19,7 @@ import (
 
 	"github.com/beevik/etree"
 	"github.com/fleetdm/fleet/v4/pkg/file"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/google/uuid"
 	"howett.net/plist"
@@ -148,6 +149,9 @@ func (c *Client) UploadBootstrapPackage(pkg *fleet.MDMAppleBootstrapPackage, dry
 	if err := c.ParseResponse(verb, path, response, &bpResponse); err != nil {
 		return fmt.Errorf("parse response: %w", err)
 	}
+	if bpResponse.Err != nil {
+		return fmt.Errorf("upload bootstrap package response: %w", bpResponse.Err)
+	}
 
 	return nil
 }
@@ -189,18 +193,18 @@ func (c *Client) ValidateBootstrapPackageFromURL(url string) (*fleet.MDMAppleBoo
 		return nil, err
 	}
 
-	return downloadRemoteMacosBootstrapPackage(url)
+	return downloadRemoteMacosBootstrapPackage(context.Background(), url)
 }
 
-func downloadRemoteMacosBootstrapPackage(pkgURL string) (*fleet.MDMAppleBootstrapPackage, error) {
+func downloadRemoteMacosBootstrapPackage(ctx context.Context, pkgURL string) (*fleet.MDMAppleBootstrapPackage, error) {
 	resp, err := http.Get(pkgURL) // nolint:gosec // we want this URL to be provided by the user. It will run on their machine.
 	if err != nil {
-		return nil, fmt.Errorf("downloading bootstrap package: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "downloading bootstrap package")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("the URL to the macos_bootstrap_package doesn't exist. Please make this URL publicly accessible to the internet.")
+		return nil, ctxerr.New(ctx, "the URL to the macos_bootstrap_package doesn't exist. Please make this URL publicly accessible to the internet.")
 	}
 
 	// try to extract the name from a header
@@ -227,18 +231,18 @@ func downloadRemoteMacosBootstrapPackage(pkgURL string) (*fleet.MDMAppleBootstra
 	var pkgBuf bytes.Buffer
 	hash := sha256.New()
 	if _, err := io.Copy(hash, io.TeeReader(resp.Body, &pkgBuf)); err != nil {
-		return nil, fmt.Errorf("calculating sha256 of package: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "calculating sha256 of package")
 	}
 
 	pkgReader := bytes.NewReader(pkgBuf.Bytes())
 	if err := file.CheckPKGSignature(pkgReader); err != nil {
 		switch {
 		case errors.Is(err, file.ErrInvalidType):
-			return nil, errors.New("Couldn’t edit macos_bootstrap_package. The file must be a package (.pkg).")
+			return nil, ctxerr.New(ctx, "Couldn’t edit macos_bootstrap_package. The file must be a package (.pkg).")
 		case errors.Is(err, file.ErrNotSigned):
-			return nil, errors.New("Couldn’t edit macos_bootstrap_package. The macos_bootstrap_package must be signed. Learn how to sign the package in the Fleet documentation: https://fleetdm.com/learn-more-about/setup-experience/bootstrap-package")
+			return nil, ctxerr.New(ctx, "Couldn’t edit macos_bootstrap_package. The macos_bootstrap_package must be signed. Learn how to sign the package in the Fleet documentation: https://fleetdm.com/learn-more-about/setup-experience/bootstrap-package")
 		default:
-			return nil, fmt.Errorf("checking package signature: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "checking package signature")
 		}
 	}
 
