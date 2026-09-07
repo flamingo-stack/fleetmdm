@@ -163,9 +163,14 @@ func TestGetPolicyByIDCrossTeamAuth(t *testing.T) {
 	ds := new(mock.Store)
 	svc, ctx := newTestService(t, ds, nil, nil)
 
-	// The fetched policy belongs to team 2.
+	// The fetched policy belongs to team 2. The mock re-derives the TeamID
+	// from the requested id (rather than hard-coding it) so that we also
+	// exercise GetPolicyByID's use of the real, per-request DB row's TeamID
+	// instead of any value that might be cached or otherwise stale.
+	const policyID = uint(42)
 	const policyTeamID = uint(2)
 	ds.PolicyFunc = func(ctx context.Context, id uint) (*fleet.Policy, error) {
+		require.Equal(t, policyID, id)
 		teamID := policyTeamID
 		return &fleet.Policy{
 			PolicyData: fleet.PolicyData{
@@ -219,7 +224,7 @@ func TestGetPolicyByIDCrossTeamAuth(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := viewer.NewContext(ctx, viewer.Viewer{User: tt.user})
-			_, err := svc.GetPolicyByID(ctx, 1)
+			_, err := svc.GetPolicyByID(ctx, policyID)
 			checkAuthErr(t, tt.shouldFailRead, err)
 		})
 	}
@@ -231,8 +236,12 @@ func TestGetPolicyByIDGlobalPolicyAuth(t *testing.T) {
 	ds := new(mock.Store)
 	svc, ctx := newTestService(t, ds, nil, nil)
 
-	// The fetched policy is global (TeamID is nil).
+	// The fetched policy is global (TeamID is nil). The mock asserts on the
+	// requested id to ensure GetPolicyByID is actually looking up the
+	// specific policy requested rather than relying on a fixed/stale value.
+	const policyID = uint(7)
 	ds.PolicyFunc = func(ctx context.Context, id uint) (*fleet.Policy, error) {
+		require.Equal(t, policyID, id)
 		return &fleet.Policy{
 			PolicyData: fleet.PolicyData{
 				ID:     id,
@@ -290,7 +299,7 @@ func TestGetPolicyByIDGlobalPolicyAuth(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := viewer.NewContext(ctx, viewer.Viewer{User: tt.user})
-			_, err := svc.GetPolicyByID(ctx, 1)
+			_, err := svc.GetPolicyByID(ctx, policyID)
 			checkAuthErr(t, tt.shouldFailRead, err)
 		})
 	}
@@ -303,8 +312,12 @@ func TestGetPolicyByIDNoTeamPolicyAuth(t *testing.T) {
 	ds := new(mock.Store)
 	svc, ctx := newTestService(t, ds, nil, nil)
 
-	// The fetched policy belongs to "No team" (TeamID == 0).
+	// The fetched policy belongs to "No team" (TeamID == 0). The mock
+	// asserts on the requested id to confirm GetPolicyByID fetches the
+	// actual requested policy row rather than reusing a cached/fixed one.
+	const policyID = uint(99)
 	ds.PolicyFunc = func(ctx context.Context, id uint) (*fleet.Policy, error) {
+		require.Equal(t, policyID, id)
 		return &fleet.Policy{
 			PolicyData: fleet.PolicyData{
 				ID:     id,
@@ -357,7 +370,7 @@ func TestGetPolicyByIDNoTeamPolicyAuth(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := viewer.NewContext(ctx, viewer.Viewer{User: tt.user})
-			_, err := svc.GetPolicyByID(ctx, 1)
+			_, err := svc.GetPolicyByID(ctx, policyID)
 			checkAuthErr(t, tt.shouldFailRead, err)
 		})
 	}
