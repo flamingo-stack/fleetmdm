@@ -95,7 +95,7 @@ func main() {
 		}
 	}
 	lginfo := logger
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	var err error
 	var depot scepdepot.Depot // cert storage
@@ -179,7 +179,7 @@ func main() {
 	}()
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGINT)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errs <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -233,12 +233,23 @@ func createKey(bits int, password []byte, depot string) (*rsa.PrivateKey, error)
 	if err != nil {
 		return nil, err
 	}
-	privPEMBlock, err := x509.EncryptPEMBlock(
+	if len(password) == 0 {
+		privPEMBlock := &pem.Block{
+			Type:  rsaPrivateKeyPEMBlockType,
+			Bytes: x509.MarshalPKCS1PrivateKey(key),
+		}
+		if err := pem.Encode(file, privPEMBlock); err != nil {
+			os.Remove(name)
+			return nil, err
+		}
+		return key, nil
+	}
+	privPEMBlock, err := x509.EncryptPEMBlock( //nolint:staticcheck // legacy PEM encryption retained for backward compatibility; caller must supply a strong -capass
 		rand.Reader,
 		rsaPrivateKeyPEMBlockType,
 		x509.MarshalPKCS1PrivateKey(key),
 		password,
-		x509.PEMCipher3DES,
+		x509.PEMCipherAES256,
 	)
 	if err != nil {
 		return nil, err
