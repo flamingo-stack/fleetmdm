@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -196,13 +197,81 @@ func openframeMultitenancyConfigError(multitenancyEnabled bool, teamIDRaw, tenan
 	return nil
 }
 
+// openframeUnsafeAgentOptions are osquery options that replace endpoint/plugin flag values on the
+// agent. Serving them rewrote logger_tls_endpoint on openframe agents and silently dropped every
+// scheduled result and status log - behavioral options (intervals etc.) are safe.
+var openframeUnsafeAgentOptions = []string{
+	"config_plugin",
+	"config_tls_endpoint",
+	"distributed_plugin",
+	"distributed_tls_read_endpoint",
+	"distributed_tls_write_endpoint",
+	"logger_plugin",
+	"logger_tls_endpoint",
+}
+
+func openframeTrimAgentOptions(config json.RawMessage) json.RawMessage {
+	if len(config) == 0 {
+		return config
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(config, &top); err != nil {
+		return config
+	}
+	var opts map[string]json.RawMessage
+	if err := json.Unmarshal(top["options"], &opts); err != nil {
+		return config
+	}
+	trimmed := false
+	for _, key := range openframeUnsafeAgentOptions {
+		if _, ok := opts[key]; ok {
+			delete(opts, key)
+			trimmed = true
+		}
+	}
+	if !trimmed {
+		return config
+	}
+	optsRaw, err := json.Marshal(opts)
+	if err != nil {
+		return config
+	}
+	top["options"] = optsRaw
+	out, err := json.Marshal(top)
+	if err != nil {
+		return config
+	}
+	return out
+}
+
 // OpenframeDefaultAppConfig is the config a tenant is born with in shared mode — the equivalent
-// of what POST /setup persists on a dedicated Fleet. Upstream new-install defaults, minus agent
-// options: in openframe mode orbit passes the gateway-prefixed osquery endpoints on the command
-// line, and served config options would override those flags.
+// of what POST /setup persists on a dedicated Fleet: upstream new-install defaults with the
+// agent options already trimmed of endpoint/plugin keys. Trimmed at the source (not only at
+// serve time) so no seeded or fallback config can ever carry an endpoint override, even when
+// read by a server predating the serve-time trim — openframe/docs/agent-options.md.
 func OpenframeDefaultAppConfig() *AppConfig {
 	appConfig := &AppConfig{}
 	appConfig.ApplyDefaultsForNewInstalls()
-	appConfig.AgentOptions = nil
+	appConfig.AgentOptions = openframeTrimStoredAgentOptions(appConfig.AgentOptions)
 	return appConfig
+}
+
+// openframeTrimStoredAgentOptions trims the stored agent-options shape
+// ({"config": {"options": ...}, "overrides": ...}). Fails safe: on any parse error the
+// options are dropped entirely rather than stored untrimmed.
+func openframeTrimStoredAgentOptions(raw *json.RawMessage) *json.RawMessage {
+	if raw == nil {
+		return nil
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(*raw, &top); err != nil {
+		return nil
+	}
+	top["config"] = openframeTrimAgentOptions(top["config"])
+	out, err := json.Marshal(top)
+	if err != nil {
+		return nil
+	}
+	trimmed := json.RawMessage(out)
+	return &trimmed
 }

@@ -789,6 +789,14 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 					logger.DebugContext(ctx, "Skipping starter library application in Primo mode")
 					return nil
 				}
+				// >>> OPENFRAME(setup-no-starter-library): the starter library's declarative gitops
+				// apply erases the agent options POST /setup just wrote — openframe/docs/agent-options.md
+			} else if fleet.IsOpenframeMultitenancy() {
+				applyStarterLibrary = func(ctx context.Context, _, _ string) error {
+					logger.InfoContext(ctx, "Skipping starter library application under OpenFrame multitenancy")
+					return nil
+				}
+				// <<< OPENFRAME(setup-no-starter-library)
 			} else {
 				applyStarterLibrary = func(ctx context.Context, serverURL, token string) error {
 					return service.ApplyStarterLibrary(ctx, serverURL, token, logger, func(args []string) error {

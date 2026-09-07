@@ -52,6 +52,7 @@ The agent has its own switch, `--openframe-mode` / `ORBIT_OPENFRAME_MODE`.
 | [agent-openframe-mode.md](agent-openframe-mode.md) | OpenFrame agent mode: gateway URL prefix, encrypted bearer-token pipeline (extract / decrypt / refresh), custom osqueryd, `orbit uuid` command. |
 | [node-key-management.md](node-key-management.md) | Node-key enrollment caching, 401 re-enrollment, Windows file-lock resilience. |
 | [agent-json-content-type.md](agent-json-content-type.md) | Orbit sets `Content-Type: application/json` on requests with a body (upstream sets none). Without it a WAF cannot JSON-parse the body — Cloud Armor flagged 100% of `/orbit/config` polls as SQLi. Unconditional, not gated on OpenFrame mode. |
+| [agent-options.md](agent-options.md) | Keeps Fleet agent options (`distributed_interval: 10` et al.): skips upstream's setup-time starter-library apply in OpenFrame mode (it nulls the options setup just wrote) and seeds shared-mode tenants with the full new-install defaults. |
 | [agent-inventory-waf-shape.md](agent-inventory-waf-shape.md) | The `certificates_darwin`/`certificates_windows` detail queries hex-encode their distinguished-name columns; the ingest decodes them. Raw X.509 DNs are `/`+`=` dense and trip CRS 942431/942432 on every inventory write. Server-side only — no agent upgrade. |
 
 ## Database migrations

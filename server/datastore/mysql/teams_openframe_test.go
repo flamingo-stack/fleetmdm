@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -102,10 +103,19 @@ func TestOpenframeEnsureTeamID(t *testing.T) {
 	require.True(t, appConfigA.Features.EnableSoftwareInventory)
 	require.True(t, appConfigA.Features.EnableHostUsers)
 
-	// No agent options are served: in openframe mode orbit passes every osquery endpoint on the
-	// command line (gateway-prefixed), and a served logger_tls_endpoint would override those
-	// flags with an unprefixed path, silently dropping every result and status log.
-	require.Nil(t, appConfigA.AgentOptions)
+	// The behavioral agent options are seeded (distributed_interval 10 et al.), already
+	// trimmed of endpoint/plugin keys at the source - see OpenframeDefaultAppConfig.
+	require.NotNil(t, appConfigA.AgentOptions)
+	var agentOptionsA map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(*appConfigA.AgentOptions, &agentOptionsA))
+	var optionsCfgA map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(agentOptionsA["config"], &optionsCfgA))
+	var optsA map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(optionsCfgA["options"], &optsA))
+	require.JSONEq(t, `10`, string(optsA["distributed_interval"]))
+	require.NotContains(t, optsA, "logger_tls_endpoint")
+	require.NotContains(t, optsA, "logger_plugin")
+	require.NotContains(t, optsA, "distributed_plugin")
 
 	// Re-resolving must not replace the tenant's config either: a manual change survives.
 	appConfigA.Features.EnableSoftwareInventory = false
@@ -124,7 +134,7 @@ func TestOpenframeEnsureTeamID(t *testing.T) {
 	appConfigB, err := ds.AppConfig(ctxB)
 	require.NoError(t, err)
 	require.True(t, appConfigB.Features.EnableSoftwareInventory)
-	require.Nil(t, appConfigB.AgentOptions)
+	require.NotNil(t, appConfigB.AgentOptions)
 
 	// A team with operator-applied (or backfilled) secrets keeps them: replace A's secret set,
 	// re-resolve, and confirm the applied set is untouched.

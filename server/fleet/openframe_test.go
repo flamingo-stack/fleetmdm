@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -186,5 +187,74 @@ func TestSetOpenframeTeamIDPins(t *testing.T) {
 	id, ok := OpenframeTeamID(context.Background())
 	if !ok || id != 7 {
 		t.Fatalf("resolved pin should be returned: got (%d,%v), want (7,true)", id, ok)
+	}
+}
+
+func TestOpenframeDefaultAppConfigServesAgentOptions(t *testing.T) {
+	appConfig := OpenframeDefaultAppConfig()
+	if appConfig.AgentOptions == nil {
+		t.Fatal("agent options must be seeded for shared-mode tenants")
+	}
+
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(*appConfig.AgentOptions, &top); err != nil {
+		t.Fatalf("agent options must be valid JSON: %v", err)
+	}
+	var cfg map[string]json.RawMessage
+	if err := json.Unmarshal(top["config"], &cfg); err != nil {
+		t.Fatalf("config must be a JSON object: %v", err)
+	}
+	var opts map[string]json.RawMessage
+	if err := json.Unmarshal(cfg["options"], &opts); err != nil {
+		t.Fatalf("options must be a JSON object: %v", err)
+	}
+	for _, key := range []string{"distributed_interval", "logger_tls_period", "distributed_tls_max_attempts", "pack_delimiter"} {
+		if _, ok := opts[key]; !ok {
+			t.Fatalf("behavioral option %q must be seeded", key)
+		}
+	}
+	for _, key := range openframeUnsafeAgentOptions {
+		if _, ok := opts[key]; ok {
+			t.Fatalf("unsafe option %q must be trimmed at the source", key)
+		}
+	}
+	if _, ok := cfg["decorators"]; !ok {
+		t.Fatal("decorators must be kept")
+	}
+	if !appConfig.Features.EnableSoftwareInventory {
+		t.Fatal("software inventory must stay enabled")
+	}
+}
+
+func TestOpenframeTrimAgentOptions(t *testing.T) {
+	full := json.RawMessage(`{"options": {"pack_delimiter": "/", "logger_tls_period": 10, "distributed_plugin": "tls", "disable_distributed": false, "logger_tls_endpoint": "/api/osquery/log", "distributed_interval": 10, "distributed_tls_max_attempts": 3}, "decorators": {"load": ["SELECT 1;"]}}`)
+	trimmed := openframeTrimAgentOptions(full)
+
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &top); err != nil {
+		t.Fatalf("trimmed payload must stay valid JSON: %v", err)
+	}
+	var opts map[string]json.RawMessage
+	if err := json.Unmarshal(top["options"], &opts); err != nil {
+		t.Fatalf("options must stay a JSON object: %v", err)
+	}
+	for _, key := range openframeUnsafeAgentOptions {
+		if _, ok := opts[key]; ok {
+			t.Fatalf("unsafe key %q must be stripped", key)
+		}
+	}
+	for _, key := range []string{"distributed_interval", "logger_tls_period", "distributed_tls_max_attempts", "pack_delimiter", "disable_distributed"} {
+		if _, ok := opts[key]; !ok {
+			t.Fatalf("behavioral key %q must be kept", key)
+		}
+	}
+	if _, ok := top["decorators"]; !ok {
+		t.Fatal("sibling keys must be untouched")
+	}
+
+	for _, raw := range []json.RawMessage{nil, json.RawMessage(`not-json`), json.RawMessage(`{"decorators": {}}`)} {
+		if got := openframeTrimAgentOptions(raw); string(got) != string(raw) {
+			t.Fatalf("payload without trimmable options must pass through unchanged: %q -> %q", raw, got)
+		}
 	}
 }
