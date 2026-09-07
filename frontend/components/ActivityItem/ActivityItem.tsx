@@ -91,11 +91,9 @@ const ActivityItem = ({
     ? addGravatarUrlToResource({ email: actor_email })
     : { gravatar_url: undefined };
 
-  // wrapped just in case the date string does not parse correctly
-  let activityCreatedAt: Date;
-  try {
-    activityCreatedAt = new Date(activity.created_at);
-  } catch (e) {
+  // fall back to the current date if the date string does not parse correctly
+  let activityCreatedAt = new Date(activity.created_at);
+  if (isNaN(activityCreatedAt.getTime())) {
     activityCreatedAt = new Date();
   }
 
@@ -139,3 +137,4 @@ const ActivityItem = ({
 };
 
 export default ActivityItem;
+
