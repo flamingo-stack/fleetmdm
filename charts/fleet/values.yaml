@@ -221,8 +221,14 @@ vulnProcessing:
   schedule: "0 * * * *"
   # >>> OPENFRAME(vuln-persistence): fork-added feed-cache persistence for the vuln cron — openframe/docs/helm-chart.md
   # When true, `schedule` is ignored and the job runs hourly at a minute derived
-  # from the release namespace, so tenants sharing a cluster don't all fire at :00.
+  # from `staggerKey`, so releases sharing a feed mirror or a database don't all
+  # fire at :00.
   staggerSchedule: false
+  # Hash input for the stagger; empty means the release namespace. Set it to
+  # something that differs per release (cluster id, tenant id) whenever every
+  # release lands in an identically named namespace — otherwise every release
+  # derives the same minute and the stagger is a no-op.
+  staggerKey: ""
   # Persist FLEET_VULNERABILITIES_DATABASES_PATH (/tmp/vuln) across runs so each
   # run only fetches feed deltas instead of the full ~800MB. Requires dedicated=true.
   persistence:

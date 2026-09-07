@@ -195,7 +195,7 @@ intra-wave kind ordering.
 | Deployment annotations | `deploymentAnnotations` | Arbitrary annotations merged onto the Fleet Deployment metadata (e.g. for ArgoCD / reloader). |
 | Additional CA certs | `fleet.additionalCAs.*` | Init-container injection of CA bundles from named ConfigMaps/Secrets, for private PKI. |
 | Dedicated vuln processing | `vulnProcessing.dedicated`, `vulnProcessing.schedule` | When `true`, runs vulnerability processing as a separate CronJob ([vulnprocessing/cronjob.yaml](../../charts/fleet/templates/vulnprocessing/cronjob.yaml)) and disables it in the main deployment. |
-| Vuln feed persistence | `vulnProcessing.persistence.*`, `vulnProcessing.staggerSchedule` | See [below](#vulnerability-feed-persistence-vuln-persistence). |
+| Vuln feed persistence | `vulnProcessing.persistence.*`, `vulnProcessing.staggerSchedule`, `vulnProcessing.staggerKey` | See [below](#vulnerability-feed-persistence-vuln-persistence). |
 | Probe split | `fleet.probes.*` | See [below](#probes). |
 
 ## Probes
@@ -269,7 +269,8 @@ The fork adds first-class persistence for the **dedicated cron** mode:
 ```yaml
 vulnProcessing:
   dedicated: true        # required — persistence only wires into the CronJob
-  staggerSchedule: true  # hourly at a minute derived from the release namespace
+  staggerSchedule: true  # hourly at a minute derived from staggerKey
+  staggerKey: ""         # hash input; empty = the release namespace
   persistence:
     enabled: true
     size: 5Gi
@@ -302,8 +303,12 @@ What this renders:
   `fsGroup` (+ `fsGroupChangePolicy: OnRootMismatch`) is what lets it write —
   without it uid 3333 cannot write a fresh root-owned PVC.
 - With `staggerSchedule: true`, `vulnProcessing.schedule` is ignored and the cron
-  fires hourly at `adler32sum(namespace) mod 60`, so tenants sharing a cluster
-  don't all hit the feed mirrors at `:00`.
+  fires hourly at `adler32sum(staggerKey) mod 60`, so releases sharing a feed
+  mirror — or a database — don't all fire at `:00`. `staggerKey` defaults to the
+  release namespace, which only spreads anything when the releases actually sit
+  in differently named namespaces. One release per cluster in a fixed namespace
+  (`platform`) derives the identical minute everywhere, so set `staggerKey` to a
+  per-cluster value; OpenFrame passes `platform.id`.
 
 Combined effect: server pods never download feeds (redeploys are free), and each
 hourly job only fetches deltas (EPSS/CISA and, when Amazon Linux hosts exist,
