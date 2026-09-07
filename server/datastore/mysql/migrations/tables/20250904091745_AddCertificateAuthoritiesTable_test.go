@@ -135,16 +135,12 @@ func TestUp_20250904091745(t *testing.T) {
 		`INSERT INTO app_config_json(json_value) VALUES(?) ON DUPLICATE KEY UPDATE json_value = VALUES(json_value)`,
 		jsonBytes,
 	)
-	if err != nil {
-		require.NoError(t, err, "failed to insert app_config_json")
-	}
+	require.NoError(t, err, "failed to insert app_config_json")
 	_, err = db.Exec(
 		`UPDATE app_config_json SET json_value = JSON_SET(json_value, '$.integrations', CAST(? AS JSON))`,
 		integrationJSONBytes,
 	)
-	if err != nil {
-		require.NoError(t, err, "failed to insert integrations_json into app_config_json")
-	}
+	require.NoError(t, err, "failed to insert integrations_json into app_config_json")
 	// Apply current migration.
 	applyNext(t, db)
 
