@@ -14,8 +14,6 @@
 
 package wfn
 
-import "sync"
-
 // Matcher knows whether it matches some attributes
 type Matcher interface {
 	// Match returns attributes which match it
@@ -69,30 +67,27 @@ func DontMatch(m Matcher) Matcher {
 type multiMatcher struct {
 	matchers []Matcher
 	// if true, match will only return something if all matchers matched at least something
-	allMatch   bool
-	depth      int
-	depthMutex sync.Mutex
+	allMatch bool
 }
 
 // Match is part of the Matcher interface
 func (mm *multiMatcher) Match(attrs []*Attributes, requireVersion bool) []*Attributes {
-	defer func() {
-		mm.depthMutex.Lock()
-		if mm.depth > 0 {
-			mm.depth--
-		}
-		mm.depthMutex.Unlock()
-	}()
+	return mm.match(attrs, requireVersion, 0)
+}
 
+// match performs the actual matching, threading the nesting depth through
+// the call stack (rather than storing it on the matcher instance) so that
+// concurrent top-level calls to Match do not interfere with each other.
+func (mm *multiMatcher) match(attrs []*Attributes, requireVersion bool, depth int) []*Attributes {
 	matched := make(map[*Attributes]bool)
 	for _, matcher := range mm.matchers {
+		var matches []*Attributes
 		// type check matcher against multiMatcher
-		if _, ok := matcher.(*multiMatcher); !ok {
-			mm.depthMutex.Lock()
-			mm.depth++
-			mm.depthMutex.Unlock()
+		if nested, ok := matcher.(*multiMatcher); ok {
+			matches = nested.match(attrs, requireVersion, depth+1)
+		} else {
+			matches = matcher.Match(attrs, requireVersion)
 		}
-		matches := matcher.Match(attrs, requireVersion)
 		if mm.allMatch && len(matches) == 0 {
 			// all matchers need to match at least one attr
 			return nil
@@ -107,11 +102,9 @@ func (mm *multiMatcher) Match(attrs []*Attributes, requireVersion bool) []*Attri
 		matches = append(matches, m)
 	}
 
-	if mm.depthMutex.Lock(); mm.depth == 0 && len(matches) > 1 && !attributesIncludeApp(matches) {
-		mm.depthMutex.Unlock()
+	if depth == 0 && len(matches) > 1 && !attributesIncludeApp(matches) {
 		return nil
 	}
-	mm.depthMutex.Unlock()
 
 	return matches
 }
