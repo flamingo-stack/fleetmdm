@@ -10,9 +10,9 @@ metadata:
   name: fleet-vulnprocessing
   namespace: {{ .Release.Namespace }}
 spec:
-  # >>> OPENFRAME(vuln-persistence): optional namespace-derived hourly stagger — openframe/docs/helm-chart.md
+  # >>> OPENFRAME(vuln-persistence): optional hashed hourly stagger — openframe/docs/helm-chart.md
   {{- if .Values.vulnProcessing.staggerSchedule }}
-  schedule: "{{ mod (atoi (adler32sum .Release.Namespace)) 60 }} * * * *"
+  schedule: "{{ mod (atoi (adler32sum (default .Release.Namespace .Values.vulnProcessing.staggerKey))) 60 }} * * * *"
   {{- else }}
   schedule: {{ .Values.vulnProcessing.schedule | quote }}
   {{- end }}
