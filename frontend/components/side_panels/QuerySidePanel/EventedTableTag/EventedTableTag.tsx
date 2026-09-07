@@ -19,7 +19,8 @@ const EventedTableTag = ({ selectedTableName }: IEventedTableTagProps) => {
     <a
       href={`https://fleetdm.com/guides/osquery-evented-tables-overview?${queryString}`}
       className={baseClass}
-      target="__blank"
+      target="_blank"
+      rel="noopener noreferrer"
     >
       <Icon name="calendar-check" />
       <span>EVENTED TABLE</span>
@@ -28,3 +29,4 @@ const EventedTableTag = ({ selectedTableName }: IEventedTableTagProps) => {
 };
 
 export default EventedTableTag;
+
