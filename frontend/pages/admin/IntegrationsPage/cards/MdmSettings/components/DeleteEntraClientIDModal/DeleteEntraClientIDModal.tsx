@@ -28,7 +28,9 @@ const DeleteEntraClientIdModal = ({
 
     try {
       const currentClientIds = config?.mdm.windows_entra_client_ids ?? [];
-      const updatedClientIds = currentClientIds.filter((id) => id !== clientId);
+      const updatedClientIds = currentClientIds.filter(
+        (id) => id.toLowerCase() !== clientId.toLowerCase()
+      );
       const updateData = await configAPI.update({
         mdm: {
           windows_entra_client_ids: updatedClientIds,
