@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -57,7 +56,7 @@ func (d *ConditionalAccessSCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.Pri
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(context.Background(), "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -90,22 +89,24 @@ func (d *ConditionalAccessSCEPDepot) HasCN(cn string, allowTime int, cert *x509.
 // The UUID is used to look up the host in Fleet, and the certificate is only issued
 // if the host exists. Old certificates for the same host are automatically revoked.
 func (d *ConditionalAccessSCEPDepot) Put(name string, crt *x509.Certificate) error {
+	ctx := context.Background()
+
 	if crt.Subject.CommonName == "" || len(crt.Subject.CommonName) > maxCommonNameLength {
-		return errors.New("common name empty or too long")
+		return ctxerr.New(ctx, "common name empty or too long")
 	}
 	if !crt.SerialNumber.IsInt64() {
-		return errors.New("cannot represent serial number as int64")
+		return ctxerr.New(ctx, "cannot represent serial number as int64")
 	}
 
 	// Extract UUID from SAN URI
 	// Expected format: urn:device:apple:uuid:<device-uuid>
 	uuid := extractUUIDFromCert(crt)
 	if uuid == "" {
-		return errors.New("no device UUID found in certificate SAN URI")
+		return ctxerr.New(ctx, "no device UUID found in certificate SAN URI")
 	}
 
 	// Look up host BEFORE storing certificate
-	host, err := d.ds.HostByIdentifier(context.Background(), uuid)
+	host, err := d.ds.HostByIdentifier(ctx, uuid)
 	if err != nil {
 		return fmt.Errorf("host not found for UUID %s: %w", uuid, err)
 	}
@@ -113,14 +114,14 @@ func (d *ConditionalAccessSCEPDepot) Put(name string, crt *x509.Certificate) err
 	// Apply rate limiting if configured
 	cooldown := d.config.Osquery.EnrollCooldown
 	if cooldown > 0 {
-		existingCertCreatedAt, err := d.ds.GetConditionalAccessCertCreatedAtByHostID(context.Background(), host.ID)
+		existingCertCreatedAt, err := d.ds.GetConditionalAccessCertCreatedAtByHostID(ctx, host.ID)
 		switch {
 		case err != nil && !fleet.IsNotFound(err):
 			return fmt.Errorf("checking existing certificate: %w", err)
 		case err == nil:
 			// Certificate exists, check if rate limit applies
 			if time.Since(*existingCertCreatedAt) < cooldown {
-				return backoff.Permanent(ctxerr.Errorf(context.Background(), "host %s requesting certificates too often", uuid))
+				return backoff.Permanent(ctxerr.Errorf(ctx, "host %s requesting certificates too often", uuid))
 			}
 		}
 		// If certificate doesn't exist or rate limit doesn't apply, continue
@@ -135,7 +136,7 @@ func (d *ConditionalAccessSCEPDepot) Put(name string, crt *x509.Certificate) err
 	// This prevents authentication failures when:
 	// - Network delays in delivering the new certificate to the client
 	// - Client is offline during certificate rotation (client will request new cert when it comes back online)
-	_, err = d.db.ExecContext(context.Background(), `
+	_, err = d.db.ExecContext(ctx, `
 		INSERT INTO conditional_access_scep_certificates
 			(serial, host_id, name, not_valid_before, not_valid_after, certificate_pem)
 		VALUES
@@ -151,7 +152,7 @@ func (d *ConditionalAccessSCEPDepot) Put(name string, crt *x509.Certificate) err
 		return err
 	}
 
-	d.logger.InfoContext(context.TODO(), "stored conditional access certificate",
+	d.logger.InfoContext(ctx, "stored conditional access certificate",
 		"cn", name,
 		"serial", crt.SerialNumber.Int64(),
 		"host_id", host.ID,
