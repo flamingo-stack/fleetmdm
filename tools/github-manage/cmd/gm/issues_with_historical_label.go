@@ -46,6 +46,7 @@ var issuesWithHistoricalLabelCmd = &cobra.Command{
 		issues, err := ghapi.GetIssuesCreatedSinceWithLabel(repo, since, label, verbose, concurrency, olderThan)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching issues: %v\n", err)
+			return
 		}
 
 		if len(issues) == 0 {
