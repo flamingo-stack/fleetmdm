@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"net/url"
 	"strings"
 
@@ -18,7 +17,7 @@ func (mw validationMiddleware) NewAppConfig(ctx context.Context, payload fleet.A
 	} else {
 		serverURLString = cleanupURL(payload.ServerSettings.ServerURL)
 	}
-	if err := ValidateServerURL(serverURLString); err != nil {
+	if err := ValidateServerURL(ctx, serverURLString); err != nil {
 		invalid.Append("server_url", err.Error())
 	}
 	if invalid.HasErrors() {
@@ -27,12 +26,16 @@ func (mw validationMiddleware) NewAppConfig(ctx context.Context, payload fleet.A
 	return mw.Service.NewAppConfig(ctx, payload)
 }
 
-func ValidateServerURL(urlString string) error {
-	// TODO - implement more robust URL validation here
-
+// ValidateServerURL validates that the given URL string is well-formed and
+// contains a scheme (http/https) and a host.
+//
+// TODO(FLEETMDM-002) - implement more robust URL validation here, see
+// https://github.com/fleetdm/fleet/issues for tracking further hardening
+// (e.g. rejecting suspicious userinfo/host combinations).
+func ValidateServerURL(ctx context.Context, urlString string) error {
 	// no valid scheme provided
 	if !(strings.HasPrefix(urlString, "http://") || strings.HasPrefix(urlString, "https://")) {
-		return errors.New(fleet.InvalidServerURLMsg)
+		return ctxerr.New(ctx, fleet.InvalidServerURLMsg)
 	}
 
 	// valid scheme provided - require host
@@ -41,8 +44,9 @@ func ValidateServerURL(urlString string) error {
 		return err
 	}
 	if parsed.Host == "" {
-		return errors.New(fleet.InvalidServerURLMsg)
+		return ctxerr.New(ctx, fleet.InvalidServerURLMsg)
 	}
 
 	return nil
 }
+
