@@ -44,11 +44,19 @@ func TestAuthenticatedDeviceFallbackAuth(t *testing.T) {
 
 	t.Run("fallback_to_uuid_auth_for_ios", func(t *testing.T) {
 		// iOS device with UUID in URL - token auth fails, falls back to UUID auth
+		var tokenAuthCalled, uuidAuthCalled bool
+		var tokenAuthCalledBeforeUUIDAuth bool
+
 		ds.LoadHostByDeviceAuthTokenFunc = func(ctx context.Context, authToken string, ttl time.Duration) (*fleet.Host, error) {
+			tokenAuthCalled = true
+			if !uuidAuthCalled {
+				tokenAuthCalledBeforeUUIDAuth = true
+			}
 			return nil, newNotFoundError()
 		}
 
 		ds.HostByUUIDFunc = func(ctx context.Context, uuid string) (*fleet.Host, error) {
+			uuidAuthCalled = true
 			if uuid == "ios-device-uuid" {
 				return &fleet.Host{
 					ID:       1,
@@ -62,15 +70,26 @@ func TestAuthenticatedDeviceFallbackAuth(t *testing.T) {
 		req := mockDeviceAuthRequest{Token: "ios-device-uuid"}
 		_, err := middleware(context.Background(), req)
 		require.NoError(t, err)
+		require.True(t, tokenAuthCalled, "expected token-based auth to be attempted before falling back to UUID auth")
+		require.True(t, uuidAuthCalled, "expected UUID-based auth to be attempted as fallback")
+		require.True(t, tokenAuthCalledBeforeUUIDAuth, "expected token-based auth to be attempted before UUID-based auth")
 	})
 
 	t.Run("fallback_to_uuid_auth_for_ipados", func(t *testing.T) {
 		// iPadOS device with UUID in URL - token auth fails, falls back to UUID auth
+		var tokenAuthCalled, uuidAuthCalled bool
+		var tokenAuthCalledBeforeUUIDAuth bool
+
 		ds.LoadHostByDeviceAuthTokenFunc = func(ctx context.Context, authToken string, ttl time.Duration) (*fleet.Host, error) {
+			tokenAuthCalled = true
+			if !uuidAuthCalled {
+				tokenAuthCalledBeforeUUIDAuth = true
+			}
 			return nil, newNotFoundError()
 		}
 
 		ds.HostByUUIDFunc = func(ctx context.Context, uuid string) (*fleet.Host, error) {
+			uuidAuthCalled = true
 			if uuid == "ipados-device-uuid" {
 				return &fleet.Host{
 					ID:       2,
@@ -84,6 +103,9 @@ func TestAuthenticatedDeviceFallbackAuth(t *testing.T) {
 		req := mockDeviceAuthRequest{Token: "ipados-device-uuid"}
 		_, err := middleware(context.Background(), req)
 		require.NoError(t, err)
+		require.True(t, tokenAuthCalled, "expected token-based auth to be attempted before falling back to UUID auth")
+		require.True(t, uuidAuthCalled, "expected UUID-based auth to be attempted as fallback")
+		require.True(t, tokenAuthCalledBeforeUUIDAuth, "expected token-based auth to be attempted before UUID-based auth")
 	})
 
 	t.Run("failure_when_both_auth_methods_fail", func(t *testing.T) {
