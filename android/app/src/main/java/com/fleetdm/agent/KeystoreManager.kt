@@ -8,6 +8,8 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 object KeystoreManager {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
@@ -17,28 +19,32 @@ object KeystoreManager {
     private const val IV_SEPARATOR = "]"
 
     // Test mode uses in-memory key instead of Android Keystore
-    private var testMode = false
-    private var testKey: SecretKey? = null
+    private val testMode = AtomicBoolean(false)
+    private val testKey = AtomicReference<SecretKey?>(null)
 
     /**
      * Enables test mode which uses an in-memory key instead of Android Keystore.
      * This allows unit tests to run without Android's hardware-backed keystore.
      */
+    @Synchronized
     fun enableTestMode() {
-        testMode = true
-        testKey = KeyGenerator.getInstance("AES").apply {
-            init(256)
-        }.generateKey()
+        testKey.set(
+            KeyGenerator.getInstance("AES").apply {
+                init(256)
+            }.generateKey(),
+        )
+        testMode.set(true)
     }
 
+    @Synchronized
     fun disableTestMode() {
-        testMode = false
-        testKey = null
+        testMode.set(false)
+        testKey.set(null)
     }
 
     private fun getOrCreateKey(): SecretKey {
-        if (testMode) {
-            return testKey ?: error("Test mode enabled but no test key available")
+        if (testMode.get()) {
+            return testKey.get() ?: error("Test mode enabled but no test key available")
         }
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
             load(null)
