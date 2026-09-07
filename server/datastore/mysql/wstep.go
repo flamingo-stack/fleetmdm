@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"math/big"
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
 )
 
@@ -26,7 +26,7 @@ func (ds *Datastore) WSTEPStoreCertificate(ctx context.Context, name string, crt
 		name = fmt.Sprintf("%x", sha256.Sum256(crt.Raw))
 	}
 	if !crt.SerialNumber.IsInt64() {
-		return errors.New("cannot represent serial number as int64")
+		return ctxerr.New(ctx, "cannot represent serial number as int64")
 	}
 	certPEM := certificate.EncodeCertPEM(crt)
 	_, err := ds.writer(ctx).ExecContext(ctx, `
@@ -40,20 +40,29 @@ VALUES
 		crt.NotAfter,
 		certPEM,
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "store certificate")
+	}
+	return nil
 }
 
 // WSTEPNewSerial allocates and returns a new (increasing) serial number.
+//
+// NOTE: serial numbers are allocated sequentially via AUTO_INCREMENT rather
+// than randomly. This is a known deviation from CA/Browser Forum guidance
+// recommending unpredictable serial numbers; addressing it would require a
+// broader change to the allocation scheme and is tracked separately. The
+// allocated value is also not currently bounds-checked against a maximum
+// serial number.
 func (ds *Datastore) WSTEPNewSerial(ctx context.Context) (*big.Int, error) {
 	result, err := ds.writer(ctx).ExecContext(ctx, `INSERT INTO wstep_serials () VALUES ();`)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "insert wstep serial")
 	}
-	lid, err := result.LastInsertId() // TODO: ok if sequential and not random?
+	lid, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get last insert id for wstep serial")
 	}
-	// TODO: check maxSerialNumber?
 	return big.NewInt(lid), nil
 }
 
@@ -65,5 +74,8 @@ UPDATE sha256 = new.sha256;`,
 		deviceUUID,
 		strings.ToUpper(hash), // TODO: confirm if this is necessary
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "associate cert hash")
+	}
+	return nil
 }
