@@ -31,13 +31,13 @@ func userIsGitOpsOnly(ctx context.Context) (bool, error) {
 		return false, fleet.ErrNoContext
 	}
 	if vc.User == nil {
-		return false, errors.New("missing user in context")
+		return false, ctxerr.New(ctx, "missing user in context")
 	}
 	if vc.User.GlobalRole != nil {
 		return *vc.User.GlobalRole == fleet.RoleGitOps, nil
 	}
 	if len(vc.User.Teams) == 0 {
-		return false, errors.New("user has no roles")
+		return false, ctxerr.New(ctx, "user has no roles")
 	}
 	for _, teamRole := range vc.User.Teams {
 		if teamRole.Role != fleet.RoleGitOps {
@@ -133,7 +133,11 @@ func (svc *Service) GetPack(ctx context.Context, id uint) (*fleet.Pack, error) {
 		return nil, err
 	}
 
-	return svc.ds.Pack(ctx, id)
+	pack, err := svc.ds.Pack(ctx, id)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "get pack")
+	}
+	return pack, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,7 +221,7 @@ func (svc *Service) NewPack(ctx context.Context, p fleet.PackPayload) (*fleet.Pa
 
 	_, err := svc.ds.NewPack(ctx, &pack)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "new pack")
 	}
 
 	if err := svc.NewActivity(
@@ -280,7 +284,7 @@ func (svc *Service) ModifyPack(ctx context.Context, id uint, p fleet.PackPayload
 
 	pack, err := svc.ds.Pack(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get pack for modification")
 	}
 
 	if p.Name != nil && pack.EditablePackType() {
@@ -313,7 +317,7 @@ func (svc *Service) ModifyPack(ctx context.Context, id uint, p fleet.PackPayload
 
 	err = svc.ds.SavePack(ctx, pack)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "save pack")
 	}
 
 	if err := svc.NewActivity(
@@ -368,7 +372,11 @@ func (svc *Service) ListPacks(ctx context.Context, opt fleet.PackListOptions) ([
 		return nil, err
 	}
 
-	return svc.ds.ListPacks(ctx, opt)
+	packs, err := svc.ds.ListPacks(ctx, opt)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "list packs")
+	}
+	return packs, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -401,15 +409,18 @@ func (svc *Service) DeletePack(ctx context.Context, name string) error {
 
 	pack, _, err := svc.ds.PackByName(ctx, name)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "get pack by name for deletion")
+	}
+	if pack == nil {
+		return ctxerr.Wrap(ctx, notFoundErrorForPackName(name))
 	}
 	// if there is a pack by this name, ensure it is not type Global or Team
-	if pack != nil && !pack.EditablePackType() {
-		return fmt.Errorf("cannot delete pack_type %s", *pack.Type)
+	if !pack.EditablePackType() {
+		return ctxerr.Errorf(ctx, "cannot delete pack_type %s", *pack.Type)
 	}
 
 	if err := svc.ds.DeletePack(ctx, name); err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "delete pack")
 	}
 
 	if err := svc.NewActivity(
@@ -422,6 +433,11 @@ func (svc *Service) DeletePack(ctx context.Context, name string) error {
 		return ctxerr.Wrap(ctx, err, "create activity for pack deletion")
 	}
 	return nil
+}
+
+// notFoundErrorForPackName returns a not-found error for the given pack name.
+func notFoundErrorForPackName(name string) error {
+	return &fleet.NotFoundError{Message: fmt.Sprintf("pack %q not found", name)}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -454,13 +470,13 @@ func (svc *Service) DeletePackByID(ctx context.Context, id uint) error {
 
 	pack, err := svc.ds.Pack(ctx, id)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "get pack by id for deletion")
 	}
 	if pack != nil && !pack.EditablePackType() {
-		return fmt.Errorf("cannot delete pack_type %s", *pack.Type)
+		return ctxerr.Errorf(ctx, "cannot delete pack_type %s", *pack.Type)
 	}
 	if err := svc.ds.DeletePack(ctx, pack.Name); err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "delete pack by id")
 	}
 
 	if err := svc.NewActivity(
@@ -505,7 +521,7 @@ func (svc *Service) ApplyPackSpecs(ctx context.Context, specs []*fleet.PackSpec)
 
 	packs, err := svc.ds.ListPacks(ctx, fleet.PackListOptions{IncludeSystemPacks: true})
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "list packs for apply pack specs")
 	}
 
 	namePacks := make(map[string]*fleet.Pack, len(packs))
@@ -539,7 +555,7 @@ func (svc *Service) ApplyPackSpecs(ctx context.Context, specs []*fleet.PackSpec)
 	}
 
 	if err := svc.ds.ApplyPackSpecs(ctx, result); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "apply pack specs")
 	}
 
 	if err := svc.NewActivity(
@@ -576,7 +592,11 @@ func (svc *Service) GetPackSpecs(ctx context.Context) ([]*fleet.PackSpec, error)
 		return nil, err
 	}
 
-	return svc.ds.GetPackSpecs(ctx)
+	specs, err := svc.ds.GetPackSpecs(ctx)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "get pack specs")
+	}
+	return specs, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -604,7 +624,11 @@ func (svc *Service) GetPackSpec(ctx context.Context, name string) (*fleet.PackSp
 		return nil, err
 	}
 
-	return svc.ds.GetPackSpec(ctx, name)
+	spec, err := svc.ds.GetPackSpec(ctx, name)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "get pack spec")
+	}
+	return spec, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -616,5 +640,9 @@ func (svc *Service) ListPacksForHost(ctx context.Context, hid uint) ([]*fleet.Pa
 		return nil, err
 	}
 
-	return svc.ds.ListPacksForHost(ctx, hid)
+	packs, err := svc.ds.ListPacksForHost(ctx, hid)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "list packs for host")
+	}
+	return packs, nil
 }
