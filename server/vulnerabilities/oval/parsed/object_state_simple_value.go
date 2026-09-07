@@ -26,13 +26,19 @@ func NewObjectStateSimpleValue(dtype string, op string, val string) ObjectStateS
 	return ObjectStateSimpleValue(fmt.Sprintf("%s|%s|%s", dtype, op, val))
 }
 
-func (sta ObjectStateSimpleValue) unpack() (DataType, OperationType, string) {
-	parts := strings.Split(string(sta), "|")
-	return NewDataType(parts[0]), NewOperationType(parts[1]), parts[2]
+func (sta ObjectStateSimpleValue) unpack() (DataType, OperationType, string, error) {
+	parts := strings.SplitN(string(sta), "|", 3)
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("malformed ObjectStateSimpleValue: %q", string(sta))
+	}
+	return NewDataType(parts[0]), NewOperationType(parts[1]), parts[2], nil
 }
 
 func (sta ObjectStateSimpleValue) Eval(other string) (bool, error) {
-	dType, op, val := sta.unpack()
+	dType, op, val, err := sta.unpack()
+	if err != nil {
+		return false, err
+	}
 
 	for _, cType := range complexTypes {
 		if dType == cType {
