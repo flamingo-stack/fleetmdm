@@ -25,7 +25,7 @@ func Up_20260218175704(tx *sql.Tx) error {
 
 	if !indexExistsTx(tx, "software_installers", "idx_software_installers_team_title_version") {
 		if _, err := tx.Exec(`ALTER TABLE software_installers ADD UNIQUE INDEX idx_software_installers_team_title_version (global_or_team_id,title_id,version)`); err != nil {
-			return fmt.Errorf("altering software_installers: %w", err)
+			return fmt.Errorf("altering software_installers: %w (this can fail if duplicate (global_or_team_id, title_id, version) rows already exist in software_installers; such duplicates must be de-duplicated before this migration can succeed)", err)
 		}
 	}
 
@@ -36,7 +36,10 @@ func Up_20260218175704(tx *sql.Tx) error {
 	}
 
 	// At migration time, the 1-installer-per-title rule is still enforced,
-	// so every existing installer is the active one for its title.
+	// so every existing installer is the active one for its title. This
+	// depends on the unique index above having succeeded (i.e., no
+	// duplicate (global_or_team_id, title_id, version) rows exist); if that
+	// index creation failed, we would not reach this point.
 	_, err := tx.Exec(`UPDATE software_installers SET is_active = 1`)
 	if err != nil {
 		return fmt.Errorf("setting is_active for existing installers: %w", err)
