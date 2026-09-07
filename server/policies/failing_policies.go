@@ -228,14 +228,10 @@ func makeTeamConfigCache(ds fleet.Datastore, globalIntgs fleet.Integrations) fun
 
 func makeDefaultTeamConfigCache(ds fleet.Datastore, globalIntgs fleet.Integrations, logger *slog.Logger) func(ctx context.Context) (FailingPolicyAutomationConfig, error) {
 	var cached *FailingPolicyAutomationConfig
-	var cachedErr error
 
 	return func(ctx context.Context) (FailingPolicyAutomationConfig, error) {
-		// Return cached result if already loaded
-		if cached != nil || cachedErr != nil {
-			if cachedErr != nil {
-				return FailingPolicyAutomationConfig{}, cachedErr
-			}
+		// Return cached result if already loaded successfully
+		if cached != nil {
 			return *cached, nil
 		}
 
@@ -243,14 +239,12 @@ func makeDefaultTeamConfigCache(ds fleet.Datastore, globalIntgs fleet.Integratio
 		var cfg FailingPolicyAutomationConfig
 		defaultTeamConfig, err := ds.DefaultTeamConfig(ctx)
 		if err != nil {
-			cachedErr = err
 			logger.ErrorContext(ctx, "failed to get default team config", "err", err)
 			return cfg, err
 		}
 
 		intgs, err := defaultTeamConfig.Integrations.MatchWithIntegrations(globalIntgs)
 		if err != nil {
-			cachedErr = err
 			logger.ErrorContext(ctx, "failed to match default team integrations", "err", err)
 			return cfg, err
 		}
