@@ -78,9 +78,16 @@ func TestOpenframePolicyQueryByIDTeamFence(t *testing.T) {
 		_, err = ds.PoliciesByID(ctxA, []uint{polB.ID})
 		require.True(t, fleet.IsNotFound(err), "foreign policy in batch by-id must be NotFound, got %v", err)
 
-		// A mixed batch fails too — the foreign id is indistinguishable from a nonexistent one.
+		// NOTE(fail-closed, cross-team mixed batch): the current PoliciesByID implementation fails
+		// the entire request as NotFound when the id list mixes an owned id with a foreign one — the
+		// foreign id is indistinguishable from a nonexistent one. This differs from typical batch-fetch
+		// semantics where callers expect partial results for the ids they are authorized to see. This
+		// is documented here rather than silently relied upon: any caller that gathers ids from
+		// multiple sources (e.g. a UI multi-select spanning teams) must not assume PoliciesByID will
+		// return the subset it can access — it must ensure ids passed to PoliciesByID are pre-filtered
+		// to a single tenant scope, or treat NotFound from a mixed batch as a signal to retry per-id.
 		_, err = ds.PoliciesByID(ctxA, []uint{polA.ID, polB.ID})
-		require.True(t, fleet.IsNotFound(err), "mixed batch with foreign id must be NotFound, got %v", err)
+		require.True(t, fleet.IsNotFound(err), "mixed batch with foreign id must be NotFound (fail-closed; callers must not mix cross-team ids), got %v", err)
 	})
 
 	t.Run("unpinned baseline: foreign reads still succeed", func(t *testing.T) {
