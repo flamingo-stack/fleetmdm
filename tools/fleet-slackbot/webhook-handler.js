@@ -41,6 +41,13 @@ function verifySignature(rawBody, signatureHeader, secret) {
   }
 }
 
+// Rejects any path containing a ".." segment anywhere (not just as a
+// leading prefix), to guard against traversal via backslash or other
+// separators that path.posix.normalize does not collapse.
+function hasTraversalSegment(p) {
+  return p.split(/[\\/]/).some((segment) => segment === "..");
+}
+
 function createWebhookHandler(config, github, claude) {
   return async function handleWebhook(req, res) {
     // Collect raw body from the IncomingMessage stream (capped at 1MB)
@@ -152,15 +159,31 @@ function createWebhookHandler(config, github, claude) {
       return;
     }
 
-    // Respond to GitHub immediately to avoid timeout
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, message: "processing" }));
-
     // Extract PR number — different payload structure per event type
     const prNumber = event === "issue_comment"
       ? payload.issue.number
       : payload.pull_request.number;
     const commentId = payload.comment.id;
+
+    // Extra safety: author_association reflects association to the repo the
+    // event fired on, not necessarily the PR's head repo. Verify the PR's
+    // head repo matches the base repo (i.e. not a fork) before proceeding,
+    // since this bot can auto-commit AI-authored content.
+    const baseRepoFullName = payload.repository && payload.repository.full_name;
+    const prForAssocCheck = event === "issue_comment" ? payload.issue.pull_request : payload.pull_request;
+    const headRepoFullName = prForAssocCheck && prForAssocCheck.head && prForAssocCheck.head.repo &&
+      prForAssocCheck.head.repo.full_name;
+    if (headRepoFullName && baseRepoFullName && headRepoFullName !== baseRepoFullName) {
+      console.log(`[webhook] Ignoring comment on PR #${prNumber} — head repo "${headRepoFullName}" does not match base repo "${baseRepoFullName}" (fork)`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, message: "cross-repo PR not allowed" }));
+      return;
+    }
+
+    // Respond to GitHub immediately to avoid timeout
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, message: "processing" }));
+
     console.log(`[webhook] PR #${prNumber} comment from ${commentAuthor}: "${commentBody.slice(0, 100)}"`);
 
     // Check if the bot was @mentioned
@@ -251,7 +274,8 @@ async function processComment({ prNumber, commentBody, commentId, event, mention
   const changes = [];
   for (const c of proposal.changes) {
     const normalized = path.posix.normalize(c.filePath);
-    if (normalized.startsWith("..") || path.posix.isAbsolute(normalized) ||
+    if (normalized.startsWith("..") || path.posix.isAbsolute(normalized) || hasTraversalSegment(c.filePath) ||
+        hasTraversalSegment(normalized) ||
         !(normalized === "default.yml" || normalized.startsWith("fleets/") || normalized.startsWith("lib/"))) {
       throw new Error(`Invalid file path in response (must be under default.yml, fleets/, or lib/): ${c.filePath}`);
     }
@@ -308,20 +332,29 @@ async function handleCheckRun(payload, config, github, claude) {
   const headSha = checkRun.head_sha;
   console.log(`[ci-fix] Check "${checkRun.name}" failed on PR #${prNumber} (sha: ${headSha.slice(0, 8)})`);
 
-  // Loop prevention: allow up to 2 consecutive CI fix attempts, then stop
+  // Loop prevention: walk back through consecutive "CI fix:" commits and
+  // count how many auto-fix attempts have already been made. This covers
+  // non-consecutive bot commits interleaved with human commits by tracking
+  // an attempt counter embedded in the commit message rather than only
+  // inspecting the immediate parent.
+  const MAX_CI_FIX_ATTEMPTS = 2;
   try {
-    const commit = await github.getCommit(headSha);
-    if (commit.message.startsWith("CI fix:")) {
-      // Check the parent commit too — if it's also a CI fix, we've already retried once
-      const parentSha = commit.parentSha;
-      if (parentSha) {
-        const parent = await github.getCommit(parentSha);
-        if (parent.message.startsWith("CI fix:")) {
-          console.log(`[ci-fix] Skipping — already attempted CI fix twice`);
-          return;
-        }
-      }
-      console.log(`[ci-fix] Previous CI fix failed, retrying (attempt 2)...`);
+    let attemptCount = 0;
+    let sha = headSha;
+    for (let i = 0; i < MAX_CI_FIX_ATTEMPTS + 1; i++) {
+      const commit = await github.getCommit(sha);
+      const match = commit.message.match(/^CI fix:(?:\s*\(attempt (\d+)\))?/);
+      if (!match) break;
+      attemptCount = match[1] ? parseInt(match[1], 10) : attemptCount + 1;
+      if (!commit.parentSha) break;
+      sha = commit.parentSha;
+    }
+    if (attemptCount >= MAX_CI_FIX_ATTEMPTS) {
+      console.log(`[ci-fix] Skipping — already attempted CI fix ${attemptCount} time(s)`);
+      return;
+    }
+    if (attemptCount > 0) {
+      console.log(`[ci-fix] Previous CI fix failed, retrying (attempt ${attemptCount + 1})...`);
     }
   } catch (err) {
     console.warn(`[ci-fix] Could not check commit history: ${err.message}, skipping as a safety precaution`);
@@ -395,7 +428,8 @@ async function handleCheckRun(payload, config, github, claude) {
   const changes = [];
   for (const c of proposal.changes) {
     const normalized = path.posix.normalize(c.filePath);
-    if (normalized.startsWith("..") || path.posix.isAbsolute(normalized) ||
+    if (normalized.startsWith("..") || path.posix.isAbsolute(normalized) || hasTraversalSegment(c.filePath) ||
+        hasTraversalSegment(normalized) ||
         !(normalized === "default.yml" || normalized.startsWith("fleets/") || normalized.startsWith("lib/"))) {
       throw new Error(`Invalid file path in CI fix response (must be under default.yml, fleets/, or lib/): ${c.filePath}`);
     }
