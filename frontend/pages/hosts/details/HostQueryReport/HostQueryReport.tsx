@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { useQuery } from "react-query";
 import { browserHistory, InjectedRouter } from "react-router";
 import { Params } from "react-router/lib/Router";
@@ -96,15 +96,16 @@ const HostQueryReport = ({
   } = queryResponse || {};
 
   // previous reroute can be done before API call, not this one, hence 2
-  if (queryDiscardData) {
-    router.push(PATHS.HOST_REPORTS(hostId));
-  }
+  useEffect(() => {
+    if (queryDiscardData) {
+      router.push(PATHS.HOST_REPORTS(hostId));
+    }
+  }, [queryDiscardData, router, hostId]);
 
   // Updates title that shows up on browser tabs
   if (queryName && hostName) {
     // e.g., Discover TLS certificates (Rachel's MacBook Pro) | Hosts | Fleet
-    document.title = `${queryName} (${hostName}) |
-   Hosts | ${DOCUMENT_TITLE_SUFFIX}`;
+    document.title = `${queryName} (${hostName}) | Hosts | ${DOCUMENT_TITLE_SUFFIX}`;
   } else {
     document.title = `Hosts | ${DOCUMENT_TITLE_SUFFIX}`;
   }
