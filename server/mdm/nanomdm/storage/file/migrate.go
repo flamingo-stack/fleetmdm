@@ -35,6 +35,7 @@ func (s *FileStorage) RetrieveMigrationCheckins(_ context.Context, c chan<- inte
 			authExists, err := e.fileExists(AuthenticateFilename)
 			if err != nil {
 				c <- err
+				continue
 			}
 			// if an Authenticate doesn't exist then this is a
 			// user-channel enrollment. skip it for this loop
@@ -47,6 +48,7 @@ func (s *FileStorage) RetrieveMigrationCheckins(_ context.Context, c chan<- inte
 			tokExists, err := e.fileExists(TokenUpdateFilename)
 			if err != nil {
 				c <- err
+				continue
 			}
 			// if neither an authenticate nor tokenupdate exists then
 			// this is an invalid enrollment and we should skip it
