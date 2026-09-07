@@ -110,8 +110,12 @@ module.exports = {
       throw new Error('No webhook secret configured!  (Please set `sails.config.custom.zapierWebhookSecret`.)');
     }
 
-    if(webhookSecret !== sails.config.custom.clayWebhookSecret){
-      throw new Error('Received unexpected webhook request with webhookSecret set to: '+webhookSecret);
+    let crypto = require('crypto');
+    let expectedSecretBuffer = Buffer.from(sails.config.custom.clayWebhookSecret);
+    let receivedSecretBuffer = Buffer.from(webhookSecret);
+    let isSecretValid = expectedSecretBuffer.length === receivedSecretBuffer.length && crypto.timingSafeEqual(expectedSecretBuffer, receivedSecretBuffer);
+    if(!isSecretValid){
+      throw new Error('Received unexpected webhook request with an invalid webhookSecret.');
     }
 
 
@@ -134,7 +138,7 @@ module.exports = {
 
     if(!recordDetails.salesforceAccountId) {
       sails.log.warn(`When the receive-from-clay received information about a user's activity (name: ${firstName} ${lastName}), activity: ${intentSignal}). A contact was successfully updated, but the webhook is unable to continue because this contact is not associated with any Salesforce account record. Contact ID: ${recordDetails.salesforceContactId}`);
-      throw 'couldNotCreateActivity';
+      throw {couldNotCreateActivity: new Error(`Could not create activity: contact (Contact ID: ${recordDetails.salesforceContactId}) is not associated with any Salesforce account record.`)};
     }
 
     let trimmedLinkedinUrl;
