@@ -46,7 +46,7 @@ rm -f vet.err
 # 3. Marker presence: if a merge silently dropped fork code, its OPENFRAME markers
 #    vanish too. A slug dropping to zero is a red flag worth a human look.
 step "OPENFRAME marker presence (dropped-fork-code detector)"
-for slug in host-assignments managed-policies managed-queries redis-key-prefix redis-seed-nodes query-results-ttl osquery-host-id agent-openframe-mode agent-json-content-type migration-race; do
+for slug in host-assignments managed-policies managed-queries redis-key-prefix redis-seed-nodes query-results-ttl osquery-host-id agent-openframe-mode agent-json-content-type agent-skip-setup-experience migration-race; do
   n=$(grep -rIl "OPENFRAME($slug" --include='*.go' --include='*.yaml' --include='*.tpl' . 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" -gt 0 ]; then ok "$slug — present in $n file(s)"; else bad "$slug — NO markers found (fork code may have been dropped in the merge)"; fi
 done

@@ -359,6 +359,11 @@ func (s *LinuxSetupExperiencer) Run(_ *fleet.OrbitConfig) error {
 		// nothing to do.
 		return nil
 	}
+	// >>> OPENFRAME(agent-skip-setup-experience): a disabled setup experience has nothing to poll on the Premium-only status endpoint — openframe/docs/agent-skip-setup-experience.md
+	if !info.Enabled {
+		return nil
+	}
+	// <<< OPENFRAME(agent-skip-setup-experience)
 
 	payload, err := s.orbitClient.GetSetupExperienceStatus(false)
 	if err != nil {

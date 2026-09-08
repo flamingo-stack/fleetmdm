@@ -136,6 +136,7 @@ and the heaviest standing rebase cost.
 | Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/osquery/osquery.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
 | Agent options kept | `cmd/fleet/serve.go` (starter-library skip under multitenancy), `server/fleet/openframe.go` (trimmed seed/fallback defaults), `server/datastore/mysql/teams_openframe_test.go`, `server/fleet/openframe_test.go` |
 | Agent JSON content-type | `client/orbit_client.go`, `client/device_client.go`, `orbit/cmd/fetch_cert/main.go`, `client/orbit_client_content_type_test.go` |
+| Agent skip setup experience | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/setup_experience/setup_experience.go`, `orbit/cmd/orbit/setup_experience_openframe_test.go`, `orbit/pkg/setup_experience/setup_experience_openframe_test.go` |
 | Build / meta | `go.mod`, `go.sum`, `.gitignore`, `README.md`, `.github/pull_request_template.md`, `server/archtest/*` |
 
 ### Helm chart (~9 files)
