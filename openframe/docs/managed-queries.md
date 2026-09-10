@@ -56,7 +56,24 @@ POST /api/latest/fleet/queries
 `PATCH /api/latest/fleet/queries/{id}` takes `"openframe_managed": true|false`; omitting the field
 leaves the flag as-is. Every query payload returns `"openframe_managed"`.
 
-There is no `include_managed` parameter, for the same fail-closed reason as on the policies side.
+### Listing
+
+`GET /api/latest/fleet/queries` excludes managed queries by default. Pass
+`?include_openframe_managed=1` to include them. The flag is **opt-in and defaults to excluded**, so
+the decluttered operator-facing listing cannot be changed by an accidental or user-supplied value;
+the OpenFrame platform's own services (query sync, host auto-assign) set it to enumerate what they
+own.
+
+This stays **decluttering, not access control** — the flag decides whether the listing is tidy for a
+normal operator, it is not a security boundary. Tenant isolation is enforced separately, per-tenant.
+(An earlier draft of this doc planned *no* such parameter and had the platform read managed queries
+by id, on a "fail-closed" argument. That argument was about the declutter being unbypassable by a
+user-supplied flag, **not** about isolation — so an opt-in listing flag is an equivalent trade: the
+default still excludes, and every by-id read and write path still ignores the flag. It only spares
+the sync/reconcile path from id-guessing when it needs to diff the full managed set.)
+
+This differs from the policies side, which has no equivalent include flag — queries grew one because
+the query synchronizer must list what it owns to reconcile it.
 
 ## Implementation
 
@@ -102,8 +119,14 @@ written by the same `INSERT`/`UPDATE` as every other query field (`NewQuery`, `S
 | `server/datastore/mysql/schema.sql` | the column, so test databases match production |
 | `server/fleet/queries.go` | `OpenframeManaged` on `Query` and on `QueryPayload` |
 | `server/service/queries.go` | maps the flag on query create and on modify |
-| `server/datastore/mysql/queries.go` | the `INSERT`, the `UPDATE`, both SELECT lists, and the listing exclusion |
-| `server/datastore/mysql/queries_openframe_managed_test.go` | MySQL coverage |
+| `server/datastore/mysql/queries.go` | the `INSERT`, the `UPDATE`, both SELECT lists, and the listing exclusion (skipped when `IncludeOpenframeManaged`) |
+| `server/fleet/app.go` | `IncludeOpenframeManaged` on `ListQueryOptions` |
+| `server/fleet/api_queries.go` | `IncludeOpenframeManaged` on `ListQueriesRequest` (query param `include_openframe_managed`) |
+| `server/fleet/service.go` | trailing `includeOpenframeManaged bool` on the `ListQueries` interface |
+| `server/service/queries.go` | `listQueriesEndpoint` forwards the request flag into `ListQueryOptions` |
+| `server/mock/service/service_mock.go` | regenerated `ListQueries` mock for the new parameter |
+| `server/service/global_schedule.go`, `server/service/team_schedule.go`, `server/service/queries_test.go` | internal `ListQueries` callers pass `false` (keep the default exclude) |
+| `server/datastore/mysql/queries_openframe_managed_test.go` | MySQL coverage, incl. the `include_openframe_managed` opt-in |
 
 ## Host assignment interaction (open item)
 

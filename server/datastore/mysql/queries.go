@@ -928,8 +928,11 @@ func (ds *Datastore) ListQueries(ctx context.Context, opt fleet.ListQueryOptions
 	args := []interface{}{false, fleet.AggregatedStatsTypeScheduledQuery}
 	whereClauses := "WHERE saved = true"
 	// >>> OPENFRAME(managed-queries): drop platform-owned queries from this listing and from the
-	// count derived from it — openframe/docs/managed-queries.md
-	whereClauses += openframeManagedQueryExclusion
+	// count derived from it — openframe/docs/managed-queries.md. Opt-in callers (query sync,
+	// host auto-assign) pass IncludeOpenframeManaged to enumerate what OpenFrame owns.
+	if !opt.IncludeOpenframeManaged {
+		whereClauses += openframeManagedQueryExclusion
+	}
 	// <<< OPENFRAME(managed-queries)
 
 	switch {

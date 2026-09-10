@@ -184,7 +184,7 @@ type GetQuerySpecsFunc func(ctx context.Context, teamID *uint) ([]*fleet.QuerySp
 
 type GetQuerySpecFunc func(ctx context.Context, teamID *uint, name string) (*fleet.QuerySpec, error)
 
-type ListQueriesFunc func(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error)
+type ListQueriesFunc func(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string, includeOpenframeManaged bool) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error)
 
 type GetQueryFunc func(ctx context.Context, id uint) (*fleet.Query, error)
 
@@ -2938,11 +2938,11 @@ func (s *Service) GetQuerySpec(ctx context.Context, teamID *uint, name string) (
 	return s.GetQuerySpecFunc(ctx, teamID, name)
 }
 
-func (s *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error) {
+func (s *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string, includeOpenframeManaged bool) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error) {
 	s.mu.Lock()
 	s.ListQueriesFuncInvoked = true
 	s.mu.Unlock()
-	return s.ListQueriesFunc(ctx, opt, teamID, scheduled, mergeInherited, platform)
+	return s.ListQueriesFunc(ctx, opt, teamID, scheduled, mergeInherited, platform, includeOpenframeManaged)
 }
 
 func (s *Service) GetQuery(ctx context.Context, id uint) (*fleet.Query, error) {

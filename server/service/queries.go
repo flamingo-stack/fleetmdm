@@ -58,7 +58,7 @@ func listQueriesEndpoint(ctx context.Context, request interface{}, svc fleet.Ser
 		urlPlatform = &req.Platform
 	}
 
-	queries, count, inheritedCount, meta, err := svc.ListQueries(ctx, req.ListOptions, teamID, nil, req.MergeInherited, urlPlatform)
+	queries, count, inheritedCount, meta, err := svc.ListQueries(ctx, req.ListOptions, teamID, nil, req.MergeInherited, urlPlatform, req.IncludeOpenframeManaged)
 	if err != nil {
 		return fleet.ListQueriesResponse{Err: err}, nil
 	}
@@ -76,7 +76,7 @@ func listQueriesEndpoint(ctx context.Context, request interface{}, svc fleet.Ser
 	}, nil
 }
 
-func (svc *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, urlPlatform *string) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error) {
+func (svc *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, urlPlatform *string, includeOpenframeManaged bool) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error) {
 	// Check the user is allowed to list queries on the given team.
 	if err := svc.authz.Authorize(ctx, &fleet.Query{
 		TeamID: teamID,
@@ -106,11 +106,12 @@ func (svc *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, team
 	}
 
 	queries, count, inheritedCount, meta, err := svc.ds.ListQueries(ctx, fleet.ListQueryOptions{
-		ListOptions:    opt,
-		TeamID:         teamID,
-		IsScheduled:    scheduled,
-		MergeInherited: mergeInherited,
-		Platform:       dbPlatform,
+		ListOptions:             opt,
+		TeamID:                  teamID,
+		IsScheduled:             scheduled,
+		MergeInherited:          mergeInherited,
+		Platform:                dbPlatform,
+		IncludeOpenframeManaged: includeOpenframeManaged,
 	})
 	if err != nil {
 		return nil, 0, 0, nil, err
@@ -889,7 +890,7 @@ func getQuerySpecsEndpoint(ctx context.Context, request interface{}, svc fleet.S
 }
 
 func (svc *Service) GetQuerySpecs(ctx context.Context, teamID *uint) ([]*fleet.QuerySpec, error) {
-	queries, _, _, _, err := svc.ListQueries(ctx, fleet.ListOptions{}, teamID, nil, false, nil)
+	queries, _, _, _, err := svc.ListQueries(ctx, fleet.ListOptions{}, teamID, nil, false, nil, false)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "getting queries")
 	}

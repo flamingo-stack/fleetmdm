@@ -48,6 +48,14 @@ func TestOpenframeManagedQueries(t *testing.T) {
 		require.Equal(t, 1, total, "managed queries must not inflate the count")
 	})
 
+	t.Run("included when opted in", func(t *testing.T) {
+		opts := fleet.ListQueryOptions{IncludeOpenframeManaged: true}
+		queries, total, _, _, err := ds.ListQueries(ctx, opts)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{visible.Name, managed.Name}, queryNames(queries))
+		require.Equal(t, 2, total, "opt-in must surface managed queries in the count too")
+	})
+
 	t.Run("still readable by id", func(t *testing.T) {
 		got, err := ds.Query(ctx, managed.ID)
 		require.NoError(t, err)
