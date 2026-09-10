@@ -130,6 +130,7 @@ and the heaviest standing rebase cost.
 | Area | Files |
 |------|-------|
 | Host assignments | `server/fleet/{policies,queries,hosts,datastore,service}.go`, `server/datastore/mysql/{policies,queries,hosts}.go`, `server/service/{global_policies,queries,handler,labels_util}.go`, `server/mock/{datastore,datastore_mock}.go`, `server/mock/service/service_mock.go`, `server/datastore/mysql/mysql.go`, `cmd/fleet/prepare.go` |
+| Managed queries / policies | flag: `server/fleet/{queries,policies}.go`, `server/service/{queries,global_policies,team_policies}.go`, `server/datastore/mysql/{queries,policies}.go`, `schema.sql`; queries listing opt-in (`include_openframe_managed`): `server/fleet/{app,api_queries,service}.go`, `server/service/{global_schedule,team_schedule,queries_test}.go`, `server/mock/service/service_mock.go`; tests: `server/datastore/mysql/{queries,policies}_openframe_managed_test.go` — see [managed-queries.md](managed-queries.md), [managed-policies.md](managed-policies.md) |
 | osquery host id | `server/fleet/hosts.go` |
 | Query-results TTL cleanup | `server/config/config.go`, `server/fleet/{cron_schedules,datastore}.go`, `server/datastore/mysql/query_results.go`, `cmd/fleet/{cron,serve}.go` |
 | Redis key prefix | `server/datastore/redis/redis.go`, `server/config/config.go`, `cmd/fleet/serve.go` |
@@ -230,7 +231,7 @@ server/service/openframe/openframe_authorization_manager.go
 server/service/openframe/openframe_token_refresher.go
 ```
 
-### Modified (46)
+### Modified (52)
 
 ```
 .github/pull_request_template.md
@@ -264,6 +265,8 @@ server/datastore/mysql/policies.go
 server/datastore/mysql/queries.go
 server/datastore/mysql/query_results.go
 server/datastore/redis/redis.go
+server/fleet/api_queries.go
+server/fleet/app.go
 server/fleet/cron_schedules.go
 server/fleet/datastore.go
 server/fleet/hosts.go
@@ -275,10 +278,12 @@ server/mock/datastore_mock.go
 server/mock/service/service_mock.go
 server/service/base_client.go
 server/service/global_policies.go
+server/service/global_schedule.go
 server/service/handler.go
 server/service/labels_util.go
 server/service/orbit_client.go
 server/service/osquery_utils/queries.go
 server/service/queries.go
+server/service/team_schedule.go
 server/vulnerabilities/nvd/cpe.go
 ```
