@@ -35,6 +35,11 @@ module.exports = {
       description: 'The provided email address is already in use.',
     },
 
+    emailChangeNotSupported: {
+      statusCode: 400,
+      description: 'Changing this user\'s email address is not currently supported, because it would require re-confirmation.',
+    },
+
   },
 
 
@@ -63,6 +68,14 @@ module.exports = {
       desiredEmailEffect = 'change-immediately';
     } else {
       desiredEmailEffect = 'begin-change';
+    }
+
+    // The email confirmation feature is unused and has not been adapted for fleetdm.com,
+    // so if this request would require sending a confirmation email for a pending email
+    // address change, fail early with a clear error instead of silently leaving the
+    // account in a broken 'change-requested' state.
+    if (desiredEmailEffect === 'begin-change' || desiredEmailEffect === 'modify-pending-change') {
+      throw 'emailChangeNotSupported';
     }
 
 
@@ -98,17 +111,6 @@ module.exports = {
           emailProofToken: '',
           emailProofTokenExpiresAt: 0,
           emailStatus: this.req.me.emailStatus === 'unconfirmed' ? 'unconfirmed' : 'confirmed'
-        });
-        break;
-
-      // Begin new email change, or modify a pending email change
-      case 'begin-change':
-      case 'modify-pending-change':
-        _.extend(valuesToSet, {
-          emailChangeCandidate: newEmailAddress,
-          emailProofToken: await sails.helpers.strings.random('url-friendly'),
-          emailProofTokenExpiresAt: Date.now() + sails.config.custom.emailProofTokenTTL,
-          emailStatus: 'change-requested'
         });
         break;
 
@@ -150,22 +152,8 @@ module.exports = {
       }
     }
 
-    // If an email address change was requested, and re-confirmation is required,
-    // send the "confirm account" email.
-    if (desiredEmailEffect === 'begin-change' || desiredEmailEffect === 'modify-pending-change') {
-      throw new Error('Not yet supported: the email confirmation feature is unused and has not been adapted for fleetdm.com.  This error should never be displayed.');
-      // await sails.helpers.sendTemplateEmail.with({
-      //   to: newEmailAddress,
-      //   subject: 'Your account has been updated',
-      //   template: 'email-verify-new-email',
-      //   templateData: {
-      //     fullName: fullName||this.req.me.fullName,
-      //     token: valuesToSet.emailProofToken
-      //   }
-      // });
-    }
-
   }
 
 
 };
+

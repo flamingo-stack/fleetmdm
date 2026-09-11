@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Get the current console user (the actual logged-in user), excluding root and loginwindow
+CURRENT_USER=$(/usr/bin/stat -f "%Su" /dev/console)
 
-# For QA: Replace <username> with your test user
-/usr/bin/sudo -u <username> /usr/bin/defaults write /Users/<username>/Library/Preferences/.GlobalPreferences.plist AppleShowAllExtensions -bool true
+if [[ -z "$CURRENT_USER" || "$CURRENT_USER" == "root" ]]; then
+    echo "Unable to determine a valid non-root console user. Aborting."
+    exit 1
+fi
+
+/usr/bin/sudo -u "$CURRENT_USER" /usr/bin/defaults write "/Users/$CURRENT_USER/Library/Preferences/.GlobalPreferences.plist" AppleShowAllExtensions -bool true
+

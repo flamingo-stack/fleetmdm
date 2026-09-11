@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/fleetdm/fleet/v4/server/config"
@@ -20,10 +21,10 @@ func shouldForceSMTPBackend(appCfg *fleet.AppConfig, emailBackend string) bool {
 		emailBackend != ""
 }
 
-// initMailService configures the mail service. Mail is best-effort at startup:
-// a construction failure is logged and the (possibly nil) service is returned
-// rather than aborting boot.
-func initMailService(ctx context.Context, cfg config.FleetConfig, appCfg *fleet.AppConfig, logger *slog.Logger) fleet.MailService {
+// initMailService configures the mail service. If construction fails, the
+// error is logged and returned so callers can fail fast at startup instead of
+// receiving a nil service silently.
+func initMailService(ctx context.Context, cfg config.FleetConfig, appCfg *fleet.AppConfig, logger *slog.Logger) (fleet.MailService, error) {
 	if shouldForceSMTPBackend(appCfg, cfg.Email.EmailBackend) {
 		// Force-load the SMTP implementation by clearing the configured backend.
 		cfg.Email.EmailBackend = ""
@@ -33,6 +34,7 @@ func initMailService(ctx context.Context, cfg config.FleetConfig, appCfg *fleet.
 	mailService, err := mail.NewService(cfg)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to configure mailing service", "err", err)
+		return nil, fmt.Errorf("failed to configure mailing service: %w", err)
 	}
-	return mailService
+	return mailService, nil
 }

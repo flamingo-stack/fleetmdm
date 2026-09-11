@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 
@@ -120,6 +121,8 @@ ON DUPLICATE KEY UPDATE
 				return fmt.Errorf("failed to update uninstall script ID %d: %w", script.ID, err)
 			}
 
+		} else {
+			log.Printf("WARNING: uninstall script content ID %d for software installer ID %d did not match expected pattern; skipping update, please verify uninstall script manually", scriptContentID, script.ID)
 		}
 	}
 

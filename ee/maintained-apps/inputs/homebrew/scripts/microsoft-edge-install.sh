@@ -52,19 +52,14 @@ hdiutil detach "$MOUNT_POINT"
 # Clean up any backup files that might exist from previous failed installations
 # This ensures we start with a clean slate
 cleanup_backup_files() {
-  # Clean up backup in the installer's temp directory
+  # Clean up backup in the installer's temp directory only.
+  # Scoped to the known install/backup location actually used by this
+  # installer to avoid a broad, unconditional find+rm -rf across shared
+  # temp trees (/tmp, /var/folders, /private/var/folders).
   if [ -d "$TMPDIR/Microsoft Edge.app.bkp" ]; then
     echo "Removing existing backup file: $TMPDIR/Microsoft Edge.app.bkp"
     sudo rm -rf "$TMPDIR/Microsoft Edge.app.bkp" 2>/dev/null || true
   fi
-
-  # Search for backup files in all common temp locations
-  # Use -exec to avoid pipe subshell issues
-  for search_base in /tmp /var/folders /private/var/folders; do
-    if [ -d "$search_base" ]; then
-      find "$search_base" -type d -name "Microsoft Edge.app.bkp" -exec sudo rm -rf {} + 2>/dev/null || true
-    fi
-  done
 }
 
 # copy to the applications folder
@@ -90,5 +85,6 @@ else
 	echo "Installation failed"
 	exit 1
 fi
+
 
 
