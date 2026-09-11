@@ -68,17 +68,17 @@ module.exports = {
       // Handle specific BigQuery errors
       if (err.name === 'PartialFailureError') {
         // Log the specific rows that failed
-        throw new Error(`Partial failure when ${operation}:`, err.errors);
+        throw new Error(`Partial failure when ${operation}: ${JSON.stringify(err.errors)}`);
       } else if (err.code === 404) {
-        throw new Error('BigQuery table or dataset not found. Please ensure the table exists:', {
+        throw new Error(`BigQuery table or dataset not found. Please ensure the table exists: ${JSON.stringify({
           dataset: 'github_metrics',
           table: tableId,
           fullError: err.message
-        });
+        })}`);
       } else if (err.code === 403) {
         throw new Error('Permission denied when accessing BigQuery. Check service account permissions.');
       }
-      throw new Error(`Error ${operation}:`, err);
+      throw new Error(`Error ${operation}: ${err && err.stack ? err.stack : err}`);
     }
   }
 

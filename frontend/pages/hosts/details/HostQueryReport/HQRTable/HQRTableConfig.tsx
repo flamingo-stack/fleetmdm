@@ -28,7 +28,7 @@ const generateColumnConfigs = (rows: IWebSocketData[]): IHQRTTableColumn[] => {
             // Sentence case last fetched
             headerProps.column.id === "last_fetched"
               ? "Last fetched"
-              : headerProps.column.id || headerProps.column.id
+              : headerProps.column.id
           }
           isSortedDesc={headerProps.column.isSortedDesc}
         />
@@ -58,3 +58,4 @@ const generateColumnConfigs = (rows: IWebSocketData[]): IHQRTTableColumn[] => {
 };
 
 export default generateColumnConfigs;
+

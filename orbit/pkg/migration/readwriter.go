@@ -90,7 +90,7 @@ func (rw *ReadWriter) FileExists() (bool, error) {
 
 // DirExists returns whether or not the directory where the MDM migration file is stored exists.
 func (rw *ReadWriter) DirExists() (bool, error) {
-	_, err := os.Stat(rw.FileName)
+	_, err := os.Stat(rw.Path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil

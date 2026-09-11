@@ -306,7 +306,7 @@ func (p *Proxy) setHeaders(r *http.Request) error {
 		return fmt.Errorf("get origin: %w", err)
 	}
 	if origin == "" {
-		return fmt.Errorf("missing origin: %w", err)
+		return fmt.Errorf("missing origin")
 	}
 	r.Header.Add("MS-API-Key", p.apiKey)
 	r.Header.Add("Origin", origin)

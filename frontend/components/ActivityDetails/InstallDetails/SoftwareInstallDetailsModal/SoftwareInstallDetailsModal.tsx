@@ -365,7 +365,7 @@ export const SoftwareInstallDetailsModal = ({
   const overrideFailedMessageWithInstalledMessage =
     canOverrideFailureWithInstalled &&
     ["failed_install", "failed_uninstall"].includes(
-      swInstallResult?.status || "" || ""
+      swInstallResult?.status || ""
     );
 
   // Hide version section from pending installs or failures that aren't overridden to installed (4.82 #31663)

@@ -19,15 +19,19 @@ if ! [[ "$INCREMENT" =~ ^[0-9]+$ ]] || (( INCREMENT <= 0 )); then
 fi
 if [ -z "$BRANCH_NAME" ]; then
 	echo "Missing BRANCH_NAME"
+	exit 1
 fi
 if [ -z "$START_INDEX" ]; then
 	echo "Missing START_INDEX"
+	exit 1
 fi
 if [ -z "$END_INDEX" ]; then
 	echo "Missing END_INDEX"
+	exit 1
 fi
 if [ -z "$TASK_SIZE" ]; then
 	echo "Missing TASK_SIZE"
+	exit 1
 fi
 
 # We add this check to avoid terraform (error-prone) locking in case of typos.
@@ -44,3 +48,4 @@ done
 if (( $c - $INCREMENT != $END_INDEX )); then
 	terraform apply -var git_tag_branch=$BRANCH_NAME -var task_size="$TASK_SIZE" -var loadtest_containers=$END_INDEX -auto-approve
 fi
+

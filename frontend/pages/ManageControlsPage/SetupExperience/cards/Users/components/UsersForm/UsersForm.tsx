@@ -116,14 +116,17 @@ const UsersForm = ({
         }),
       });
       renderFlash("success", "Successfully updated.");
+      if (isMacMdmEnabledAndConfigured) {
+        setFormData((prev) => ({
+          ...prev,
+          lockEndUserInfo: canLockEndUserInfo,
+        }));
+      }
     } catch {
       renderFlash("error", "Couldn't update settings. Please try again.");
     }
 
     setIsUpdating(false);
-    if (isMacMdmEnabledAndConfigured) {
-      setFormData((prev) => ({ ...prev, lockEndUserInfo: canLockEndUserInfo }));
-    }
   };
 
   return (

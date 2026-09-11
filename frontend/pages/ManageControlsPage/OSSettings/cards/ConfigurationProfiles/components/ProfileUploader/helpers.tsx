@@ -94,7 +94,7 @@ const generateGenericLearnMoreErrMsg = (errMsg: string) => {
  */
 // eslint-disable-next-line import/prefer-default-export
 export const getErrorMessage = (err: AxiosResponse<IApiError>) => {
-  const apiReason = err?.data?.errors?.[0]?.reason;
+  const apiReason = err?.data?.errors?.[0]?.reason ?? "";
 
   if (apiReason.includes("should include valid JSON")) {
     return "Couldn't add. The profile should include valid JSON.";
@@ -245,3 +245,4 @@ export const getErrorMessage = (err: AxiosResponse<IApiError>) => {
 
   return `${apiReason}` || DEFAULT_ERROR_MESSAGE;
 };
+

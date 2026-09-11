@@ -41,7 +41,7 @@ func Up_20230602111827(tx *sql.Tx) error {
 	for _, solution := range mdmSolutions {
 		serverURL, err := url.Parse(solution.ServerURL)
 		if err != nil {
-			logger.Warn.Printf("unable to parse server_url %s, skipping\n", serverURL)
+			logger.Warn.Printf("unable to parse server_url %s, skipping\n", solution.ServerURL)
 			continue
 		}
 		// strip any query parameters from the URL
