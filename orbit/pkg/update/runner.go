@@ -372,7 +372,10 @@ func (r *Runner) updateTarget(target string) error {
 }
 
 func (r *Runner) Interrupt(err error) {
-	r.cancel <- struct{}{}
+	select {
+	case r.cancel <- struct{}{}:
+	default:
+	}
 }
 
 // compareVersion compares the old and new versions of a binary and prints the appropriate message.

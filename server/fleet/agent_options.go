@@ -65,7 +65,7 @@ func SuggestAgentOptionsCorrection(err error) error {
 	if field := GetJSONUnknownField(err); field != nil {
 		correctKeyPath, keyErr := FindAgentOptionsKeyPath(*field)
 		if keyErr != nil {
-			return fmt.Errorf("error parsing generated agent options struct: %w", err)
+			return fmt.Errorf("error parsing generated agent options struct: %w", keyErr)
 		}
 		var keyPathJoined string
 		switch pathLen := len(correctKeyPath); {

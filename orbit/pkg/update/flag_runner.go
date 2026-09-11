@@ -152,7 +152,7 @@ func (r *ExtensionRunner) Run(config *fleet.OrbitConfig) error {
 			}
 			return nil
 		default:
-			return fmt.Errorf("stat file: %s", extensionAutoLoadFile)
+			return fmt.Errorf("stat file %s: %w", extensionAutoLoadFile, err)
 		}
 	}
 

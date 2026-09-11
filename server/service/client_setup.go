@@ -42,10 +42,6 @@ func (c *Client) Setup(email, name, password, org string) (string, error) {
 		)
 	}
 
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("setup got HTTP %d, expected 200", response.StatusCode)
-	}
-
 	var responseBody setupResponse
 	err = json.NewDecoder(response.Body).Decode(&responseBody)
 	if err != nil {
@@ -58,3 +54,4 @@ func (c *Client) Setup(email, name, password, org string) (string, error) {
 
 	return *responseBody.Token, nil
 }
+
