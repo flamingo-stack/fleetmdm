@@ -23,6 +23,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// >>> OPENFRAME(mdm-lock-unlock-wipe): fork-specific lock/unlock/wipe command logic — openframe/docs/mdm-lock-unlock-wipe.md
 // lockConflictError indicates a lock command already exists for the host
 type lockConflictError struct {
 	hostUUID string
@@ -50,6 +51,8 @@ func isConflict(err error) bool {
 	}
 	return false
 }
+
+// <<< OPENFRAME(mdm-lock-unlock-wipe)
 
 // NanoMDMStorage wraps a *nanomdm_mysql.MySQLStorage and overrides further functionality.
 type NanoMDMStorage struct {
@@ -100,6 +103,7 @@ func (ds *Datastore) NewTestMDMAppleMDMStorage(asyncCap int, asyncInterval time.
 	}, nil
 }
 
+// >>> OPENFRAME(push-cert-staleness-cache): in-memory push cert staleness caching — openframe/docs/mdm-lock-unlock-wipe.md
 type pushCertStalenessCheck struct {
 	hash      string
 	updatedAt time.Time
@@ -111,6 +115,8 @@ var (
 	pushCertStaleness   *pushCertStalenessCheck
 	pushCertStalenessMu sync.RWMutex
 )
+
+// <<< OPENFRAME(push-cert-staleness-cache)
 
 // RetrievePushCert partially implements nanomdm_storage.PushCertStore.
 //
@@ -128,6 +134,7 @@ func (s *NanoMDMStorage) RetrievePushCert(
 	return cert, checksum, nil
 }
 
+// >>> OPENFRAME(push-cert-staleness-cache): in-memory push cert staleness caching — openframe/docs/mdm-lock-unlock-wipe.md
 // checkInMemoryHash checks the incoming hash agains the in-memory hash.
 // if criteria is met, it updates the in-memory hash with the new hash and updatedAt = now.
 func checkInMemoryHash(hash string) {
@@ -175,11 +182,14 @@ func (s *NanoMDMStorage) IsPushCertStale(ctx context.Context, topic, staleToken 
 	return false, nil
 }
 
+// <<< OPENFRAME(push-cert-staleness-cache)
+
 // StorePushCert partially implements nanomdm_storage.PushCertStore.
 func (s *NanoMDMStorage) StorePushCert(ctx context.Context, pemCert, pemKey []byte) error {
-	return errors.New("please use fleet.Datastore to manage MDM assets")
+	return ctxerr.New(ctx, "please use fleet.Datastore to manage MDM assets")
 }
 
+// >>> OPENFRAME(mdm-lock-unlock-wipe): fork-specific lock/unlock/wipe command logic — openframe/docs/mdm-lock-unlock-wipe.md
 // GetPendingLockCommand returns the most recent unacknowledged DeviceLock command
 // for the given host, along with its unlock PIN.
 // Returns nil, "", nil if no pending lock command exists.
@@ -257,7 +267,7 @@ func (s *NanoMDMStorage) EnqueueDeviceLockCommand(
 
 		// Now enqueue the command
 		if err := enqueueCommandDB(ctx, tx, []string{host.UUID}, cmd); err != nil {
-			return err
+			return fmt.Errorf("enqueueing device lock command: %w", err)
 		}
 
 		// Insert or update the host_mdm_actions row
@@ -286,7 +296,7 @@ func (s *NanoMDMStorage) EnqueueDeviceLockCommand(
 func (s *NanoMDMStorage) EnqueueDeviceUnlockCommand(ctx context.Context, host *fleet.Host, cmd *mdm.Command) error {
 	return common_mysql.WithRetryTxx(ctx, s.db, func(tx sqlx.ExtContext) error {
 		if err := enqueueCommandDB(ctx, tx, []string{host.UUID}, cmd); err != nil {
-			return err
+			return fmt.Errorf("enqueueing device unlock command: %w", err)
 		}
 
 		stmt := `
@@ -312,7 +322,7 @@ func (s *NanoMDMStorage) EnqueueDeviceUnlockCommand(ctx context.Context, host *f
 func (s *NanoMDMStorage) EnqueueDeviceWipeCommand(ctx context.Context, host *fleet.Host, cmd *mdm.Command) error {
 	return common_mysql.WithRetryTxx(ctx, s.db, func(tx sqlx.ExtContext) error {
 		if err := enqueueCommandDB(ctx, tx, []string{host.UUID}, cmd); err != nil {
-			return err
+			return fmt.Errorf("enqueueing device wipe command: %w", err)
 		}
 
 		stmt := `
@@ -332,6 +342,8 @@ func (s *NanoMDMStorage) EnqueueDeviceWipeCommand(ctx context.Context, host *fle
 		return nil
 	}, s.logger)
 }
+
+// <<< OPENFRAME(mdm-lock-unlock-wipe)
 
 func (s *NanoMDMStorage) GetAllMDMConfigAssetsByName(ctx context.Context, assetNames []fleet.MDMAssetName,
 	queryerContext sqlx.QueryerContext,
@@ -414,7 +426,7 @@ func (s *NanoDEPStorage) RetrieveAuthTokens(ctx context.Context, name string) (*
 
 // StoreAuthTokens partially implements nanodep.AuthTokensStorer.
 func (s *NanoDEPStorage) StoreAuthTokens(ctx context.Context, name string, tokens *nanodep_client.OAuth1Tokens) error {
-	return errors.New("please use fleet.Datastore to manage MDM assets")
+	return ctxerr.New(ctx, "please use fleet.Datastore to manage MDM assets")
 }
 
 func enqueueCommandDB(ctx context.Context, tx sqlx.ExtContext, ids []string, cmd *mdm.Command) error {

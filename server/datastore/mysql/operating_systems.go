@@ -182,7 +182,10 @@ func upsertHostOperatingSystemDB(ctx context.Context, tx sqlx.ExtContext, hostID
 		`INSERT INTO host_operating_system (host_id, os_id) VALUES (?, ?)
 				ON DUPLICATE KEY UPDATE os_id = VALUES(os_id)`, hostID, osID,
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "upsert host operating system")
+	}
+	return nil
 }
 
 // getIDHostOperatingSystemDB queries the `host_operating_system` table and returns the
