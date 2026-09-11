@@ -51,7 +51,7 @@ const AddAbmModal = ({ onCancel, onAdded }: IAddAbmModalProps) => {
   }, [tokenFile, renderFlash, onAdded, onCancel]);
 
   return (
-    <Modal className={baseClass} title="Add AB" onExit={onCancel} width="large">
+    <Modal className={baseClass} title="Add ABM" onExit={onCancel} width="large">
       <p>
         Follow the step-by-step guide to connect Fleet to Apple Business.{" "}
         <CustomLink
@@ -78,7 +78,7 @@ const AddAbmModal = ({ onCancel, onAdded }: IAddAbmModalProps) => {
           isLoading={isUploading}
           disabled={!tokenFile || isUploading}
         >
-          Add AB
+          Add ABM
         </Button>
         <DownloadABMKey baseClass={baseClass} />
       </div>

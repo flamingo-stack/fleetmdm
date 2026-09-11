@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS batch_script_execution_host_results (
   created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_batch_script_execution_host_result_execution_id (batch_execution_id),
+  UNIQUE KEY idx_batch_script_execution_host_result_execution_id (batch_execution_id, host_id),
   CONSTRAINT batch_script_batch_id FOREIGN KEY (batch_execution_id) REFERENCES batch_script_executions (execution_id) ON DELETE CASCADE
 )
 `
@@ -48,3 +48,4 @@ CREATE TABLE IF NOT EXISTS batch_script_execution_host_results (
 func Down_20250424153059(tx *sql.Tx) error {
 	return nil
 }
+CURRENT>>>
