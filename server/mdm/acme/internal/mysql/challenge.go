@@ -56,7 +56,7 @@ func (ds *Datastore) GetChallengeByID(ctx context.Context, accountID, challengeI
 // UpdateChallenge handles updating the challenge status, and the authorization status as well as moving the order status.
 func (ds *Datastore) UpdateChallenge(ctx context.Context, challenge *types.Challenge) (*types.Challenge, error) {
 	if challenge == nil {
-		return nil, errors.New("Challenge can not be nil for update")
+		return nil, ctxerr.New(ctx, "challenge can not be nil for update")
 	}
 
 	err := platform_mysql.WithRetryTxx(ctx, ds.writer(ctx), func(tx sqlx.ExtContext) error {

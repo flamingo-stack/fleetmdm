@@ -130,7 +130,7 @@ func (t *HostLifecycle) doWithUUIDValidation(ctx context.Context, action uuidFn,
 
 	users, acts, err := action(ctx, opts.UUID)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "execute uuid action")
 	}
 	return t.createActivities(ctx, users, acts)
 }
