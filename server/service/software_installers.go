@@ -207,6 +207,7 @@ func (updateSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http
 		}
 	}
 
+	// >>> OPENFRAME(waf-bypass-scripts): base64-encode scripts to avoid WAF pattern blocks — openframe/docs/waf-bypass.md
 	// Check if scripts are base64 encoded (to bypass WAF rules that block script patterns)
 	if isScriptsEncoded(r) {
 		if decoded.InstallScript != nil {
@@ -238,6 +239,7 @@ func (updateSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http
 			decoded.PostInstallScript = &decodedScript
 		}
 	}
+	// <<< OPENFRAME(waf-bypass-scripts)
 
 	return &decoded, nil
 }
@@ -423,6 +425,7 @@ func (uploadSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http
 		decoded.AutomaticInstall = parsed
 	}
 
+	// >>> OPENFRAME(waf-bypass-scripts): base64-encode scripts to avoid WAF pattern blocks — openframe/docs/waf-bypass.md
 	// Check if scripts are base64 encoded (to bypass WAF rules that block script patterns)
 	if isScriptsEncoded(r) {
 		var err error
@@ -439,6 +442,7 @@ func (uploadSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http
 			return nil, &fleet.BadRequestError{Message: "invalid base64 encoding for post_install_script"}
 		}
 	}
+	// <<< OPENFRAME(waf-bypass-scripts)
 
 	return &decoded, nil
 }
