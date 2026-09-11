@@ -252,7 +252,6 @@ module.exports = {
         let generatedMySQLRootPassword = await sails.helpers.strings.uuid();
 
         let createMySQLResponse = await sails.helpers.http.post.with({
-          // url: 'https://api.render.com/v1/servicess',// Intentionally causing an error to test error handling in this script.
           url: 'https://api.render.com/v1/services',
           data: {
             ownerId: sails.config.custom.renderOwnerId,
@@ -429,7 +428,7 @@ module.exports = {
         ];
 
         //
-        //  ╔═╗╦═╗╔═╗╔═╗╔╦╗╔═╗  ╔═╗╦  ╔═╗╔═╗╔╦╗  ╔═╗╔═╗╦═╗╦  ╦╦╔═╗╔═╗
+        //  ╔═╗╦═╗╔═╗╔═╗╔╦╗╔═╗  ╔═╗╦  ╔═╗╔═╗╦═╗╦  ╦╦╔═╗╔═╗
         //  ║  ╠╦╝║╣ ╠═╣ ║ ║╣   ╠╣ ║  ║╣ ║╣  ║   ╚═╗║╣ ╠╦╝╚╗╔╝║║  ║╣
         //  ╚═╝╩╚═╚═╝╩ ╩ ╩ ╚═╝  ╚  ╩═╝╚═╝╚═╝ ╩   ╚═╝╚═╝╩╚═ ╚╝ ╩╚═╝╚═╝
         // Create the Fleet service for this instance:

@@ -123,7 +123,7 @@ type HostScriptExecution struct {
 	Status string `json:"status"`
 }
 
-// SetLastExecution updates the LastExecution field of the HostScriptDetail if the provided details
+// setLastExecution updates the LastExecution field of the HostScriptDetail if the provided details
 // are more recent than the current LastExecution. It returns true if the LastExecution was updated.
 func (hs *HostScriptDetail) setLastExecution(executionID *string, executedAt *time.Time, exitCode *int64, hsrID *uint) bool {
 	if executionID == nil || executedAt == nil {

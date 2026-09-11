@@ -18,7 +18,7 @@ func Up_20250213104005(tx *sql.Tx) error {
 			created_at DATETIME(6) NULL DEFAULT NOW(6),
   			updated_at DATETIME(6) NULL DEFAULT NOW(6) ON UPDATE NOW(6))`)
 	if err != nil {
-		return fmt.Errorf("failed to create android_enterprise table: %w", err)
+		return fmt.Errorf("failed to create android_enterprises table: %w", err)
 	}
 	return nil
 }
@@ -26,3 +26,4 @@ func Up_20250213104005(tx *sql.Tx) error {
 func Down_20250213104005(_ *sql.Tx) error {
 	return nil
 }
+
