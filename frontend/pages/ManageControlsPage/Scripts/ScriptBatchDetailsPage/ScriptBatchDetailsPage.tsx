@@ -259,7 +259,10 @@ const ScriptBatchDetailsPage = ({
       <>
         <span>
           <b>{targeted}</b> hosts targeted (
-          {Math.ceil(100 * ((ran + errored) / targeted))}% responded)
+          {targeted
+            ? `${Math.ceil(100 * ((ran + errored) / targeted))}% responded`
+            : "no hosts targeted"}
+          )
         </span>
         <span className="when">{getWhen(batchDetails)}</span>
       </>

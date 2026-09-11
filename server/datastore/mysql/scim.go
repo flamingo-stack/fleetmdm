@@ -143,7 +143,7 @@ func scimUserByUserName(ctx context.Context, q sqlx.QueryerContext, userName str
 }
 
 // ScimUserByUserNameOrEmail finds a SCIM user by username. If it cannot find one, then it tries email, if set.
-// If multiple users are found with the same email, we log an error and return nil.
+// If multiple users are found with the same email, an error is returned.
 // Emails and groups are NOT populated in this method.
 func (ds *Datastore) ScimUserByUserNameOrEmail(ctx context.Context, userName string, email string) (*fleet.ScimUser, error) {
 	return scimUserByUserNameOrEmail(ctx, ds.reader(ctx), ds.logger, userName, email)
@@ -192,10 +192,10 @@ func scimUserByUserNameOrEmail(ctx context.Context, q sqlx.QueryerContext, logge
 		return nil, notFound("scim user")
 	}
 
-	// If multiple users found, log a message and return nil
+	// If multiple users found, log a message and return an error
 	if len(users) > 1 {
 		logger.ErrorContext(ctx, "Multiple SCIM users found with the same email", "email", email)
-		return nil, nil
+		return nil, ctxerr.New(ctx, "multiple SCIM users found with the same email")
 	}
 
 	return &users[0], nil
@@ -1442,3 +1442,4 @@ func (ds *Datastore) ScimUsersExist(ctx context.Context, ids []uint) (bool, erro
 
 	return true, nil
 }
+

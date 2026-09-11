@@ -47,7 +47,7 @@ func DownloadInstaller(ctx context.Context, installerURL string, client *http.Cl
 	}
 
 	// Allow all 2xx and 3xx status codes in this pass.
-	if resp.StatusCode > 400 {
+	if resp.StatusCode >= 400 {
 		return nil, "", fleet.NewInvalidArgumentError(
 			"fleet_maintained_app.url",
 			fmt.Sprintf("Couldn't download maintained app installer. URL (%q) received response status code %d.", installerURL, resp.StatusCode),

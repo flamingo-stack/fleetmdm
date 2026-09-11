@@ -113,7 +113,7 @@ func preprocessWindowsProfileContents(deps ProfilePreprocessDependencies, params
 				return profileContents, err
 			}
 			if !replacedVariable {
-				return profileContents, ctxerr.Wrap(deps.Context, err, "host end user IDP variable replacement failed for variable")
+				return profileContents, ctxerr.New(deps.Context, fmt.Sprintf("host end user IDP variable replacement failed for variable %s", fleetVar))
 			}
 			result = replacedContents
 		}

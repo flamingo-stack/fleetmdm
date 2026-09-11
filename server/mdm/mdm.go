@@ -248,6 +248,10 @@ func DecodeAndDecrypt(base64CipherText string, symmetricKey string) (string, err
 	// Get the nonce size
 	nonceSize := aesGCM.NonceSize()
 
+	if len(encrypted) < nonceSize {
+		return "", fmt.Errorf("ciphertext too short: got %d bytes, need at least %d", len(encrypted), nonceSize)
+	}
+
 	// Extract the nonce from the encrypted data
 	nonce, ciphertext := encrypted[:nonceSize], encrypted[nonceSize:]
 

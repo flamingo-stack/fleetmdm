@@ -85,7 +85,7 @@ type mysqlServer int
 const (
 	unknownServer mysqlServer = 0
 	mysql5        mysqlServer = 1
-	mysql8        mysqlServer = 3
+	mysql8        mysqlServer = 2
 	mariaDB_10_6  mysqlServer = 3
 )
 
