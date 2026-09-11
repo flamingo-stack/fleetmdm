@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -44,7 +43,8 @@ func (w *webhookLogWriter) Write(ctx context.Context, logs []json.RawMessage) er
 	)
 
 	if err := server.PostJSONWithTimeout(ctx, w.url, payload, w.logger); err != nil {
-		w.logger.ErrorContext(ctx, fmt.Sprintf("failed to send automation webhook to %s", server.MaskSecretURLParams(w.url)),
+		w.logger.ErrorContext(ctx, "failed to send automation webhook",
+			"url", server.MaskSecretURLParams(w.url),
 			"err", server.MaskURLError(err).Error(),
 		)
 	}
