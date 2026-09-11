@@ -52,6 +52,9 @@ func parseOpenVEX(filePath string) (*OpenVEXDocument, error) {
 
 func generateMarkdown(vex *OpenVEXDocument) (string, error) {
 	var sb strings.Builder
+	if len(vex.Statements) == 0 {
+		return "", fmt.Errorf("VEX document has no statements")
+	}
 	cve := vex.Statements[0].Vulnerability.Name
 	for _, stmt := range vex.Statements[1:] {
 		if stmt.Vulnerability.Name != cve {
@@ -96,7 +99,7 @@ func generateMarkdown(vex *OpenVEXDocument) (string, error) {
 		if stmt.Timestamp != "" {
 			t, err := time.Parse(timeFormat, stmt.Timestamp)
 			if err != nil {
-				return "", fmt.Errorf("parsing timestamp %s for %s: %s", stmt.Timestamp, stmt.Vulnerability.Name, err)
+				return "", fmt.Errorf("parsing timestamp %s for %s: %w", stmt.Timestamp, stmt.Vulnerability.Name, err)
 			}
 			sb.WriteString(fmt.Sprintf("- **Timestamp:** %s\n", t.Format(time.DateTime)))
 		}

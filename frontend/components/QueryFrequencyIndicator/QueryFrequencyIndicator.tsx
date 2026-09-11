@@ -24,7 +24,8 @@ const QueryFrequencyIndicator = ({
   const frequencyClassName = classnames(
     "query-frequency-indicator",
     `query-frequency-indicator--${classTag}`,
-    `frequency--${classTag}`
+    `frequency--${classTag}`,
+    { grey: frequency === 0 && !checked }
   );
   const readableQueryFrequency = () => {
     switch (frequency) {
@@ -53,10 +54,7 @@ const QueryFrequencyIndicator = ({
   };
 
   return (
-    <div
-      className={`${frequencyClassName}
-        ${frequency === 0 && !checked && "grey"}`}
-    >
+    <div className={frequencyClassName}>
       {frequencyIcon()}
       {readableQueryFrequency()}
     </div>

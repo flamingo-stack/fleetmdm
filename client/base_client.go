@@ -100,8 +100,6 @@ func (bc *BaseClient) ParseResponse(verb, path string, response *http.Response, 
 		}
 	}
 
-	bc.SetServerCapabilities(response)
-
 	return nil
 }
 
@@ -286,7 +284,11 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 
 // DoHTTPRequest performs an HTTP request using the underlying HTTP client.
 func (bc *BaseClient) DoHTTPRequest(req *http.Request) (*http.Response, error) {
-	return bc.HTTP.Do(req)
+	resp, err := bc.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("performing http request: %w", err)
+	}
+	return resp, nil
 }
 
 // GetRawHTTPClient returns the underlying HTTP client for type assertions (e.g., idle connection cleanup).

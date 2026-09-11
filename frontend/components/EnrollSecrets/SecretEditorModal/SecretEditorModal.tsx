@@ -21,13 +21,11 @@ const baseClass = "secret-editor-modal";
 
 const randomSecretGenerator = () => {
   const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  let result = "";
-  for (let i = 0; i < 32; i += 1) {
-    result += randomChars.charAt(
-      Math.floor(Math.random() * randomChars.length)
-    );
-  }
-  return result;
+  const bytes = new Uint32Array(32);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => randomChars[b % randomChars.length]).join(
+    ""
+  );
 };
 
 const SecretEditorModal = ({
@@ -45,14 +43,15 @@ const SecretEditorModal = ({
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const renderTeam = () => {
-    if (typeof selectedTeam === "string") {
-      selectedTeam = parseInt(selectedTeam, 10);
-    }
+    const parsedSelectedTeam =
+      typeof selectedTeam === "string"
+        ? parseInt(selectedTeam, 10)
+        : selectedTeam;
 
-    if (selectedTeam === 0) {
+    if (parsedSelectedTeam === 0) {
       return { name: "Unassigned" };
     }
-    return teams.find((team) => team.id === selectedTeam);
+    return teams.find((team) => team.id === parsedSelectedTeam);
   };
 
   const onSecretChange = (value: string) => {
