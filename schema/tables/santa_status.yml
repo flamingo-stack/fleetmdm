@@ -34,11 +34,11 @@ columns:
     required: false
     type: text
   - name: sync_execution_rules_hash
-    description: Hash of the currently applied file access ruleset
+    description: Hash of the currently applied execution ruleset
     required: false
     type: text
   - name: sync_file_access_rules_hash
-    description: Hash of the currently applied execution ruleset
+    description: Hash of the currently applied file access ruleset
     required: false
     type: text
   - name: sync_bundle_scanning
@@ -156,7 +156,7 @@ columns:
   - name: metrics_server
     description: The address of the server Santa sends metrics to.
     required: false
-    type: integer
+    type: text
   - name: watch_items_config_path
     description: Path to the configuration file that defines watch items
     required: false
@@ -178,3 +178,4 @@ columns:
     required: false
     type: text
     
+

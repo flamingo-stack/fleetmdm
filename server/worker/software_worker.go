@@ -215,7 +215,7 @@ func (v *SoftwareWorker) makeAndroidAppAvailablePerHost(
 	for uuid := range hosts {
 		hostUUIDs = append(hostUUIDs, uuid)
 	}
-	filter := fleet.TeamFilter{User: &fleet.User{GlobalRole: new("admin")}}
+	filter := fleet.TeamFilter{User: &fleet.User{GlobalRole: ptr.String("admin")}}
 	hostDetails, err := v.Datastore.ListHostsLiteByUUIDs(ctx, filter, hostUUIDs)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "list hosts lite by uuids for fleet var substitution")
@@ -271,7 +271,7 @@ func (v *SoftwareWorker) makeAndroidAppUnavailable(ctx context.Context, applicat
 	// Update Android MDM policy to remove the app from the hosts
 	_, err := v.AndroidModule.RemoveAppsFromAndroidPolicy(ctx, enterpriseName, []string{applicationID}, hostUUIDToPolicyID)
 	if err != nil {
-		return ctxerr.Wrap(ctx, err, "add app store app: add app to android policy")
+		return ctxerr.Wrap(ctx, err, "remove app store app: remove app from android policy")
 	}
 	return nil
 }

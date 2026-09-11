@@ -79,23 +79,25 @@ describe("IdPSection helpers", () => {
       ).toBe(true); // metadata or metadata_url must be present
     });
 
-    expect(
-      isMissingAnyRequiredField({
-        entity_id: "entityId",
-        idp_name: "idpImageUrl",
-        metadata: "",
-        metadata_url: "metadataUrl",
-      })
-    ).toBe(false); // metadata is not required if metadata_url is present
+    it("returns false if metadata or metadata_url is present", () => {
+      expect(
+        isMissingAnyRequiredField({
+          entity_id: "entityId",
+          idp_name: "idpImageUrl",
+          metadata: "",
+          metadata_url: "metadataUrl",
+        })
+      ).toBe(false); // metadata is not required if metadata_url is present
 
-    expect(
-      isMissingAnyRequiredField({
-        entity_id: "entityId",
-        idp_name: "idpImageUrl",
-        metadata: "metadata",
-        metadata_url: "",
-      })
-    ).toBe(false); // metadata_url is not required if metadata is present
+      expect(
+        isMissingAnyRequiredField({
+          entity_id: "entityId",
+          idp_name: "idpImageUrl",
+          metadata: "metadata",
+          metadata_url: "",
+        })
+      ).toBe(false); // metadata_url is not required if metadata is present
+    });
   });
 
   describe("validateFormDataIdP", () => {
@@ -213,37 +215,39 @@ describe("IdPSection helpers", () => {
       }); // all fields valid
     });
 
-    expect(
-      newFormDataIdp({
-        entity_id: "entityId   ",
-        idp_name: "    idpImageUrl",
-        issuer_uri: "issuerUri",
-        metadata: "metadata",
-        metadata_url: "   https://metadataUrl.com   ",
-      })
-    ).toEqual({
-      entity_id: "entityId",
-      idp_name: "idpImageUrl",
-      metadata: "metadata",
-      metadata_url: "https://metadataUrl.com",
-    }); // whitespace trimmed
-
-    expect(newFormDataIdp(undefined)).toEqual({
-      entity_id: "",
-      idp_name: "",
-      metadata: "",
-      metadata_url: "",
-    }); // all fields missing
-
-    expect(
-      newFormDataIdp({
+    it("trims whitespace and fills in missing fields", () => {
+      expect(
+        newFormDataIdp({
+          entity_id: "entityId   ",
+          idp_name: "    idpImageUrl",
+          issuer_uri: "issuerUri",
+          metadata: "metadata",
+          metadata_url: "   https://metadataUrl.com   ",
+        })
+      ).toEqual({
         entity_id: "entityId",
-      } as IEndUserAuthentication)
-    ).toEqual({
-      entity_id: "entityId",
-      idp_name: "",
-      metadata: "",
-      metadata_url: "",
-    }); // idp_name, metadata, metadata_url missing
+        idp_name: "idpImageUrl",
+        metadata: "metadata",
+        metadata_url: "https://metadataUrl.com",
+      }); // whitespace trimmed
+
+      expect(newFormDataIdp(undefined)).toEqual({
+        entity_id: "",
+        idp_name: "",
+        metadata: "",
+        metadata_url: "",
+      }); // all fields missing
+
+      expect(
+        newFormDataIdp({
+          entity_id: "entityId",
+        } as IEndUserAuthentication)
+      ).toEqual({
+        entity_id: "entityId",
+        idp_name: "",
+        metadata: "",
+        metadata_url: "",
+      }); // idp_name, metadata, metadata_url missing
+    });
   });
 });

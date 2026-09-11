@@ -124,7 +124,7 @@ const LocationModal = ({
   const isIosLockedWithLocationAvail =
     iosOrIpadosDetails?.isIosOrIpadosHost &&
     iosOrIpadosDetails?.hostMdmDeviceStatus === "locked" &&
-    hostGeolocation !== null;
+    Boolean(hostGeolocation);
 
   const shouldShowLastUpdatedAt =
     !isIosOrIpadosHost || isIosLockedWithLocationAvail;

@@ -93,6 +93,7 @@ func (ds *Datastore) LoadHostConditionalAccessStatus(ctx context.Context, hostID
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ctxerr.Wrap(ctx, notFound("HostConditionalAccessStatus").WithID(hostID))
 		}
+		return nil, ctxerr.Wrap(ctx, err, "getting host conditional access status")
 	}
 	hostConditionalAccessStatus.OSVersion = strings.TrimPrefix(hostConditionalAccessStatus.OSVersion, "macOS ")
 	if strings.HasPrefix(hostConditionalAccessStatus.OSVersion, "Windows") {

@@ -132,23 +132,33 @@ func (m *mdmProxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request) {
+// authorize validates the Authorization header of remote admin requests
+// against the configured auth token. It writes an error response and
+// returns false if the request is not authorized.
+func (m *mdmProxy) authorize(w http.ResponseWriter, r *http.Request) bool {
 	if m.token == "" {
 		http.Error(w, "Set auth token to enable remote updates", http.StatusUnauthorized)
-		return
+		return false
 	}
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		http.Error(w, "Authorization header must be provided", http.StatusUnauthorized)
-		return
+		return false
 
 	}
 	if !strings.HasPrefix(authHeader, "Bearer ") {
 		http.Error(w, "Authorization header must start with \"Bearer \"", http.StatusUnauthorized)
-		return
+		return false
 	}
 	if authHeader != "Bearer "+m.token {
 		http.Error(w, "Authorization header does not match", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
+func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request) {
+	if !m.authorize(w, r) {
 		return
 	}
 
@@ -178,22 +188,7 @@ func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request
 }
 
 func (m *mdmProxy) handleUpdateMigrateUDIDs(w http.ResponseWriter, r *http.Request) {
-	if m.token == "" {
-		http.Error(w, "Set auth token to enable remote updates", http.StatusUnauthorized)
-		return
-	}
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "Authorization header must be provided", http.StatusUnauthorized)
-		return
-
-	}
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		http.Error(w, "Authorization header must start with \"Bearer \"", http.StatusUnauthorized)
-		return
-	}
-	if authHeader != "Bearer "+m.token {
-		http.Error(w, "Authorization header does not match", http.StatusUnauthorized)
+	if !m.authorize(w, r) {
 		return
 	}
 
@@ -398,6 +393,6 @@ func main() {
 	}
 	err = server.ListenAndServe()
 	if err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
+		log.Fatalf("Error starting server: %s\n", err)
 	}
 }

@@ -59,7 +59,7 @@ export const getInstallErrorMessage = (e: unknown) => {
   const reason = upperFirst(trimEnd(getErrorReason(e), "."));
 
   if (reason.includes("fleetd installed")) {
-    return `${INSTALL_SOFTWARE_ERROR_PREFIX}. ${reason}.`;
+    return `${INSTALL_SOFTWARE_ERROR_PREFIX} ${reason}.`;
   } else if (reason.includes("can be installed only on")) {
     return createOnlyInstallableOnMacOSMessage(reason);
   } else if (reason.includes("VPP token expired")) {
@@ -91,7 +91,7 @@ export const getUninstallErrorMessage = (e: unknown) => {
       "Couldn't uninstall."
     );
   } else if (reason.startsWith("No uninstall script exists")) {
-    return `${UNINSTALL_SOFTWARE_ERROR_PREFIX}. An uninstall script does not exist for this package.`;
+    return `${UNINSTALL_SOFTWARE_ERROR_PREFIX} An uninstall script does not exist for this package.`;
   }
 
   return DEFAULT_UNINSTALL_ERROR_MESSAGE;

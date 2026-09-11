@@ -16,7 +16,7 @@ module.exports = {
 
     let thirtyDaysFromNowAt = Date.now() + (1000 * 60 * 60 * 24 * 30);
     // Get an array of all Users with
-    let idsOfUsersWithSubscriptions = await Subscription.find().select('user');
+    let idsOfUsersWithSubscriptions = (await Subscription.find().select('user')).map((subscription)=>subscription.user);
     let numberOfUsersWhoWouldHaveBeenUpdated = 0;
 
     await User.stream({
@@ -64,7 +64,7 @@ module.exports = {
             emailAddress: thisUser.emailAddress
           },
           to: thisUser.emailAddress,
-          subject: 'Whoops',
+          subject: 'Your Fleet Premium trial is ready',
           from: sails.config.custom.contactFormEmailAddress,
           fromName: 'Mike McNeil',
           ensureAck: true,
@@ -82,4 +82,5 @@ module.exports = {
 
 
 };
+
 

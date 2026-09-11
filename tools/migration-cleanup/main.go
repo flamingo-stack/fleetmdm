@@ -361,10 +361,7 @@ func resolveBranch(checkout, branch string) (string, error) {
 		lastErr = err
 		fmt.Fprintln(os.Stderr, err)
 	}
-	if lastErr != nil {
-		return "", fmt.Errorf("ERROR: cannot resolve branch %q", branch)
-	}
-	return "", fmt.Errorf("ERROR: cannot resolve branch %q", branch)
+	return "", fmt.Errorf("cannot resolve branch %q: %w", branch, lastErr)
 }
 
 func getMergeBase(checkout, branch string) (string, error) {
@@ -938,3 +935,4 @@ func writeOutput(sqlText, outputPath string) error {
 	fmt.Fprintf(os.Stderr, "SQL written to %s\n", outputPath)
 	return nil
 }
+

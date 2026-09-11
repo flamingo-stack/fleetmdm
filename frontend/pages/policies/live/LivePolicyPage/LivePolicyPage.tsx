@@ -75,7 +75,6 @@ const LivePolicyPage = ({
   const teamIdForApi = currentTeamId === -1 ? undefined : currentTeamId;
 
   // Reroute users out of live flow when live queries are globally disabled
-  // Reroute users out of live flow when live queries are globally disabled
   useEffect(() => {
     if (disabledLiveQuery) {
       const path = policyId
