@@ -7,6 +7,7 @@ import (
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mock"
+	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func TestListSelfServiceSoftwareCategoriesForHost(t *testing.T) {
 		}
 		svc := newTestService(t, ds)
 
-		_, err := svc.ListSelfServiceSoftwareCategoriesForHost(ctx, &fleet.Host{ID: 1, TeamID: new(uint(7))})
+		_, err := svc.ListSelfServiceSoftwareCategoriesForHost(ctx, &fleet.Host{ID: 1, TeamID: ptr.Uint(7)})
 		require.ErrorContains(t, err, "list self-service software categories for host")
 		assert.True(t, ds.ListSoftwareCategoriesFuncInvoked)
 	})
@@ -35,7 +36,7 @@ func TestListSelfServiceSoftwareCategoriesForHost(t *testing.T) {
 		}
 		svc := newTestService(t, ds)
 
-		got, err := svc.ListSelfServiceSoftwareCategoriesForHost(ctx, &fleet.Host{ID: 1, TeamID: new(uint(7))})
+		got, err := svc.ListSelfServiceSoftwareCategoriesForHost(ctx, &fleet.Host{ID: 1, TeamID: ptr.Uint(7)})
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, "🌎 Browsers", got[0].Name)

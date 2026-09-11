@@ -292,7 +292,7 @@ func TestClearPasscode(t *testing.T) {
 			return &fleet.HostMDM{}, nil
 		}
 		ds.GetNanoMDMEnrollmentDetailsFunc = func(ctx context.Context, hostUUID string) (*fleet.NanoMDMEnrollmentDetails, error) {
-			return &fleet.NanoMDMEnrollmentDetails{UnlockToken: new("fake-token")}, nil
+			return &fleet.NanoMDMEnrollmentDetails{UnlockToken: ptr.String("fake-token")}, nil
 		}
 
 		cases := []struct {

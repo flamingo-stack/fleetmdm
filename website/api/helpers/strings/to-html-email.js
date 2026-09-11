@@ -112,7 +112,7 @@ module.exports = {
 
     // For emphasized text
     customRenderer.em = function(textHTML) {
-      return `<span style="display: inline; font-style: italic; font-size:16px;>${textHTML}</span>`;
+      return `<span style="display: inline; font-style: italic; font-size:16px;">${textHTML}</span>`;
     };
 
     // For inline codespans
@@ -122,23 +122,21 @@ module.exports = {
 
     // For links
     customRenderer.link = function(href, title, textHTML) {
-      (href)=>{
-        let isExternal = ! href.match(/^https?:\/\/([^\.|blog]+\.)*fleetdm\.com/g);// « FUTURE: make this smarter with sails.config.baseUrl + _.escapeRegExp()
-        // Check if this link is to fleetdm.com or www.fleetdm.com.
-        let isBaseUrl = href.match(/^(https?:\/\/)([^\.]+\.)*fleetdm\.com$/g);
-        if (isExternal) {
-          href = href.replace(/(https?:\/\/([^"]+))/g, '$1 target="_blank"');
+      let isExternal = ! href.match(/^https?:\/\/([^\.|blog]+\.)*fleetdm\.com/g);// « FUTURE: make this smarter with sails.config.baseUrl + _.escapeRegExp()
+      // Check if this link is to fleetdm.com or www.fleetdm.com.
+      let isBaseUrl = href.match(/^(https?:\/\/)([^\.]+\.)*fleetdm\.com$/g);
+      if (isExternal) {
+        href = href.replace(/(https?:\/\/([^"]+))/g, '$1 target="_blank"');
+      } else {
+        // Otherwise, change the link to be web root relative.
+        // (e.g. 'href="http://sailsjs.com/documentation/concepts"'' becomes simply 'href="/documentation/concepts"'')
+        // > Note: See the Git version history of "compile-markdown-content.js" in the sailsjs.com website repo for examples of ways this can work across versioned subdomains.
+        if (isBaseUrl) {
+          href = href.replace(/https?:\/\//, '');
         } else {
-          // Otherwise, change the link to be web root relative.
-          // (e.g. 'href="http://sailsjs.com/documentation/concepts"'' becomes simply 'href="/documentation/concepts"'')
-          // > Note: See the Git version history of "compile-markdown-content.js" in the sailsjs.com website repo for examples of ways this can work across versioned subdomains.
-          if (isBaseUrl) {
-            href = href.replace(/https?:\/\//, '');
-          } else {
-            href = href.replace(/https?:\/\//, '');
-          }
+          href = href.replace(/https?:\/\//, '');
         }
-      };
+      }
       return `<a style="display: inline; color: #6A67FE; font-size: 16px; text-decoration: none; word-break: break-word;" href="${href}" target="_blank">${textHTML}</a>`;
     };
 
@@ -162,3 +160,4 @@ module.exports = {
 
 
 };
+

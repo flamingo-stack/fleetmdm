@@ -41,7 +41,7 @@ func Configure(dbPath string) (http.Handler, error) {
 	var err error
 	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("opening sqlite3 db: %w", err)
 	}
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
@@ -167,12 +167,12 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	timeMin := r.URL.Query().Get("timemin")
-	if email == "" {
+	if timeMin == "" {
 		http.Error(w, "missing timemin", http.StatusBadRequest)
 		return
 	}
 	timeMax := r.URL.Query().Get("timemax")
-	if email == "" {
+	if timeMax == "" {
 		http.Error(w, "missing timemax", http.StatusBadRequest)
 		return
 	}
@@ -302,6 +302,10 @@ func deleteEvent(w http.ResponseWriter, r *http.Request) {
 	_, err := db.Exec(sqlStmt, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusGone)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }

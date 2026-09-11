@@ -12,7 +12,7 @@ set -euo pipefail
 
 # ---------- defaults ----------
 FLEET_URL="${FLEET_URL:-https://localhost:8080}"
-FLEET_TOKEN="${FLEET_TOKEN:-cKw8nrubZuOfZhe8EJo9JuLZ8w55WGfgYa6Ro3wAF7V8wjVvULnWsugdc4xytewVSZ85YgWYQqyDPwrTBG9P4Q==}"
+FLEET_TOKEN="${FLEET_TOKEN:-}"
 POLICY_ID=""
 QUERY_ID=""
 HOST_IDS=""
@@ -348,3 +348,4 @@ echo "============================================"
 if [[ $fail -gt 0 ]]; then
   exit 1
 fi
+

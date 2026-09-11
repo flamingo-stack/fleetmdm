@@ -55,8 +55,9 @@ ON DUPLICATE KEY
 UPDATE
     cert_pem = VALUES(cert_pem),
     key_pem = VALUES(key_pem),
-    push_certs.stale_token = push_certs.stale_token + 1;`,
+    stale_token = nano_push_certs.stale_token + 1;`,
 		topic, pemCert, pemKey,
 	)
 	return err
 }
+

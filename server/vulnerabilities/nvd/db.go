@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS cpe_2 (
     product TEXT,
     version TEXT,
     target_sw TEXT,
-    sw_edition TEST,
+    sw_edition TEXT,
     deprecated BOOLEAN DEFAULT FALSE
 );
 CREATE VIEW IF NOT EXISTS cpe AS
@@ -203,3 +203,4 @@ VALUES %s`, values),
 	)
 	return err
 }
+
