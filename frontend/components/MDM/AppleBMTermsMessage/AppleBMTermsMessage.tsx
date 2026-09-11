@@ -13,7 +13,7 @@ const AppleBMTermsMessage = () => {
       cta={
         <CustomLink
           url="https://business.apple.com/" // TODO: maybe point to new /settings/integrations/mdm/abm
-          text="Go to AB"
+          text="Go to Apple Business"
           className={`${baseClass}__new-tab`}
           newTab
           variant="banner-link"
@@ -30,3 +30,4 @@ const AppleBMTermsMessage = () => {
 };
 
 export default AppleBMTermsMessage;
+

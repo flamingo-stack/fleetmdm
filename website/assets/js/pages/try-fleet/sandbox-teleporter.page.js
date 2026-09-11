@@ -20,7 +20,7 @@ parasails.registerPage('sandbox-teleporter', {
     window.history.replaceState({}, '', '/');
 
     // Binding an event handler to 'onpageshow', if a user navigates to a locally cached version of this page (e.g., A Safari user clicking the back button from their Fleet Sandbox), they will be taken to the fleetdm.com homepage.
-    window.onpageshow = function(event) {
+    window.onpageshow = (event) => {
       if(event.persisted) {
         this.goto('/');
       }

@@ -59,6 +59,9 @@ export default class TableOSVersion extends Table {
         console.warn(
           `Chrome version ${version} does not have expected 4 segments`
         );
+        for (const column of ["major", "minor", "build", "patch"]) {
+          warningsArray.push({ column, error_message: "unexpected version format" });
+        }
       } else {
         [major, minor, build, patch] = splits;
       }

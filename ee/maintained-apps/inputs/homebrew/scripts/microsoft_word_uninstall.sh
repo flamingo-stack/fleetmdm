@@ -134,7 +134,7 @@ remove_receipt_files() {
   fi
 
   echo "sudo pkgutil --only-files --files \"$PKGID\" | sed \"s|^|${FULL_INSTALL_LOCATION}/|\" | tr '\\\\n' '\\\\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf"
-  sudo pkgutil --only-files --files "$PKGID" | sed "s|^|/${INSTALL_LOCATION}/|" | tr '\n' '\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf
+  sudo pkgutil --only-files --files "$PKGID" | sed "s|^|${FULL_INSTALL_LOCATION}/|" | tr '\n' '\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf
 
   echo "sudo pkgutil --only-dirs --files \"$PKGID\" | sed \"s|^|${FULL_INSTALL_LOCATION}/|\" | grep '\\.app$' | tr '\\\\n' '\\\\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf"
   sudo pkgutil --only-dirs --files "$PKGID" | sed "s|^|${FULL_INSTALL_LOCATION}/|" | grep '\.app$' | tr '\n' '\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf
@@ -188,3 +188,4 @@ trash $LOGGED_IN_USER '~/Library/Application Support/CrashReporter/Microsoft Wor
 trash $LOGGED_IN_USER '~/Library/Containers/com.microsoft.Word'
 trash $LOGGED_IN_USER '~/Library/Preferences/com.microsoft.Word.plist'
 trash $LOGGED_IN_USER '~/Library/Saved Application State/com.microsoft.Word.savedState'
+
