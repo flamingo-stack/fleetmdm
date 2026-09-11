@@ -26,6 +26,7 @@ const getDefaultUninstallScript = (fileName: string): string => {
     case "rpm":
       return uninstallRPM;
     case "exe":
+    case "zip":
     case "tar.gz":
     case "sh":
     case "ps1":

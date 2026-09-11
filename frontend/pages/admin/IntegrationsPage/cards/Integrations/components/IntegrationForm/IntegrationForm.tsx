@@ -22,7 +22,7 @@ const baseClass = "integration-form";
 interface IIntegrationFormProps {
   onCancel: () => void;
   onSubmit: (
-    untegrationSubmitData: IIntegration[],
+    integrationSubmitData: IIntegration[],
     integrationDestination: string
   ) => void;
   integrationEditing?: IIntegrationTableData;

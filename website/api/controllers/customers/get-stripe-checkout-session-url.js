@@ -34,7 +34,7 @@ module.exports = {
     const stripe = require('stripe')(sails.config.custom.stripeSecret);
 
     // Find the quote record that was created.
-    let quoteRecord = await Quote.findOne({id: inputs.quoteId});
+    let quoteRecord = await Quote.findOne({id: inputs.quoteId, user: this.req.me.id});
     if(!quoteRecord) {
       throw new Error(`Consistency violation: The specified quote (${inputs.quoteId}) no longer seems to exist.`);
     }
@@ -85,3 +85,4 @@ module.exports = {
 
 
 };
+

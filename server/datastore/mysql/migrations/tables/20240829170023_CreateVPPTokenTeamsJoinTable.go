@@ -11,7 +11,6 @@ func init() {
 
 func Up_20240829170023(tx *sql.Tx) error {
 	// Idempotent migration.
-	// Idempotent migration.
 	_, err := tx.Exec(`
 CREATE TABLE IF NOT EXISTS vpp_token_teams (
 	id int unsigned NOT NULL PRIMARY KEY AUTO_INCREMENT,

@@ -17,7 +17,7 @@ func TestUp_20220524102918(t *testing.T) {
 	teamID, err := res.LastInsertId()
 	require.NoError(t, err)
 
-	_, err = db.Exec(`
+	res, err = db.Exec(`
     INSERT INTO policies (name, query, description, team_id)
     VALUES ('test_policy', "", "", ?)
   `, teamID)

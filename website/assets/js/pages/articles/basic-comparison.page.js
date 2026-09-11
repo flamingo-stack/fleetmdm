@@ -27,7 +27,6 @@ parasails.registerPage('basic-comparison', {
       return subtopics;
     })();
     $('.table').find('thead th').each((index, el)=>{
-      console.log(el);
       this.tableHeadersForMobileComparisonTable.push($(el).text().trim());
     });
     $('.table').find('tbody tr').each((index, el)=>{

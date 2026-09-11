@@ -1,5 +1,5 @@
 #!/bin/bash
-# Please don't delete. This script is used in tests (tools/tuf/test/migration/migration_test.sh), workflors (.github/workflows/), and in the guide here: https://fleetdm.com/guides/how-to-uninstall-fleetd
+# Please don't delete. This script is used in tests (tools/tuf/test/migration/migration_test.sh), workflows (.github/workflows/), and in the guide here: https://fleetdm.com/guides/how-to-uninstall-fleetd
 
 if [ $(id -u) -ne 0 ]; then
     echo "Please run as root"
@@ -54,3 +54,4 @@ else
         bash -c "bash $0 remove >/dev/null 2>/dev/null </dev/null &"
     fi
 fi
+

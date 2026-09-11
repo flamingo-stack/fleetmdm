@@ -168,12 +168,8 @@ func GetIssueProjectStatuses(issueNumber int, projects []int) (map[int]ProjectSt
 	// Single GraphQL query to fetch all project items and their Status field for this issue
 	owner, repo, err := getRepoOwnerAndName()
 	if err != nil {
-		// If repo cannot be determined, return absent for all
-		res := make(map[int]ProjectStatus, len(projects))
-		for _, pid := range projects {
-			res[pid] = ProjectStatus{Present: false, Status: ""}
-		}
-		return res, nil
+		// Cannot determine the repo, so we cannot determine project presence; surface the error.
+		return nil, fmt.Errorf("determining repo owner/name: %w", err)
 	}
 
 	query := `query($owner:String!,$repo:String!,$number:Int!){
@@ -199,12 +195,9 @@ func GetIssueProjectStatuses(issueNumber int, projects []int) (map[int]ProjectSt
 	cmd := fmt.Sprintf("gh api graphql -f query='%s' -f owner='%s' -f repo='%s' -F number=%d", query, owner, repo, issueNumber)
 	out, err := runCommandWithRetry(cmd, 5, 2*time.Second)
 	if err != nil {
-		// On error, default to absent for all requested projects
-		res := make(map[int]ProjectStatus, len(projects))
-		for _, pid := range projects {
-			res[pid] = ProjectStatus{Present: false, Status: ""}
-		}
-		return res, nil
+		// The API call failed; we cannot determine presence, so surface the error rather
+		// than silently reporting all projects as absent.
+		return nil, fmt.Errorf("fetching project statuses for issue %d: %w", issueNumber, err)
 	}
 	var resp struct {
 		Data struct {
@@ -232,11 +225,9 @@ func GetIssueProjectStatuses(issueNumber int, projects []int) (map[int]ProjectSt
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out, &resp); err != nil {
-		res := make(map[int]ProjectStatus, len(projects))
-		for _, pid := range projects {
-			res[pid] = ProjectStatus{Present: false, Status: ""}
-		}
-		return res, nil
+		// Parsing failed; we cannot determine presence, so surface the error rather
+		// than silently reporting all projects as absent.
+		return nil, fmt.Errorf("parsing project statuses for issue %d: %w", issueNumber, err)
 	}
 
 	// Build a map of project number -> status value

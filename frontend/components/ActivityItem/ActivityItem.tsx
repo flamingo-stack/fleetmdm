@@ -91,11 +91,10 @@ const ActivityItem = ({
     ? addGravatarUrlToResource({ email: actor_email })
     : { gravatar_url: undefined };
 
-  // wrapped just in case the date string does not parse correctly
-  let activityCreatedAt: Date;
-  try {
-    activityCreatedAt = new Date(activity.created_at);
-  } catch (e) {
+  // Date constructor never throws on invalid input, it returns an Invalid
+  // Date object instead, so we explicitly check for that and fall back.
+  let activityCreatedAt = new Date(activity.created_at);
+  if (isNaN(activityCreatedAt.getTime())) {
     activityCreatedAt = new Date();
   }
 
