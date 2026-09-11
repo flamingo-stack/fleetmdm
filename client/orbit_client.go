@@ -601,6 +601,9 @@ func (oc *OrbitClient) enroll() (string, error) {
 		ComputerName:      oc.hostInfo.ComputerName,
 		HardwareModel:     oc.hostInfo.HardwareModel,
 		EUAToken:          oc.euaToken,
+		// >>> OPENFRAME(agent-openframe-mode): carry osquery's instance id — openframe/docs/agent-openframe-mode.md
+		InstanceID: oc.hostInfo.InstanceID,
+		// <<< OPENFRAME(agent-openframe-mode)
 	}
 	var resp fleet.EnrollOrbitResponse
 	err := oc.request(verb, path, params, &resp)

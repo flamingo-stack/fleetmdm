@@ -116,6 +116,9 @@ type OrbitHostInfo struct {
 	//
 	// If not set, then the HardwareUUID is used/set as the osquery identifier.
 	OsqueryIdentifier string
+	// >>> OPENFRAME(agent-openframe-mode): osquery instance id, diagnostics only — openframe/docs/agent-openframe-mode.md
+	InstanceID string
+	// <<< OPENFRAME(agent-openframe-mode)
 	// ComputerName is the device's friendly name (optional).
 	ComputerName string
 	// HardwareModel is the device's hardware model. For example: Standard PC (Q35 + ICH9, 2009)
