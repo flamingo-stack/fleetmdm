@@ -25,6 +25,41 @@ interface IProps {
   actions: IActionButtonProps[];
 }
 
+const renderSecondaryAction = (action: IActionButtonProps): JSX.Element => {
+  const variant: ButtonVariant = action.buttonVariant ?? "inverse";
+  const content =
+    action.buttonVariant !== "text-icon" ? (
+      action.label
+    ) : (
+      <>
+        {action.label}
+        {action.iconName && <Icon name={action.iconName} />}
+      </>
+    );
+
+  if (action.gitOpsModeCompatible) {
+    return (
+      <GitOpsModeTooltipWrapper
+        renderChildren={(disableChildren) => (
+          <Button
+            variant={variant}
+            onClick={action.onClick}
+            disabled={disableChildren}
+          >
+            {content}
+          </Button>
+        )}
+      />
+    );
+  }
+
+  return (
+    <Button variant={variant} onClick={action.onClick}>
+      {content}
+    </Button>
+  );
+};
+
 const ActionButtons = ({ baseClass, actions }: IProps): JSX.Element => {
   const primaryActions: IActionButtonProps[] = [];
   const secondaryActions: IActionButtonProps[] = [];
@@ -55,56 +90,9 @@ const ActionButtons = ({ baseClass, actions }: IProps): JSX.Element => {
         <div
           className={`${baseClass}__action-buttons--secondary-buttons action-buttons__secondary-buttons`}
         >
-          {secondaryActions.map((action) => {
-            if (!action.hideAction && action.buttonVariant !== "text-icon") {
-              if (action.gitOpsModeCompatible) {
-                return (
-                  <GitOpsModeTooltipWrapper
-                    renderChildren={(disableChildren) => (
-                      <Button
-                        variant={action.buttonVariant}
-                        onClick={action.onClick}
-                        disabled={disableChildren}
-                      >
-                        {action.label}
-                      </Button>
-                    )}
-                  />
-                );
-              }
-              return (
-                <Button variant={action.buttonVariant} onClick={action.onClick}>
-                  {action.label}
-                </Button>
-              );
-            }
-            if (action.gitOpsModeCompatible) {
-              return (
-                <GitOpsModeTooltipWrapper
-                  renderChildren={(disableChildren) => (
-                    <Button
-                      variant="inverse"
-                      onClick={action.onClick}
-                      disabled={disableChildren}
-                    >
-                      <>
-                        {action.label}
-                        {action.iconName && <Icon name={action.iconName} />}
-                      </>
-                    </Button>
-                  )}
-                />
-              );
-            }
-            return (
-              <Button variant="inverse" onClick={action.onClick}>
-                <>
-                  {action.label}
-                  {action.iconName && <Icon name={action.iconName} />}
-                </>
-              </Button>
-            );
-          })}
+          {secondaryActions.map(
+            (action) => !action.hideAction && renderSecondaryAction(action)
+          )}
         </div>
         <div
           className={`${baseClass}__action-buttons--secondary-dropdown action-buttons__secondary-dropdown`}
