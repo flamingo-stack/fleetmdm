@@ -19,7 +19,7 @@ const EmptyOS = (platform: PlatformValueOptions): JSX.Element => (
   <EmptyState
     className={`${baseClass}__os-empty-table`}
     header={`No${
-      ` ${PLATFORM_DISPLAY_NAMES[platform]}` || ""
+      PLATFORM_DISPLAY_NAMES[platform] ? ` ${PLATFORM_DISPLAY_NAMES[platform]}` : ""
     } operating systems detected`}
     info="This report is updated every hour to protect the performance of your
   devices."
