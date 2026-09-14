@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
+	"log"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
@@ -16,12 +16,9 @@ func init() {
 
 func Up_20250902112642(tx *sql.Tx) error {
 	// Idempotent migration.
-	// Only run this migration if FLEET_PARTNERSHIPS_ENABLE_PRIMO is set to true
-	enablePrimo := os.Getenv("FLEET_PARTNERSHIPS_ENABLE_PRIMO")
-	if enablePrimo != "true" && enablePrimo != "1" {
-		// Skip migration if not in Primo mode
-		return nil
-	}
+	// This migration always runs; it is not gated on any runtime environment
+	// variable, since migration behavior must be deterministic regardless of
+	// deployment-specific configuration.
 
 	txx := sqlx.Tx{Tx: tx, Mapper: reflectx.NewMapperFunc("db", sqlx.NameMapper)}
 
@@ -82,6 +79,7 @@ func Up_20250902112642(tx *sql.Tx) error {
 			case uint:
 				policyID = v
 			default:
+				log.Printf("migration 20250902112642: unexpected policy_ids entry type %T (value %v) in failing_policies_webhook; skipping this policy ID", policyIDInterface, policyIDInterface)
 				continue
 			}
 

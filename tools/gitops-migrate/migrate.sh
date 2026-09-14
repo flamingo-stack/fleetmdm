@@ -74,7 +74,6 @@ validate_yaml() {
 extract_keys_from_software() {
     local software_file="$1"
     local temp_file=$(mktemp -p .)
-    chmod 666 $temp_file
     
     # Extract the keys we need
     {
@@ -93,7 +92,6 @@ remove_keys_from_software() {
     
     # Create a temporary file with keys removed
     local temp_file=$(mktemp -p .)
-    chmod 666 $temp_file
     yq eval --output-format=yaml 'del(.self_service, .categories, .labels_include_any, .labels_exclude_any)' "$software_file" > "$temp_file"
     
     # Replace the original file
@@ -190,7 +188,7 @@ process_team_file() {
         # Clean up temp file
         rm -f "$keys_temp_file"
         
-        PROCESSED_PACKAGED=$((PROCESSED_PACKAGES+1))
+        PROCESSED_PACKAGES=$((PROCESSED_PACKAGES+1))
         echo -e "${GREEN}    ✓ Package processed successfully${NC}"
     done
     
@@ -333,3 +331,4 @@ main() {
 
 # Run main function with all script arguments
 main "$@"
+

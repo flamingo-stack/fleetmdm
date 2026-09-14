@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 // SoftwareEntry represents a software item from server data
@@ -46,7 +46,7 @@ var knownPublicSoftware = []string{
 // - 172.16.0.0/12 (172.16.x.x - 172.31.x.x)
 // - 192.168.0.0/16 (192.168.x.x)
 // - 127.0.0.0/8 (127.x.x.x - loopback)
-var privateIPRegex = regexp.MustCompile(`^(10(\.\d{1,3}){3}|127(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2[0-9]|3[0-1])(\.\d{1,3}){2})`)
+var privateIPRegex = regexp.MustCompile(`^(10(\.\d{1,3}){3}|127(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2[0-9]|3[0-1])(\.\d{1,3}){2})$`)
 
 type ImportStats struct {
 	Total             int
@@ -246,7 +246,8 @@ func (imp *Importer) importEntry(entry SoftwareEntry) {
 	if !imp.dryRun {
 		err := imp.insertSoftware(entry)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			var sqliteErr sqlite3.Error
+			if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
 				imp.stats.Duplicates++
 				if imp.verbose {
 					fmt.Printf("  ⏭️  Duplicate: %s v%s\n", entry.Name, entry.Version)

@@ -18,6 +18,7 @@ module.exports = {
     missingOriginHeader: { description: 'The request was missing an Origin header', responseType: 'badRequest'},
     unauthorized: { description: 'Invalid authentication token.', responseType: 'unauthorized'},
     notFound: { description: 'No Android enterprise found for this Fleet server.', responseType: 'notFound'},
+    rateLimited: { description: 'The Android management API rate limit was exceeded.', responseType: 'tooManyRequests' },
   },
 
 
@@ -46,11 +47,18 @@ module.exports = {
       throw 'notFound';
     }
 
-    if (thisAndroidEnterprise.fleetServerSecret !== fleetServerSecret) {
+    let crypto = require('crypto');
+    let providedSecretBuffer = Buffer.from(fleetServerSecret);
+    let storedSecretBuffer = Buffer.from(thisAndroidEnterprise.fleetServerSecret);
+    let secretsMatch = providedSecretBuffer.length === storedSecretBuffer.length &&
+      crypto.timingSafeEqual(providedSecretBuffer, storedSecretBuffer);
+
+    if (!secretsMatch) {
       throw 'unauthorized';
     }
 
     // Get the Android enterprises list from Google
+    let isRateLimited = false;
     try {
       let enterprisesList = await sails.helpers.flow.build(async ()=>{
         let { google } = require('googleapis');
@@ -93,6 +101,7 @@ module.exports = {
       }).intercept({status: 429}, (err)=>{
         // If the Android management API returns a 429 response, log an additional warning that will trigger a help-p1 alert.
         sails.log.warn(`p1: Android management API rate limit exceeded!`);
+        isRateLimited = true;
         return err;
       }).intercept((err)=>{
         // Re-throw the error for handling outside the intercept
@@ -114,6 +123,9 @@ module.exports = {
       return { enterprises: filteredEnterprises };
 
     } catch (err) {
+      if (isRateLimited) {
+        throw 'rateLimited';
+      }
       throw new Error(`When attempting to list android enterprises, an error occurred. Error: ${err}`);
     }
 
