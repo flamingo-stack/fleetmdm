@@ -358,9 +358,15 @@ func (ds *Datastore) expandEmbeddedSecrets(ctx context.Context, document string)
 
 	// Detect document format so we can escape the secret value appropriately.
 	// XML detection is aggressive because Windows profiles do not begin with <?xml.
+	// If the document is neither recognized as JSON nor as XML-like, we default to
+	// XML escaping since it is the safer conservative choice for embedding into
+	// markup-like documents (e.g., SyncML fragments) and is a no-op for plain text
+	// that contains none of the escaped characters.
 	trimmed := strings.TrimSpace(document)
-	documentIsXML := strings.HasPrefix(trimmed, "<")
 	documentIsJSON := strings.HasPrefix(trimmed, "{")
+	documentIsXML := !documentIsJSON
+
+	var escapeErr error
 
 	expanded := fleet.MaybeExpand(document, func(s string, startPos, endPos int) (string, bool) {
 		if !strings.HasPrefix(s, fleet.ServerSecretPrefix) {
@@ -373,8 +379,8 @@ func (ds *Datastore) expandEmbeddedSecrets(ctx context.Context, document string)
 			val = jsonEscapeString(val)
 		case documentIsXML:
 			var b strings.Builder
-			err = xml.EscapeText(&b, []byte(val))
-			if err != nil {
+			if err := xml.EscapeText(&b, []byte(val)); err != nil {
+				escapeErr = err
 				return "", false
 			}
 			val = b.String()
@@ -382,6 +388,10 @@ func (ds *Datastore) expandEmbeddedSecrets(ctx context.Context, document string)
 
 		return val, ok
 	})
+
+	if escapeErr != nil {
+		return "", nil, ctxerr.Wrap(ctx, escapeErr, "escaping secret value for embedding")
+	}
 
 	return expanded, secrets, nil
 }
@@ -504,8 +514,10 @@ func (ds *Datastore) ExpandHostSecrets(ctx context.Context, document string, enr
 
 	// Detect document format (same logic as expandEmbeddedSecrets)
 	trimmed := strings.TrimSpace(document)
-	documentIsXML := strings.HasPrefix(trimmed, "<")
 	documentIsJSON := strings.HasPrefix(trimmed, "{")
+	documentIsXML := !documentIsJSON
+
+	var escapeErr error
 
 	// Expand the placeholders
 	expanded := fleet.MaybeExpand(document, func(s string, startPos, endPos int) (string, bool) {
@@ -524,6 +536,7 @@ func (ds *Datastore) ExpandHostSecrets(ctx context.Context, document string, enr
 		case documentIsXML:
 			var b strings.Builder
 			if err := xml.EscapeText(&b, []byte(val)); err != nil {
+				escapeErr = err
 				return "", false
 			}
 			val = b.String()
@@ -531,6 +544,10 @@ func (ds *Datastore) ExpandHostSecrets(ctx context.Context, document string, enr
 
 		return val, ok
 	})
+
+	if escapeErr != nil {
+		return "", ctxerr.Wrap(ctx, escapeErr, "escaping host secret value for embedding")
+	}
 
 	return expanded, nil
 }
