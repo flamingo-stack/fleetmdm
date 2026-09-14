@@ -7,6 +7,7 @@ import (
 
 const ServerSecretPrefix = "FLEET_SECRET_"
 
+// >>> OPENFRAME(host-secrets): Fleet-internal host-scoped secrets support
 // HostSecretPrefix is used for host-scoped secrets that are looked up by
 // enrollment ID rather than by name. These are expanded at command delivery time.
 //
@@ -30,6 +31,8 @@ const (
 	// The token is stored in the nano_devices table and injected at delivery time for ClearPasscode commands sent to Apple MDM-enrolled hosts.
 	HostSecretMDMUnlockToken = "MDM_UNLOCK_TOKEN" // nolint:gosec // G101: this is a constant identifier, not a credential
 )
+
+// <<< OPENFRAME(host-secrets)
 
 type MissingSecretsError struct {
 	MissingSecrets []string
