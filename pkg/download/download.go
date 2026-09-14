@@ -142,7 +142,7 @@ func download(client *http.Client, u *url.URL, path string, extract bool) error 
 	}
 
 	if err := os.Rename(tmpFile.Name(), path); err != nil {
-		return err
+		return fmt.Errorf("rename temporary file: %w", err)
 	}
 
 	moved = true
