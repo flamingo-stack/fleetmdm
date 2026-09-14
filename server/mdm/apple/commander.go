@@ -3,6 +3,7 @@ package apple_mdm
 import (
 	"context"
 	"encoding/base64"
+	"encoding/xml"
 	"fmt"
 	"net/http"
 	"sort"
@@ -157,9 +158,10 @@ func (svc *MDMAppleCommander) DeviceLock(ctx context.Context, host *fleet.Host, 
 		}
 		if c, ok := err.(conflictInterface); ok && c.IsConflict() {
 			// Another goroutine won the race, fetch the command that was created
+			origConflictErr := err
 			existingCmd, existingPIN, err := svc.storage.GetPendingLockCommand(ctx, host.UUID)
 			if err != nil {
-				return "", ctxerr.Wrap(ctx, err, "getting existing lock after race condition")
+				return "", ctxerr.Wrap(ctx, err, "getting existing lock after race condition", "original conflict error", origConflictErr)
 			}
 			if existingCmd != nil {
 				// Send push notification for the existing command and return its PIN
@@ -172,7 +174,7 @@ func (svc *MDMAppleCommander) DeviceLock(ctx context.Context, host *fleet.Host, 
 				return existingPIN, nil
 			}
 			// This shouldn't happen, but if we can't find the command, return the original error
-			return "", ctxerr.Wrap(ctx, err, "lock command conflict but no existing command found")
+			return "", ctxerr.Wrap(ctx, origConflictErr, "lock command conflict but no existing command found")
 		}
 		return "", ctxerr.Wrap(ctx, err, "enqueuing for DeviceLock")
 	}
@@ -326,7 +328,7 @@ func (svc *MDMAppleCommander) InstallEnterpriseApplicationWithEmbeddedManifest(
 
 	raw, err := plist.Marshal(cmd)
 	if err != nil {
-		return fmt.Errorf("marshal command payload plist: %w", err)
+		return ctxerr.Wrap(ctx, err, "marshal command payload plist")
 	}
 
 	return svc.EnqueueCommand(ctx, hostUUIDs, string(raw))
@@ -350,6 +352,16 @@ type AdminAccountConfig struct {
 	PrimaryAccountType fleet.PrimaryAccountType // admin, standard, or none
 }
 
+// xmlEscapeString escapes a string for safe embedding inside plist <string>
+// elements, guarding against user-controlled values (e.g. SSO-provided names)
+// that may contain XML special characters.
+func xmlEscapeString(s string) string {
+	var b strings.Builder
+	// xml.EscapeText never returns an error for a strings.Builder writer.
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
+
 func (svc *MDMAppleCommander) AccountConfiguration(ctx context.Context, hostUUIDs []string,
 	cmdUUID string,
 	ssoAccount *SSOAccountConfig,
@@ -366,7 +378,7 @@ func (svc *MDMAppleCommander) AccountConfiguration(ctx context.Context, hostUUID
       <string>%s</string>
       <key>LockPrimaryAccountInfo</key>
       <%t />
-`, ssoAccount.FullName, ssoAccount.UserName, ssoAccount.LockPrimaryAccountInfo)
+`, xmlEscapeString(ssoAccount.FullName), xmlEscapeString(ssoAccount.UserName), ssoAccount.LockPrimaryAccountInfo)
 	}
 
 	if adminAccount != nil {
@@ -400,7 +412,7 @@ func (svc *MDMAppleCommander) AccountConfiguration(ctx context.Context, hostUUID
           <string>%s</string>
         </dict>
       </array>
-`, adminAccount.Hidden, passwordHashEncoded, adminAccount.ShortName, adminAccount.FullName)
+`, adminAccount.Hidden, passwordHashEncoded, xmlEscapeString(adminAccount.ShortName), xmlEscapeString(adminAccount.FullName))
 	}
 
 	raw := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
