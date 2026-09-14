@@ -48,7 +48,7 @@ type Item struct {
 func main() {
 	org := flag.String("org", "", "GitHub org")
 	projectNum := flag.Int("project", 0, "Project number")
-	limit := flag.Int("limit", 100, "Max project items to scan (no pagination; expected usage is small)")
+	limit := flag.Int("limit", 100, "Max project items to fetch per page")
 	flag.Parse()
 
 	if *org == "" || *projectNum == 0 {
@@ -124,28 +124,47 @@ func fetchItems(
 		Node struct {
 			ProjectV2 struct {
 				Items struct {
-					Nodes []Item
-				} `graphql:"items(first: $first)"`
+					Nodes    []Item
+					PageInfo struct {
+						HasNextPage bool
+						EndCursor   githubv4.String
+					}
+				} `graphql:"items(first: $first, after: $after)"`
 			} `graphql:"... on ProjectV2"`
 		} `graphql:"node(id: $id)"`
 	}
 
-	err := client.Query(ctx, &q, map[string]interface{}{
-		"id":    projectID,
-		"first": githubv4.Int(limit),
-	})
-	if err != nil {
-		log.Fatalf("items query failed: %v", err)
+	var all []Item
+	var after githubv4.String
+	hasAfter := false
+
+	for {
+		vars := map[string]interface{}{
+			"id":    projectID,
+			"first": githubv4.Int(limit),
+		}
+		if hasAfter {
+			vars["after"] = githubv4.NewString(after)
+		} else {
+			vars["after"] = (*githubv4.String)(nil)
+		}
+
+		err := client.Query(ctx, &q, vars)
+		if err != nil {
+			log.Fatalf("items query failed: %v", err)
+		}
+
+		all = append(all, q.Node.ProjectV2.Items.Nodes...)
+
+		if !q.Node.ProjectV2.Items.PageInfo.HasNextPage {
+			break
+		}
+
+		after = q.Node.ProjectV2.Items.PageInfo.EndCursor
+		hasAfter = true
 	}
 
-	if len(q.Node.ProjectV2.Items.Nodes) == limit {
-		log.Printf(
-			"NOTE: scanned %d items (limit reached, no pagination by design). Increase -limit if needed.",
-			limit,
-		)
-	}
-
-	return q.Node.ProjectV2.Items.Nodes
+	return all
 }
 
 func inAwaitingQA(it Item) bool {
