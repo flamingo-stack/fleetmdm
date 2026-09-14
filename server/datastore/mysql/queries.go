@@ -333,7 +333,10 @@ func (ds *Datastore) NewQuery(
 		return nil, ctxerr.Wrap(ctx, err, "creating new Query")
 	}
 
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "getting last insert id for query")
+	}
 	query.ID = uint(id) //nolint:gosec // dismiss G115
 	query.Packs = []fleet.Pack{}
 
@@ -1379,3 +1382,4 @@ func numSavedQueriesDB(ctx context.Context, db sqlx.QueryerContext) (int, error)
 
 	return count, nil
 }
+
