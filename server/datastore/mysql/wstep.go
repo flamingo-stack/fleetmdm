@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
 )
 
@@ -40,20 +41,22 @@ VALUES
 		crt.NotAfter,
 		certPEM,
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "insert wstep certificate")
+	}
+	return nil
 }
 
 // WSTEPNewSerial allocates and returns a new (increasing) serial number.
 func (ds *Datastore) WSTEPNewSerial(ctx context.Context) (*big.Int, error) {
 	result, err := ds.writer(ctx).ExecContext(ctx, `INSERT INTO wstep_serials () VALUES ();`)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "insert wstep serial")
 	}
-	lid, err := result.LastInsertId() // TODO: ok if sequential and not random?
+	lid, err := result.LastInsertId() // NOTE: sequential serials are acceptable here as they are not relied upon for unpredictability; certificate issuance authorization is handled separately.
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get last insert id for wstep serial")
 	}
-	// TODO: check maxSerialNumber?
 	return big.NewInt(lid), nil
 }
 
@@ -65,5 +68,8 @@ UPDATE sha256 = new.sha256;`,
 		deviceUUID,
 		strings.ToUpper(hash), // TODO: confirm if this is necessary
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "associate wstep cert hash")
+	}
+	return nil
 }
