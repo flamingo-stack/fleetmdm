@@ -93,7 +93,7 @@ func NewDB(conf *MysqlConfig, opts *DBOptions, otelDriverName string) (*sqlx.DB,
 		var err error
 		db, err = sqlx.Open(driverName, dsn)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to open mysql connection: %w", err)
 		}
 	}
 
