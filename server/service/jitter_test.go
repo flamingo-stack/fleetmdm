@@ -35,7 +35,7 @@ func TestJitterForHost(t *testing.T) {
 	t.Logf("min=%d \t max=%d \t variation=%d\n", minVal, maxVal, variation)
 
 	// check that variation is below 1% of the total amount of hosts
-	require.Less(t, variation, int(float32(hostCount)/0.01))
+	require.Less(t, variation, int(float32(hostCount)*0.01))
 }
 
 func TestNoJitter(t *testing.T) {
