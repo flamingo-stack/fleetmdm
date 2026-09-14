@@ -110,6 +110,7 @@ func NewProxy(
 
 	handler, err := newProxyHandler(targetURL, rootCA, insecure, signer)
 	if err != nil {
+		listener.Close()
 		return nil, fmt.Errorf("make proxy handler: %w", err)
 	}
 
@@ -226,7 +227,7 @@ type signingRoundTripper struct {
 func (s *signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Sign the request before sending
 	if err := s.signer.Sign(req); err != nil {
-		return nil, fmt.Errorf("signing request: %#v", err)
+		return nil, fmt.Errorf("signing request: %w", err)
 	}
 
 	// Remove X-Forwarded-For because we are forwarding from 127.0.0.1,

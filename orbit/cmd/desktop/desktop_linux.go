@@ -54,7 +54,8 @@ func blockWaitForStopEvent(_ string) error {
 func trayIconExists() bool {
 	conn, err := dbus.SessionBus()
 	if err != nil {
-		log.Error().Err(err)
+		log.Error().Err(err).Msg("trayIconExists: connect to session bus")
+		return false
 	}
 
 	// Get the name we would expect systray to reserve for our tray icon.

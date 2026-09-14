@@ -57,7 +57,7 @@ func buildNFPM(opt Options, pkger nfpm.Packager) (string, error) {
 	}
 
 	if opt.Architecture != ArchAmd64 && opt.Architecture != ArchArm64 {
-		return "", fmt.Errorf("Invalid architecture: %s", opt.Architecture)
+		return "", fmt.Errorf("invalid architecture: %s", opt.Architecture)
 	}
 
 	// Initialize autoupdate metadata
@@ -543,3 +543,4 @@ pkill fleet-desktop || true
 
 	return nil
 }
+

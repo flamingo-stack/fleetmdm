@@ -233,7 +233,7 @@ type DisassociateAssetsRequest = AssociateAssetsRequest
 // cancelled before reaching the device).
 //
 // https://developer.apple.com/documentation/devicemanagement/disassociate_assets
-func DisassociateAssets(token string, params *DisassociateAssetsRequest) (string, error) {
+func DisassociateAssets(ctx context.Context, token string, params *DisassociateAssetsRequest) (string, error) {
 	if err := params.Validate(); err != nil {
 		return "", err
 	}
@@ -243,7 +243,7 @@ func DisassociateAssets(token string, params *DisassociateAssetsRequest) (string
 		return "", fmt.Errorf("encoding params as JSON: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, getBaseURL()+"/assets/disassociate", &reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getBaseURL()+"/assets/disassociate", &reqBody)
 	if err != nil {
 		return "", fmt.Errorf("creating request to Apple VPP endpoint: %w", err)
 	}
