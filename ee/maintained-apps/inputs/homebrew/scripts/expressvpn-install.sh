@@ -4,6 +4,11 @@
 APPDIR="/Applications/"
 TMPDIR=$(mktemp -d)
 
+cleanup() {
+  rm -rf "$TMPDIR"
+}
+trap cleanup EXIT
+
 # functions
 
 quit_application() {
@@ -16,8 +21,8 @@ quit_application() {
   fi
 
   local console_user
-  console_user=$(stat -f "%Su" /dev/console)
-  if [[ $EUID -eq 0 && "$console_user" == "root" ]]; then
+  console_user=$(stat -f "%Su" /dev/console 2>/dev/null || echo "")
+  if [[ -z "$console_user" || "$console_user" == "root" || "$console_user" == "loginwindow" ]]; then
     echo "Not logged into a non-root GUI; skipping quitting application ID '$bundle_id'."
     return
   fi
@@ -82,4 +87,5 @@ if [ $EXIT_CODE -ne 0 ]; then
   echo "Error: Installer exited with code $EXIT_CODE"
   exit $EXIT_CODE
 fi
+
 
