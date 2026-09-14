@@ -19,8 +19,9 @@ const (
 
 // IAMTokenCache holds a cached token and its generation time
 type IAMTokenCache struct {
-	token     string
-	generated time.Time
+	token      string
+	generated  time.Time
+	expiryTime time.Duration
 }
 
 // TokenGenerator is a function that generates a new IAM authentication token
@@ -45,13 +46,9 @@ func NewIAMAuthTokenManager(tokenGen TokenGenerator) *IAMAuthTokenManager {
 
 // GetToken retrieves a valid IAM authentication token, using cache when possible
 func (m *IAMAuthTokenManager) GetToken(ctx context.Context) (string, error) {
-	// Calculate expiry time with jitter
-	jitter := time.Duration(rand.Int63n(int64(maxJitter))) //nolint:gosec // jitter doesn't need cryptographic randomness
-	expiryTime := tokenRefreshTime + jitter
-
 	// Check if we have a valid cached token
 	m.cacheMu.RLock()
-	if m.cache != nil && time.Since(m.cache.generated) < expiryTime {
+	if m.cache != nil && time.Since(m.cache.generated) < m.cache.expiryTime {
 		token := m.cache.token
 		m.cacheMu.RUnlock()
 		return token, nil
@@ -63,7 +60,7 @@ func (m *IAMAuthTokenManager) GetToken(ctx context.Context) (string, error) {
 	defer m.cacheMu.Unlock()
 
 	// Double-check in case another goroutine generated a token while we were waiting
-	if m.cache != nil && time.Since(m.cache.generated) < expiryTime {
+	if m.cache != nil && time.Since(m.cache.generated) < m.cache.expiryTime {
 		return m.cache.token, nil
 	}
 
@@ -72,9 +69,14 @@ func (m *IAMAuthTokenManager) GetToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	// Calculate expiry time with jitter, fixed at generation time
+	jitter := time.Duration(rand.Int63n(int64(maxJitter))) //nolint:gosec // jitter doesn't need cryptographic randomness
+	expiryTime := tokenRefreshTime + jitter
+
 	m.cache = &IAMTokenCache{
-		token:     token,
-		generated: time.Now(),
+		token:      token,
+		generated:  time.Now(),
+		expiryTime: expiryTime,
 	}
 
 	return token, nil

@@ -57,6 +57,7 @@ func Up_20210601000008(tx *sql.Tx) error {
 	if err != nil {
 		return errors.Wrap(err, "remove duplicate secrets")
 	}
+	defer rows.Close()
 	type sec struct {
 		secret string
 		count  int
@@ -70,6 +71,9 @@ func Up_20210601000008(tx *sql.Tx) error {
 			return errors.Wrap(err, "scanning duplicated secrets")
 		}
 		secretsToReduce = append(secretsToReduce, sec{secret: secret, count: c})
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "iterating duplicated secrets")
 	}
 	for _, s := range secretsToReduce {
 		// Remove duplicate secrets

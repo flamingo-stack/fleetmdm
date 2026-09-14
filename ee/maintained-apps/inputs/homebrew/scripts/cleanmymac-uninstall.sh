@@ -100,14 +100,18 @@ trash() {
   fi
 
   local trash="/Users/$logged_in_user/.Trash"
-  local file_name="$(basename "${target_file}")"
+  local file_name
 
-  if [[ -e "$target_file" ]]; then
-    echo "removing $target_file."
-    mv -f "$target_file" "$trash/${file_name}_${timestamp}_${rand}"
-  else
-    echo "$target_file doesn't exist."
-  fi
+  # Glob-expand target_file (compgen preserves spaces in the path; [[ -e "$x" ]] does not expand *)
+  while IFS= read -r expanded_file; do
+    if [[ -e "$expanded_file" ]]; then
+      file_name="$(basename "${expanded_file}")"
+      echo "removing $expanded_file."
+      mv -f "$expanded_file" "$trash/${file_name}_${timestamp}_${rand}"
+    else
+      echo "$expanded_file doesn't exist."
+    fi
+  done < <(compgen -G "$target_file")
 }
 
 remove_launchctl_service 'com.macpaw.CleanMyMac5.HealthMonitor'
@@ -130,3 +134,4 @@ trash $LOGGED_IN_USER '~/Library/LaunchAgents/com.macpaw.CleanMyMac5.Updater.pli
 trash $LOGGED_IN_USER '~/Library/Logs/com.macpaw.CleanMyMac5'
 trash $LOGGED_IN_USER '~/Library/Preferences/com.macpaw.CleanMyMac5.plist'
 trash $LOGGED_IN_USER '~/Library/Saved Application State/com.macpaw.CleanMyMac5.savedState'
+

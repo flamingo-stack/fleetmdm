@@ -64,7 +64,7 @@ func TestValidateOrgLogoFile(t *testing.T) {
 		// fleet.ValidateOrgLogoBytes fires its size check before
 		// image.DecodeConfig, so the body content doesn't need to
 		// decode as a real image.
-		body := make([]byte, orgLogoMaxFileSize+1)
+		body := make([]byte, fleet.OrgLogoMaxFileSize+1)
 		err := validateOrgLogoFile(writeTempFile(t, "big.png", body))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "100KB or less")

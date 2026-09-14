@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
@@ -35,6 +36,31 @@ var (
 	OIDAppleSerialNumber = asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 8, 9, 1}
 	OIDAppleNonce        = asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 8, 11, 1}
 )
+
+var (
+	appleEnterpriseAttestationRootCAPoolOnce sync.Once
+	appleEnterpriseAttestationRootCAPool     *x509.CertPool
+	appleEnterpriseAttestationRootCAPoolErr  error
+)
+
+func getAppleEnterpriseAttestationRootCAPool() (*x509.CertPool, error) {
+	appleEnterpriseAttestationRootCAPoolOnce.Do(func() {
+		rootCABlock, _ := pem.Decode([]byte(appleEnterpriseAttestationRootCA))
+		if rootCABlock == nil {
+			appleEnterpriseAttestationRootCAPoolErr = fmt.Errorf("Failed to parse Apple Enterprise Attestation Root CA certificate")
+			return
+		}
+		rootCA, err := x509.ParseCertificate(rootCABlock.Bytes)
+		if err != nil {
+			appleEnterpriseAttestationRootCAPoolErr = fmt.Errorf("Failed to parse Apple Enterprise Attestation Root CA certificate: %s", err.Error())
+			return
+		}
+		pool := x509.NewCertPool()
+		pool.AddCert(rootCA)
+		appleEnterpriseAttestationRootCAPool = pool
+	})
+	return appleEnterpriseAttestationRootCAPool, appleEnterpriseAttestationRootCAPoolErr
+}
 
 func (s *Service) ValidateChallenge(ctx context.Context, enrollment *types.Enrollment, account *types.Account, challengeID uint, payload string) (*types.ChallengeResponse, error) {
 	ctx, span := tracer.Start(ctx, "acme.service.ValidateChallenge")
@@ -128,16 +154,11 @@ func (s *Service) validateDeviceAttestationChallenge(ctx context.Context, enroll
 func (s *Service) validateAppleDeviceAttestationStatement(ctx context.Context, enrollment *types.Enrollment, challenge *types.Challenge, attStmt types.AppleDeviceAttestationStatement) error {
 	roots := s.TestAppleRootCAs
 	if roots == nil {
-		roots = x509.NewCertPool()
-		rootCABlock, _ := pem.Decode([]byte(appleEnterpriseAttestationRootCA))
-		if rootCABlock == nil {
-			return types.BadAttestationStatementError("Failed to parse Apple Enterprise Attestation Root CA certificate")
-		}
-		rootCA, err := x509.ParseCertificate(rootCABlock.Bytes)
+		pool, err := getAppleEnterpriseAttestationRootCAPool()
 		if err != nil {
-			return types.BadAttestationStatementError(fmt.Sprintf("Failed to parse Apple Enterprise Attestation Root CA certificate: %s", err.Error()))
+			return types.BadAttestationStatementError(err.Error())
 		}
-		roots.AddCert(rootCA)
+		roots = pool
 	}
 
 	if len(attStmt.X5C) < 1 {

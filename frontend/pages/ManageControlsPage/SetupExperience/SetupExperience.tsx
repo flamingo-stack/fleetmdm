@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect } from "react";
 import { InjectedRouter, Params } from "react-router/lib/Router";
 
 import { AppContext } from "context/app";
@@ -27,6 +27,24 @@ const SetupExperience = ({
   const { section, platform: urlPlatformParam } = params;
   const { isPremiumTier } = useContext(AppContext);
 
+  const DEFAULT_SETTINGS_SECTION = SETUP_EXPERIENCE_NAV_ITEMS[0];
+
+  const currentFormSection =
+    SETUP_EXPERIENCE_NAV_ITEMS.find((item) => item.urlSection === section) ??
+    DEFAULT_SETTINGS_SECTION;
+
+  useEffect(() => {
+    if (
+      currentFormSection.urlSection !== "install-software" &&
+      urlPlatformParam
+    ) {
+      router.replace(
+        currentFormSection.path + queryString // current card doesn't support platforms yet
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFormSection.urlSection, urlPlatformParam, queryString]);
+
   // Not premium shows premium message
   if (!isPremiumTier) {
     return (
@@ -36,20 +54,6 @@ const SetupExperience = ({
     );
   }
 
-  const DEFAULT_SETTINGS_SECTION = SETUP_EXPERIENCE_NAV_ITEMS[0];
-
-  const currentFormSection =
-    SETUP_EXPERIENCE_NAV_ITEMS.find((item) => item.urlSection === section) ??
-    DEFAULT_SETTINGS_SECTION;
-
-  if (
-    currentFormSection.urlSection !== "install-software" &&
-    urlPlatformParam
-  ) {
-    router.replace(
-      currentFormSection.path + queryString // current card doesn't support platforms yet
-    );
-  }
   const CurrentCard = currentFormSection.Card;
 
   return (

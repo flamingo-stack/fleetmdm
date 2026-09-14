@@ -7,6 +7,7 @@ import { ITeamConfig } from "interfaces/team";
 import { getErrorReason } from "interfaces/errors";
 
 import { LEARN_MORE_ABOUT_BASE_LINK } from "utilities/constants";
+import { API_NO_TEAM_ID } from "interfaces/team";
 
 import diskEncryptionAPI from "services/entities/disk_encryption";
 import teamsAPI, { ILoadTeamResponse } from "services/entities/teams";
@@ -93,7 +94,7 @@ const DiskEncryption = ({
     {
       refetchOnWindowFocus: false,
       retry: false,
-      enabled: currentTeamId !== 0,
+      enabled: currentTeamId !== API_NO_TEAM_ID,
       select: (res) => res.fleet,
       onSuccess: (res) => {
         const enableDiskEncryption = res.mdm?.enable_disk_encryption ?? false;
@@ -119,7 +120,7 @@ const DiskEncryption = ({
       );
       onMutation();
       setShowAggregate(diskEncryptionEnabled);
-      if (currentTeamId === 0) {
+      if (currentTeamId === API_NO_TEAM_ID) {
         getUpdatedAppConfig();
       }
     } catch (e) {
@@ -148,7 +149,7 @@ const DiskEncryption = ({
     }
   };
 
-  if (currentTeamId === 0 && isLoadingTeam) {
+  if (currentTeamId === API_NO_TEAM_ID && isLoadingTeam) {
     setIsLoadingTeam(false);
   }
 
