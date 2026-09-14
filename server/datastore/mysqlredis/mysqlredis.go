@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
-	"golang.org/x/sync/singleflight"
 )
 
 // Datastore is the mysqlredis datastore type - it wraps the fleet.Datastore
@@ -26,7 +25,6 @@ type Datastore struct {
 	// helpers short-circuit without touching Redis. See host_cache.go.
 	hostCacheEnabled bool
 	hostCacheTTL     time.Duration
-	hostCacheSF      singleflight.Group
 }
 
 // Option is an option that can be passed to New to configure the datastore.
