@@ -4,7 +4,6 @@ import (
 	"crypto/md5" // nolint:gosec // used only to hash for efficient comparisons
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -116,7 +115,6 @@ func TestUp_20250904091745(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal integrationsJSON: %v", err)
 	}
-	fmt.Printf("Marshalled integrations_json: %s\n", string(integrationJSONBytes))
 
 	insertNDESPasswordStmt := `INSERT INTO mdm_config_assets (name, value, md5_checksum) VALUES (?, ?, UNHEX(?))` // nolint:gosec // just test data, not hardcoded credentials
 	_, err = db.Exec(insertNDESPasswordStmt, fleet.MDMAssetNDESPassword, ndesEncryptedPassword, md5ChecksumBytes(ndesEncryptedPassword))
