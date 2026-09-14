@@ -80,11 +80,17 @@ type Connector struct {
 func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	token, err := c.tokenGen.getAuthToken(ctx)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Error("failed to generate IAM auth token", "err", err)
+		}
 		return nil, fmt.Errorf("failed to generate IAM auth token: %w", err)
 	}
 
 	cfg, err := mysql.ParseDSN(c.baseDSN)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Error("failed to parse DSN", "err", err)
+		}
 		return nil, fmt.Errorf("failed to parse DSN: %w", err)
 	}
 
@@ -92,10 +98,25 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 
 	connector, err := mysql.NewConnector(cfg)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Error("failed to create connector", "err", err)
+		}
 		return nil, fmt.Errorf("failed to create connector: %w", err)
 	}
 
-	return connector.Connect(ctx)
+	conn, err := connector.Connect(ctx)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Error("failed to connect using IAM auth token", "err", err)
+		}
+		return nil, err
+	}
+
+	if c.logger != nil {
+		c.logger.Debug("connected to RDS using IAM auth token")
+	}
+
+	return conn, nil
 }
 
 // Driver implements driver.Connector
