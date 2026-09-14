@@ -98,7 +98,7 @@ func (r CVEMatchingRule) match(ctx context.Context, ds fleet.Datastore) ([]fleet
 	}
 	software, err := ds.ListSoftwareForVulnDetection(ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing software for vuln detection (rule %q): %w", r.NameLikeMatch, err)
 	}
 
 	var excludePattern string
@@ -174,7 +174,7 @@ func CheckCustomVulnerabilities(ctx context.Context, ds fleet.Datastore, logger 
 		// Return early so DeleteOutOfDateVulnerabilities doesn't run.
 		// Otherwise, without the insert refreshing updated_at, all existing vulns would look stale and be deleted.
 		logger.ErrorContext(ctx, "Error inserting software vulnerabilities", "err", err)
-		return nil, err
+		return nil, fmt.Errorf("inserting software vulnerabilities: %w", err)
 	}
 
 	if err := ds.DeleteOutOfDateVulnerabilities(ctx, fleet.CustomSource, startTime); err != nil {
