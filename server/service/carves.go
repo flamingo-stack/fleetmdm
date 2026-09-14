@@ -396,8 +396,13 @@ func (svc *Service) CarveBlock(ctx context.Context, payload fleet.CarveBlockPayl
 	//     that host to verify carve ownership — ensuring one host cannot
 	//     post blocks into another host's carve session.
 	//  3. With osquery.allow_body_auth_fallback=true (default), the
-	//     pre-auth middleware is not installed; no host ends up in ctx,
-	//     and the ownership check is skipped.
+	//     pre-auth middleware is not installed; no host ends up in ctx.
+	//     In that case, the check below cannot verify ownership against an
+	//     authenticated host, and this is explicitly logged so it is
+	//     visible (rather than silently skipped) that the second layer of
+	//     defense did not run for this request. Operators who need
+	//     host-ownership enforcement on this endpoint should set
+	//     osquery.allow_body_auth_fallback=false.
 	carve, err := svc.carveStore.CarveBySessionId(ctx, payload.SessionId)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "find carve by session_id")
@@ -407,12 +412,18 @@ func (svc *Service) CarveBlock(ctx context.Context, payload fleet.CarveBlockPayl
 		return errors.New("request_id does not match")
 	}
 
-	if host, ok := hostctx.FromContext(ctx); ok && host.ID != carve.HostId {
-		logging.WithExtras(ctx, "carve_host_id", carve.HostId, "authed_host_id", host.ID,
-			"reason", "carve host ownership mismatch")
-		ose := newOsqueryError("authentication error")
-		ose.StatusCode = http.StatusUnauthorized
-		return ose
+	if host, ok := hostctx.FromContext(ctx); ok {
+		if host.ID != carve.HostId {
+			logging.WithExtras(ctx, "carve_host_id", carve.HostId, "authed_host_id", host.ID,
+				"reason", "carve host ownership mismatch")
+			ose := newOsqueryError("authentication error")
+			ose.StatusCode = http.StatusUnauthorized
+			return ose
+		}
+	} else {
+		logging.WithExtras(ctx, "carve_id", carve.ID, "carve_host_id", carve.HostId,
+			"reason", "carve host ownership check skipped: no authenticated host in context "+
+				"(osquery.allow_body_auth_fallback=true)")
 	}
 
 	// Request is now authenticated

@@ -75,6 +75,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer func() {
+		if err := mds.Close(); err != nil {
+			log.Printf("close mysql datastore: %v", err)
+		}
+	}()
 
 	mdmStorage, err := mds.NewMDMAppleMDMStorage()
 	if err != nil {

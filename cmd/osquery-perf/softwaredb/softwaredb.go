@@ -369,12 +369,16 @@ func generateDatabaseFromSQL(dbPath, sqlPath string) error {
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
-	defer db.Close()
 
 	// Execute the SQL file
 	if _, err := db.Exec(string(sqlContent)); err != nil {
+		db.Close()         // Close the handle before removing the file so cleanup is reliable on all platforms (notably Windows)
 		os.Remove(dbPath) // Clean up partial database
 		return fmt.Errorf("executing SQL file: %w", err)
+	}
+
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("closing database: %w", err)
 	}
 
 	log.Printf("✅ Successfully created database from %s", sqlPath)
