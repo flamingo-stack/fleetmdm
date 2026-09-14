@@ -104,12 +104,16 @@ func (s *Service) createOrderResponse(
 		return nil, ctxerr.Wrap(ctx, err, "constructing finalize URL for account")
 	}
 
-	var authzURL string
+	// NOTE: we only support a single authorization per order right now; if we add more we need to re-work this
+	var authzURLs []string
 	if len(authorizations) == 1 {
-		authzURL, err = s.getACMEURLWithBaseURL(ctx, baseURL, enrollment.PathIdentifier, "authorizations", fmt.Sprint(authorizations[0].ID))
+		authzURL, err := s.getACMEURLWithBaseURL(ctx, baseURL, enrollment.PathIdentifier, "authorizations", fmt.Sprint(authorizations[0].ID))
 		if err != nil {
 			return nil, ctxerr.Wrap(ctx, err, "constructing authorization URL for account")
 		}
+		authzURLs = []string{authzURL}
+	} else {
+		authzURLs = []string{}
 	}
 
 	var certURL string
@@ -125,7 +129,7 @@ func (s *Service) createOrderResponse(
 		Status:         order.Status,
 		Expires:        enrollment.NotValidAfter,
 		Identifiers:    order.Identifiers,
-		Authorizations: []string{authzURL},
+		Authorizations: authzURLs,
 		Finalize:       finalizeURL,
 		Certificate:    certURL,
 		Location:       orderURL,

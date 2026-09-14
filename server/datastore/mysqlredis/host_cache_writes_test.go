@@ -95,7 +95,8 @@ func TestWritePathInvalidation(t *testing.T) {
 					ds.UpdateHostRefetchCriticalQueriesUntilFunc = func(_ context.Context, _ uint, _ *time.Time) error { return nil }
 				},
 				invoke: func(ctx context.Context, d *Datastore, id uint, _ string) error {
-					return d.UpdateHostRefetchCriticalQueriesUntil(ctx, id, new(time.Unix(1, 0)))
+					until := time.Unix(1, 0)
+					return d.UpdateHostRefetchCriticalQueriesUntil(ctx, id, &until)
 				},
 				invoked: func(ds *mock.Store) bool { return ds.UpdateHostRefetchCriticalQueriesUntilFuncInvoked },
 			},
@@ -203,7 +204,8 @@ func TestWritePathInvalidation(t *testing.T) {
 				primeCachedHost(t, d, ids[i], nk)
 			}
 
-			params := fleet.NewAddHostsToTeamParams(new(uint(7)), ids)
+			teamID := uint(7)
+			params := fleet.NewAddHostsToTeamParams(&teamID, ids)
 			require.NoError(t, d.AddHostsToTeam(ctx, params))
 			require.True(t, ds.AddHostsToTeamFuncInvoked)
 			for _, nk := range nks {

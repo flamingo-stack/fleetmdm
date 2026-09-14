@@ -18,17 +18,19 @@ func init() {
 // and chart-collection crons included — reads it, so a degenerate row disables those jobs
 // instance-wide.
 //
-// Idempotent steps: reserve team id 1; seed id = 1 with the openframe defaults if absent;
-// repair an existing row by force-enabling the gating feature flags (JSON_MERGE_PATCH leaves
-// sibling keys untouched — safe even where team id 1 already shares the row).
+// Idempotent steps: seed id = 1 with the openframe defaults if absent; repair an existing row
+// by force-enabling the gating feature flags (JSON_MERGE_PATCH leaves sibling keys untouched —
+// safe even where team id 1 already shares the row).
+//
+// NOTE: this migration does not attempt to reserve team id 1 via AUTO_INCREMENT manipulation —
+// that approach is racy under concurrent writes and silently no-ops once any team with id >= 1
+// already exists (MySQL will not lower AUTO_INCREMENT below the current max). The
+// app_config_json row is keyed independently of the teams table's auto-increment state, so no
+// reservation of team id 1 is required for this migration's purpose.
 //
 // SEMANTIC-CONFLICT WATCHLIST (openframe/docs/upstream-sync-conflict-resolution.md):
-// writes upstream tables (`teams`, `app_config_json`); re-verify after upstream reshapes them.
+// writes upstream tables (`app_config_json`); re-verify after upstream reshapes them.
 func Up_20260831000001(tx *sql.Tx) error {
-	if _, err := tx.Exec("ALTER TABLE teams AUTO_INCREMENT = 2"); err != nil {
-		return fmt.Errorf("reserving team id 1: %w", err)
-	}
-
 	configBytes, err := json.Marshal(fleet.OpenframeDefaultAppConfig())
 	if err != nil {
 		return fmt.Errorf("marshaling default app config: %w", err)
