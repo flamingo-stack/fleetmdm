@@ -79,8 +79,8 @@ func certAuthRetro(t *testing.T, ctx context.Context, store storage.CertAuthStor
 }
 
 func expectErr(t *testing.T, have, want error) {
+	t.Helper()
 	if !errors.Is(have, want) {
-		t.Helper()
 		t.Errorf("have: %v; want: %v", have, want)
 	}
 }
