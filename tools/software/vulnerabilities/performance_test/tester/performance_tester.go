@@ -19,11 +19,18 @@ import (
 
 var (
 	// MySQL config
-	mysqlAddr = "localhost:3306"
-	mysqlUser = "fleet"
-	mysqlPass = "insecure"
-	mysqlDB   = "fleet"
+	mysqlAddr = getEnvOrDefault("PERF_TEST_MYSQL_ADDR", "localhost:3306")
+	mysqlUser = getEnvOrDefault("PERF_TEST_MYSQL_USER", "fleet")
+	mysqlPass = getEnvOrDefault("PERF_TEST_MYSQL_PASS", "insecure")
+	mysqlDB   = getEnvOrDefault("PERF_TEST_MYSQL_DB", "fleet")
 )
+
+func getEnvOrDefault(envVar, defaultValue string) string {
+	if v := os.Getenv(envVar); v != "" {
+		return v
+	}
+	return defaultValue
+}
 
 // TestFunction represents a datastore method to test
 type TestFunction func(context.Context, *mysql.Datastore) error
@@ -221,7 +228,7 @@ func main() {
 		Database: mysqlDB,
 	}, clock.C)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("connect to mysql datastore: %v", err)
 	}
 	defer func() { _ = ds.Close() }()
 
