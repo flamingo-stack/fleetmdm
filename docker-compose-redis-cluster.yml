@@ -8,12 +8,18 @@ services:
       cluster_network:
         ipv4_address: 172.20.0.30
     depends_on:
-      - redis-cluster-1
-      - redis-cluster-2
-      - redis-cluster-3
-      - redis-cluster-4
-      - redis-cluster-5
-      - redis-cluster-6
+      redis-cluster-1:
+        condition: service_healthy
+      redis-cluster-2:
+        condition: service_healthy
+      redis-cluster-3:
+        condition: service_healthy
+      redis-cluster-4:
+        condition: service_healthy
+      redis-cluster-5:
+        condition: service_healthy
+      redis-cluster-6:
+        condition: service_healthy
 
   redis-cluster-1:
     image: ${FLEET_REDIS_IMAGE:-redis:6.2}
@@ -25,6 +31,11 @@ services:
     networks:
       cluster_network:
         ipv4_address: 172.20.0.31
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7001", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
   redis-cluster-2:
     image: ${FLEET_REDIS_IMAGE:-redis:6.2}
@@ -36,6 +47,11 @@ services:
     networks:
       cluster_network:
         ipv4_address: 172.20.0.32
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7002", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
   redis-cluster-3:
     image: ${FLEET_REDIS_IMAGE:-redis:6.2}
@@ -47,6 +63,11 @@ services:
     networks:
       cluster_network:
         ipv4_address: 172.20.0.33
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7003", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
   redis-cluster-4:
     image: ${FLEET_REDIS_IMAGE:-redis:6.2}
@@ -58,6 +79,11 @@ services:
     networks:
       cluster_network:
         ipv4_address: 172.20.0.34
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7004", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
   redis-cluster-5:
     image: ${FLEET_REDIS_IMAGE:-redis:6.2}
@@ -69,6 +95,11 @@ services:
     networks:
       cluster_network:
         ipv4_address: 172.20.0.35
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7005", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
   redis-cluster-6:
     image: ${FLEET_REDIS_IMAGE:-redis:6.2}
@@ -80,6 +111,11 @@ services:
     networks:
       cluster_network:
         ipv4_address: 172.20.0.36
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "7006", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
 networks:
   cluster_network:
