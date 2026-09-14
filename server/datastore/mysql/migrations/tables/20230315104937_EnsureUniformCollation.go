@@ -26,7 +26,7 @@ func fixupSoftware(tx *sql.Tx, collation string) error {
 	rows, err := tx.Query(`
          SELECT
            COUNT(*) as total,
-           CONCAT('[', GROUP_CONCAT(id SEPARATOR ','), ']') as ids
+           CONCAT('[', GROUP_CONCAT(id ORDER BY id ASC SEPARATOR ','), ']') as ids
          FROM software
          GROUP BY ` +
 		fmt.Sprintf("`version` COLLATE %s,", collation) +
@@ -89,7 +89,7 @@ func fixupHostUsers(tx *sql.Tx, collation string) error {
 	rows, err := tx.Query(fmt.Sprintf(`
          SELECT
            COUNT(*) as total,
-           CONCAT('[', GROUP_CONCAT(JSON_OBJECT('username', username, 'host_id', host_id, 'uid', uid) SEPARATOR ","), ']') as ids
+           CONCAT('[', GROUP_CONCAT(JSON_OBJECT('username', username, 'host_id', host_id, 'uid', uid) ORDER BY host_id ASC, uid ASC, username ASC SEPARATOR ","), ']') as ids
          FROM host_users
          GROUP BY
            host_id,
@@ -146,7 +146,7 @@ func fixupOS(tx *sql.Tx, collation string) error {
 	rows, err := tx.Query(fmt.Sprintf(`
          SELECT
            COUNT(*) as total,
-           CONCAT('[', GROUP_CONCAT(JSON_OBJECT('name', name, 'version', version, 'arch', arch, 'kernel_version', kernel_version, 'platform', platform) SEPARATOR ","), ']') as ids
+           CONCAT('[', GROUP_CONCAT(JSON_OBJECT('name', name, 'version', version, 'arch', arch, 'kernel_version', kernel_version, 'platform', platform) ORDER BY name ASC, version ASC, arch ASC, kernel_version ASC, platform ASC SEPARATOR ","), ']') as ids
          FROM operating_systems
          GROUP BY `+
 		fmt.Sprintf("`version` COLLATE %s,", collation)+
