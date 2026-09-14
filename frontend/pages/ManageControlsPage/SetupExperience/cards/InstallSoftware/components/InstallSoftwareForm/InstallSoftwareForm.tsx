@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useState, useMemo } from "react";
+import React, { useCallback, useContext, useState, useMemo, useEffect } from "react";
 import { isEqual } from "lodash";
 import { InjectedRouter } from "react-router";
 
@@ -124,6 +124,14 @@ const InstallSoftwareForm = ({
     initialSelectedSoftware
   );
 
+  // Keep local selection in sync with the latest server-side data whenever
+  // softwareTitles changes (e.g. after a refetch following a save), so that
+  // stale local selections don't diverge from the freshly fetched truth.
+  useEffect(() => {
+    setSelectedSoftwareIds(initialSelectedSoftware);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [softwareTitles]);
+
   const installSoftwareDuringSetupCount = selectedSoftwareIds.length;
 
   const onChangeSoftwareSelect = useCallback((select: boolean, id: number) => {
@@ -158,6 +166,7 @@ const InstallSoftwareForm = ({
 
     const errorNotifications: INotification[] = [];
     let hadSuccess = false;
+    let softwareUpdateFailed = false;
 
     // 1. Software selection update
     if (shouldUpdateSoftware) {
@@ -170,6 +179,7 @@ const InstallSoftwareForm = ({
         hadSuccess = true;
         // Still let parent refetch even if the macOS call later fails
       } catch (e) {
+        softwareUpdateFailed = true;
         errorNotifications.push({
           id: "update-software",
           alertType: "error",
@@ -216,7 +226,14 @@ const InstallSoftwareForm = ({
       renderFlash("success", "Successfully updated.");
     }
 
-    refetchSoftwareTitles();
+    // Only refetch (which resyncs local selection state from server data via
+    // the effect above) if the software-selection save didn't fail. If it
+    // failed, refetching would discard the user's unsaved local selection
+    // and replace it with stale server data without any indication that the
+    // save didn't happen.
+    if (!softwareUpdateFailed) {
+      refetchSoftwareTitles();
+    }
     setIsSaving(false);
   };
 
