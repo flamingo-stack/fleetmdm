@@ -99,7 +99,7 @@ from it as an env var, and — when `database.tls.enabled` — the same Secret i
 precedence over the legacy `database.secretName`, which still applies when `existingSecret` is unset.
 The mount is whole-Secret (no `items:` projection), so every key in it surfaces as a file in the Fleet
 container; keep unrelated material out of that Secret if that matters to you.
-| Cache (Redis) | `cache.*` | `cache.existingConfigMap` | `fleet-cache` ConfigMap (address, key prefix) |
+| Cache (Redis) | `cache.*` | `cache.existingConfigMap`, `cache.tls.existingSecret` | `fleet-cache` ConfigMap (address, key prefix) |
 | Tenant UUID (multi-tenancy) | `fleet.openframe.multiTenancy.*` | `fleet.openframe.multiTenancy.existingConfigMap` | `fleet-openframe-tenant` ConfigMap (`FLEET_OPENFRAME_TENANT_UUID` = `tenantUuid`, empty in shared mode) |
 | Admin setup | `fleet.setup.*` | `fleet.setup.adminPassword.existingSecret` | `fleet-setup` Secret (`FLEET_SETUP_ADMIN_PASSWORD`) |
 
@@ -126,6 +126,24 @@ renders:
 It reads from the cache ConfigMap, so the prefix (typically the tenant ID) is
 managed alongside the Redis address. See
 [redis-key-prefix.md](redis-key-prefix.md) for what the prefix does in the server.
+
+## Redis TLS
+
+A managed Redis (Memorystore, ElastiCache) answers only over TLS, and its CA is private, so the
+client has to be handed one. `cache.tls` mirrors `database.tls` exactly:
+
+| values key | Env var | Notes |
+|------------|---------|-------|
+| `cache.tls.enabled` | `FLEET_REDIS_USE_TLS` | Off by default; an in-cluster Redis stays plain. |
+| `cache.tls.caCertKey` | `FLEET_REDIS_TLS_CA` | Key inside the Secret; becomes `/secrets/redis/<key>`. |
+| `cache.tls.serverName` | `FLEET_REDIS_TLS_SERVER_NAME` | Only when the certificate names a host the address does not. |
+| `cache.tls.existingSecret` | — | Secret mounted at `/secrets/redis`; falls back to `cache.secretName`. |
+
+The mount is whole-Secret, same as `/secrets/mysql`, and it is wired into both workloads that open a
+Redis connection: the server deployment and the vuln-processing cron.
+
+Fleet itself needs nothing else for a clustered managed Redis — `redis_cluster_follow_redirections`
+defaults to true, so MOVED replies from the discovery endpoint are followed.
 
 ## Migration job
 
@@ -357,10 +375,10 @@ helm upgrade --install fleet oci://ghcr.io/flamingo-stack/fleetmdm/helm-charts/f
 
 | File | Purpose |
 |------|---------|
-| `charts/fleet/values.yaml` | OpenFrame mode, externalized DB/cache/setup config, `cache.keyPrefixKey`, `cache.connectRetryAttempts`, `waitForMysql`, `probes`, `additionalCAs`, `vulnProcessing`, `deploymentAnnotations` |
+| `charts/fleet/values.yaml` | OpenFrame mode, externalized DB/cache/setup config, `cache.keyPrefixKey`, `cache.connectRetryAttempts`, `cache.tls`, `waitForMysql`, `probes`, `additionalCAs`, `vulnProcessing`, `deploymentAnnotations` |
 | `charts/fleet/templates/configmap.yaml` | **New** — generated DB/cache ConfigMaps |
 | `charts/fleet/templates/secret.yaml` | **New** — generated DB password / admin-setup Secrets |
-| `charts/fleet/templates/deployment.yaml` | `FLEET_OPENFRAME_MODE`, `FLEET_OPENFRAME_MULTI_TENANCY_ENABLED` / `FLEET_OPENFRAME_TENANT_UUID` / `FLEET_OPENFRAME_TEAM_ID`, `FLEET_REDIS_KEY_PREFIX`, ConfigMap/Secret refs, annotations, CA init container, probe split |
+| `charts/fleet/templates/deployment.yaml` | `FLEET_OPENFRAME_MODE`, `FLEET_OPENFRAME_MULTI_TENANCY_ENABLED` / `FLEET_OPENFRAME_TENANT_UUID` / `FLEET_OPENFRAME_TEAM_ID`, `FLEET_REDIS_KEY_PREFIX`, Redis TLS, ConfigMap/Secret refs, annotations, CA init container, probe split |
 | `charts/fleet/templates/job-migration.yaml` | `waitForMysql` init container, hook removal, TTL removal |
 | `charts/fleet/templates/vulnprocessing/cronjob.yaml` | Dedicated vuln-processing cron + `FLEET_REDIS_KEY_PREFIX`, feed-cache PVC mount, fsGroup, schedule stagger (moved from `templates/cron-vulnprocessing.yaml`) |
 | `charts/fleet/templates/vulnprocessing/pvc.yaml` | **New** — PVC persisting the vulnerability feed cache across cron runs |
