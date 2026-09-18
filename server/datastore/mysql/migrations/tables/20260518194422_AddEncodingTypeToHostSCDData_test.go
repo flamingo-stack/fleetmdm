@@ -15,6 +15,19 @@ func TestUp_20260518194422(t *testing.T) {
 	// migration this row must still be readable, with encoding_type defaulting
 	// to 0 (dense).
 	denseBytes := []byte{0x82, 0x05} // bits 1, 7, 8, 10 set: hosts {1, 7, 8, 10}
+	// Verify the comment's claim against the actual bit positions before
+	// relying on it below: byte0=0x82=0b10000010 (bits 1,7), byte1=0x05=
+	// 0b00000101 (bits 0,2 -> global bits 8,10).
+	var setBits []int
+	for byteIdx, b := range denseBytes {
+		for bit := 0; bit < 8; bit++ {
+			if b&(1<<uint(bit)) != 0 {
+				setBits = append(setBits, byteIdx*8+bit)
+			}
+		}
+	}
+	assert.Equal(t, []int{1, 7, 8, 10}, setBits, "denseBytes must encode hosts {1, 7, 8, 10}")
+
 	validFrom := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
 		INSERT INTO host_scd_data (dataset, entity_id, host_bitmap, valid_from)

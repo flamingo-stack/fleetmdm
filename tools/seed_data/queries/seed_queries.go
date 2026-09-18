@@ -37,6 +37,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err) //nolint:gocritic // ignore exitAfterDefer
 	}
+	// Ensure foreign key checks are always re-enabled, even on early exit.
+	defer func() {
+		if _, err := db.Exec("SET FOREIGN_KEY_CHECKS=1"); err != nil {
+			log.Println(err)
+		}
+	}()
 
 	// Prepare the insert statement
 	stmtPrefix := "INSERT INTO `queries` (`saved`, `name`, `description`, `query`, `author_id`, `observer_can_run`, `team_id`, `team_id_char`, `platform`, `min_osquery_version`, `schedule_interval`, `automations_enabled`, `logging_type`, `discard_data`) VALUES "
@@ -58,17 +64,12 @@ func main() {
 		stmt := stmtPrefix + strings.Join(valueStrings, ",") + stmtSuffix
 		_, err := db.Exec(stmt, valueArgs...)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(err) //nolint:gocritic // ignore exitAfterDefer
 		}
 
 		fmt.Printf("Inserted batch %d/%d\n", batch+1, totalRecords/batchSize)
 	}
 
-	// Re-enable foreign key checks
-	_, err = db.Exec("SET FOREIGN_KEY_CHECKS=1")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	fmt.Println("Finished inserting 1 million records.")
 }
+

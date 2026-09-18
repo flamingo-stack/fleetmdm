@@ -80,12 +80,13 @@ func Vulns(ctx context.Context, log Logger, opt VulnsOptions) Result {
 			res.Errors = append(res.Errors, fmt.Errorf("read %s: %w", p.file, err))
 			continue
 		}
-		if err := insertSoftware(ctx, db, p.platform, rows, p.count, opt.BatchSiz); err != nil {
+		inserted, err := insertSoftware(ctx, db, p.platform, rows, p.count, opt.BatchSiz)
+		if err != nil {
 			res.Errors = append(res.Errors, fmt.Errorf("insert %s: %w", p.platform, err))
 			continue
 		}
-		log.Printf("vulns: %d %s rows inserted from %s", p.count, p.platform, p.file)
-		res.Created += p.count
+		log.Printf("vulns: %d %s rows inserted from %s", inserted, p.platform, p.file)
+		res.Created += inserted
 	}
 	return res
 }
@@ -143,9 +144,13 @@ func softwareChecksum(name, version, source, bundleID, release, arch, vendor, ex
 // The platform argument is unused by the INSERT itself — source values in
 // the CSVs (e.g. "apps", "deb_packages", "programs") already encode the
 // platform. It's kept on the signature so the caller can log it.
-func insertSoftware(ctx context.Context, db *sql.DB, _platform string, rows [][]string, count, batch int) error {
+//
+// insertSoftware returns the number of rows actually queued for insertion,
+// which may be less than `count` if some CSV rows were skipped for having
+// fewer than 3 columns.
+func insertSoftware(ctx context.Context, db *sql.DB, _platform string, rows [][]string, count, batch int) (int, error) {
 	if len(rows) == 0 {
-		return errors.New("empty csv")
+		return 0, errors.New("empty csv")
 	}
 	// SET FOREIGN_KEY_CHECKS=0 is a session variable. Pin everything below
 	// to a single connection so the disable, the inserts, and the restore
@@ -153,12 +158,12 @@ func insertSoftware(ctx context.Context, db *sql.DB, _platform string, rows [][]
 	// FK-disabled connection to an unrelated caller.
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return fmt.Errorf("acquire dedicated conn: %w", err)
+		return 0, fmt.Errorf("acquire dedicated conn: %w", err)
 	}
 	defer conn.Close()
 
 	if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); err != nil {
-		return err
+		return 0, err
 	}
 	defer func() {
 		// Use a fresh context so the restore still runs even if ctx was
@@ -166,6 +171,7 @@ func insertSoftware(ctx context.Context, db *sql.DB, _platform string, rows [][]
 		_, _ = conn.ExecContext(context.Background(), "SET FOREIGN_KEY_CHECKS=1")
 	}()
 
+	inserted := 0
 	for i := 0; i < count; i += batch {
 		end := i + batch
 		if end > count {
@@ -200,10 +206,11 @@ func insertSoftware(ctx context.Context, db *sql.DB, _platform string, rows [][]
 			"(name, version, source, bundle_identifier, `release`, arch, vendor, extension_for, checksum) " +
 			"VALUES " + strings.Join(placeholders, ",")
 		if _, err := conn.ExecContext(ctx, stmt, args...); err != nil {
-			return err
+			return inserted, err
 		}
+		inserted += len(placeholders)
 	}
-	return nil
+	return inserted, nil
 }
 
 func csvField(row []string, i int) string {

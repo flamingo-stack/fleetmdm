@@ -21,6 +21,24 @@ func Up_20250219100000(tx *sql.Tx) error {
 		}
 	}
 
+	// Guard against data drift: vpp_apps is expected to have at most one row per
+	// (platform, adam_id). If that assumption is violated, the backfill UPDATE below
+	// could nondeterministically apply timestamps from an arbitrary matching row, so
+	// we assert uniqueness before running it.
+	var dupCount int
+	if err := tx.QueryRow(`
+		SELECT COUNT(*) FROM (
+			SELECT platform, adam_id
+			FROM vpp_apps
+			GROUP BY platform, adam_id
+			HAVING COUNT(*) > 1
+		) dups`).Scan(&dupCount); err != nil {
+		return fmt.Errorf("checking vpp_apps for duplicate platform/adam_id rows: %w", err)
+	}
+	if dupCount > 0 {
+		return fmt.Errorf("found %d duplicate (platform, adam_id) combinations in vpp_apps; refusing to backfill vpp_apps_teams timestamps to avoid nondeterministic results", dupCount)
+	}
+
 	// make a quick guess at created/updated timestamps; getting more exact timestamps requires looking at the activity
 	// feed, which may have been purged, so that query will be available for admins to run manually
 	_, err := tx.Exec(`UPDATE vpp_apps_teams vt
