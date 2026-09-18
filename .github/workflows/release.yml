@@ -228,6 +228,8 @@ jobs:
     needs: [version, changes, build, build_client, build_helm]
     runs-on: ubuntu-latest
     if: ${{ !failure() && !cancelled() }} 
+    concurrency:
+      group: ${{ github.event_name == 'push' && 'release-latest' || github.run_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
