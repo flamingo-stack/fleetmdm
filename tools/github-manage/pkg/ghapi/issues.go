@@ -127,14 +127,14 @@ func RemoveIssueFromProject(issueNumber int, projectID int) error {
 		if err.Error() == fmt.Sprintf("issue #%d not found in project %d", issueNumber, projectID) {
 			return nil
 		}
-		return fmt.Errorf("failed to get project item ID: %v", err)
+		return fmt.Errorf("failed to get project item ID: %w", err)
 	}
 
 	// Remove the item using the project ID and item ID
 	command := fmt.Sprintf("gh project item-delete %d --owner fleetdm --id %s", projectID, itemID)
 	_, err = RunCommandAndReturnOutput(command)
 	if err != nil {
-		return fmt.Errorf("failed to remove issue %d from project %d: %v", issueNumber, projectID, err)
+		return fmt.Errorf("failed to remove issue %d from project %d: %w", issueNumber, projectID, err)
 	}
 
 	return nil
@@ -145,19 +145,19 @@ func SyncEstimateField(issueNumber int, sourceProjectID, targetProjectID int) er
 	// Get the source project item to find the current estimate
 	sourceItemID, err := GetProjectItemID(issueNumber, sourceProjectID)
 	if err != nil {
-		return fmt.Errorf("failed to get source project item ID: %v", err)
+		return fmt.Errorf("failed to get source project item ID: %w", err)
 	}
 
 	// Get the target project item
 	targetItemID, err := GetProjectItemID(issueNumber, targetProjectID)
 	if err != nil {
-		return fmt.Errorf("failed to get target project item ID: %v", err)
+		return fmt.Errorf("failed to get target project item ID: %w", err)
 	}
 
 	// Get the estimate value from the source project using GraphQL
 	sourceEstimate, err := GetProjectItemFieldValue(sourceItemID, sourceProjectID, "Estimate")
 	if err != nil {
-		return fmt.Errorf("failed to get source estimate: %v", err)
+		return fmt.Errorf("failed to get source estimate: %w", err)
 	}
 
 	if sourceEstimate == "" || sourceEstimate == "0" {
@@ -167,7 +167,7 @@ func SyncEstimateField(issueNumber int, sourceProjectID, targetProjectID int) er
 	// Set the estimate in the target project
 	err = SetProjectItemFieldValue(targetItemID, targetProjectID, "Estimate", sourceEstimate)
 	if err != nil {
-		return fmt.Errorf("failed to set target estimate: %v", err)
+		return fmt.Errorf("failed to set target estimate: %w", err)
 	}
 
 	return nil
@@ -178,19 +178,19 @@ func SetCurrentSprint(issueNumber int, projectID int) error {
 	// Get the project item ID
 	itemID, err := GetProjectItemID(issueNumber, projectID)
 	if err != nil {
-		return fmt.Errorf("failed to get project item ID: %v", err)
+		return fmt.Errorf("failed to get project item ID: %w", err)
 	}
 
 	// Look up the sprint field ID
 	sprintField, err := LookupProjectFieldName(projectID, "sprint")
 	if err != nil {
-		return fmt.Errorf("failed to lookup sprint field: %v", err)
+		return fmt.Errorf("failed to lookup sprint field: %w", err)
 	}
 
 	// Use the general field setting function to set the sprint field to @current
 	err = SetProjectItemFieldValue(itemID, projectID, sprintField.Name, "@current")
 	if err != nil {
-		return fmt.Errorf("failed to set current sprint: %v", err)
+		return fmt.Errorf("failed to set current sprint: %w", err)
 	}
 
 	return nil
@@ -201,13 +201,13 @@ func SetIssueStatus(issueNumber int, projectID int, status string) error {
 	// Get the project item ID
 	itemID, err := GetProjectItemID(issueNumber, projectID)
 	if err != nil {
-		return fmt.Errorf("failed to get project item ID: %v", err)
+		return fmt.Errorf("failed to get project item ID: %w", err)
 	}
 
 	// Use the general field setting function to set the Status field
 	err = SetProjectItemFieldValue(itemID, projectID, "Status", status)
 	if err != nil {
-		return fmt.Errorf("failed to set status: %v", err)
+		return fmt.Errorf("failed to set status: %w", err)
 	}
 
 	return nil
@@ -371,7 +371,10 @@ listLoop:
 
 	for i, issue := range issues {
 		// if we find an error, we'll drain concurrent executions and then bail
-		if stopError != nil {
+		mu.Lock()
+		currentStopError := stopError
+		mu.Unlock()
+		if currentStopError != nil {
 			break
 		}
 
@@ -400,7 +403,9 @@ listLoop:
 						fmt.Fprintf(os.Stderr, " ERROR\n")
 						mu.Unlock()
 					}
+					mu.Lock()
 					stopError = err
+					mu.Unlock()
 					logger.Errorf("Error checking timeline for issue #%d: %v", iss.Number, err)
 					return
 				}

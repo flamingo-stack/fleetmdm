@@ -79,12 +79,12 @@ func processPackageFromUrl(url string) (*file.InstallerMetadata, error) {
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create http request: %s", err)
+		return nil, fmt.Errorf("create http request: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("get request: %s", err)
+		return nil, fmt.Errorf("get request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -95,13 +95,13 @@ func processPackageFromUrl(url string) (*file.InstallerMetadata, error) {
 
 	tfr, err := fleet.NewTempFileReader(resp.Body, nil)
 	if err != nil {
-		return nil, fmt.Errorf("reading custom package: %d", resp.StatusCode)
+		return nil, fmt.Errorf("reading custom package: %w", err)
 	}
 	defer tfr.Close()
 
 	metadata, err := file.ExtractInstallerMetadata(tfr)
 	if err != nil {
-		return nil, fmt.Errorf("extract installer metadata: %s", err)
+		return nil, fmt.Errorf("extract installer metadata: %w", err)
 	}
 	return metadata, nil
 }
@@ -109,15 +109,16 @@ func processPackageFromUrl(url string) (*file.InstallerMetadata, error) {
 func processPackageFromLocal(path string) (*file.InstallerMetadata, error) {
 	fp, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open file: %s", err)
+		return nil, fmt.Errorf("open file: %w", err)
 	}
+	defer fp.Close()
 	tfr := &fleet.TempFileReader{
 		File: fp,
 	}
 
 	metadata, err := file.ExtractInstallerMetadata(tfr)
 	if err != nil {
-		return nil, fmt.Errorf("extract installer metadata: %s", err)
+		return nil, fmt.Errorf("extract installer metadata: %w", err)
 	}
 	return metadata, nil
 }

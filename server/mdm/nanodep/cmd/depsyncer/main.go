@@ -183,9 +183,9 @@ func main() {
 		go func() {
 			defer wg.Done()
 			defer closeSyncNow(syncNow)
-			err = syncer.Run(ctx)
-			if err != nil {
-				logger.Info("msg", "syncer run", "err", err)
+			runErr := syncer.Run(ctx)
+			if runErr != nil {
+				logger.Info("msg", "syncer run", "err", runErr)
 			}
 		}()
 	}

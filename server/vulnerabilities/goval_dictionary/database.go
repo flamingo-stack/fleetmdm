@@ -25,7 +25,7 @@ const baseSearchStmt = `SELECT packages.version, cves.cve_id
     FROM packages join definitions on definitions.id = packages.definition_id
     JOIN advisories ON advisories.definition_id = definitions.id JOIN cves ON cves.advisory_id = advisories.id`
 
-func (db Database) Verfiy() error {
+func (db Database) Verify() error {
 	searchStmt := fmt.Sprintf("%s LIMIT 1", baseSearchStmt)
 	affectedSoftwareRows, err := db.sqlite.Query(searchStmt)
 	if err != nil {
@@ -72,7 +72,10 @@ func (db Database) Eval(ctx context.Context, software []fleet.Software, logger *
 				} else {
 					currentVersion = swItem.Version
 				}
-				fixedVersion := strings.Split(fixedVersionWithEpochPrefix, ":")[1]
+				fixedVersion := fixedVersionWithEpochPrefix
+				if parts := strings.SplitN(fixedVersionWithEpochPrefix, ":", 2); len(parts) == 2 {
+					fixedVersion = parts[1]
+				}
 
 				if utils.Rpmvercmp(currentVersion, fixedVersion) < 0 {
 					vulnerabilities = append(vulnerabilities, fleet.SoftwareVulnerability{
