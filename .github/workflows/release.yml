@@ -230,6 +230,7 @@ jobs:
     if: ${{ !failure() && !cancelled() }} 
     concurrency:
       group: ${{ github.event_name == 'push' && 'release-latest' || github.run_id }}
+      queue: max
     steps:
       - name: Checkout
         uses: actions/checkout@v4
