@@ -100,8 +100,6 @@ func (bc *BaseClient) ParseResponse(verb, path string, response *http.Response, 
 		}
 	}
 
-	bc.SetServerCapabilities(response)
-
 	return nil
 }
 

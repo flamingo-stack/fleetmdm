@@ -73,12 +73,12 @@ func Up_20260609104220(tx *sql.Tx) error {
 	}
 	if !indexExistsTx(tx, "abm_tokens", "idx_abm_tokens_enrollment_url_token") {
 		if _, err = tx.Exec(`ALTER TABLE abm_tokens ADD UNIQUE KEY idx_abm_tokens_enrollment_url_token (enrollment_url_token)`); err != nil {
-			return fmt.Errorf("dropping default for enrollment_url_token: %w", err)
+			return fmt.Errorf("adding unique key for enrollment_url_token: %w", err)
 		}
 	}
 	if !constraintExists(tx, "abm_tokens", "abm_tokens_enroll_url_length") {
 		if _, err = tx.Exec(`ALTER TABLE abm_tokens ADD CONSTRAINT abm_tokens_enroll_url_length CHECK (LENGTH(enrollment_url_token) > 32)`); err != nil {
-			return fmt.Errorf("dropping default for enrollment_url_token: %w", err)
+			return fmt.Errorf("adding length check constraint for enrollment_url_token: %w", err)
 		}
 	}
 
@@ -111,3 +111,4 @@ func Up_20260609104220(tx *sql.Tx) error {
 func Down_20260609104220(tx *sql.Tx) error {
 	return nil
 }
+

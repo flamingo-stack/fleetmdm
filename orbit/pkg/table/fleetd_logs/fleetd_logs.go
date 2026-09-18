@@ -36,6 +36,8 @@ func TablePlugin() *table.Plugin {
 func generate(ctx context.Context, queryContext table.QueryContext) ([]map[string]string, error) {
 	output := []map[string]string{}
 
+	Logger.writeMutex.Lock()
+	defer Logger.writeMutex.Unlock()
 	for _, entry := range Logger.logs {
 		row := make(map[string]string, 5)
 		// It would be nice if we could return NULL instead of an

@@ -24,6 +24,8 @@ func parseDefinitions(platform Platform, inputFile string, outputFile string) er
 		payload, err = processUbuntuDef(r)
 	case platform.IsRedHat():
 		payload, err = processRhelDef(r)
+	default:
+		return fmt.Errorf("oval parser: unsupported platform %v", platform)
 	}
 	if err != nil {
 		return fmt.Errorf("oval parser: %w", err)
@@ -490,3 +492,4 @@ func mapToUbuntuResult(xmlResult *oval_input.UbuntuResultXML) (*oval_parsed.Ubun
 
 	return r, nil
 }
+

@@ -61,6 +61,7 @@ func main() {
 		duplicates  map[string]struct{}
 	}
 	summaryByUser := make(map[string]summary)
+	var summaryByUserMu sync.Mutex
 
 	for _, userEmail := range userEmailList {
 		wg.Add(1)
@@ -135,7 +136,9 @@ func main() {
 				}
 				pageToken = list.(*calendar.Events).NextPageToken
 				if pageToken == "" || len(list.(*calendar.Events).Items) == 0 {
+					summaryByUserMu.Lock()
 					summaryByUser[userEmail] = summary{total: total, totalByDate: totalByDate, duplicates: duplicates}
+					summaryByUserMu.Unlock()
 					break
 				}
 			}
