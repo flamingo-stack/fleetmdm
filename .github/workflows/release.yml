@@ -239,6 +239,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           mkdir -p final-artifacts/clients
@@ -256,6 +258,17 @@ jobs:
           fi
 
           ls -lh final-artifacts/clients/
+
+      - name: Check client assets
+        run: |
+          if [ "${{ needs.build_client.result }}" = "success" ]; then
+            for d in fleet-mac-universal fleet-windows-amd64; do
+              [ -d "release-artifacts/$d" ] || { echo "::error::$d build artifact is missing"; exit 1; }
+            done
+          fi
+          for f in fleet-macos-universal.tar.gz fleet-windows-amd64.zip; do
+            [ -s "final-artifacts/clients/$f" ] || { echo "::error::$f is missing"; exit 1; }
+          done
 
       - name: Generate release header
         run: |
@@ -289,6 +302,7 @@ jobs:
           prerelease: ${{ github.event_name == 'push' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           body_path: RELEASE_HEADER.md
+          fail_on_unmatched_files: true
           files: |
             final-artifacts/clients/*.zip
             final-artifacts/clients/*.tar.gz
