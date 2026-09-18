@@ -180,11 +180,15 @@ func (oc *OrbitClient) requestWithExternal(verb string, pathOrURL string, params
 		// <<< OPENFRAME(agent-json-content-type)
 		// >>> OPENFRAME(agent-openframe-mode): inject Bearer auth + x-machine-id headers on every request when in openframe mode — openframe/docs/agent-openframe-mode.md
 		if oc.openFrameMode {
-			authToken := oc.authManager.GetToken()
-			if authToken != "" {
-				request.Header.Add("Authorization", "Bearer "+authToken)
+			if oc.authManager != nil {
+				authToken := oc.authManager.GetToken()
+				if authToken != "" {
+					request.Header.Add("Authorization", "Bearer "+authToken)
+				} else {
+					log.Debug().Msg("authToken is empty, not adding Authorization header")
+				}
 			} else {
-				log.Debug().Msg("authToken is empty, not adding Authorization header")
+				log.Debug().Msg("authManager is nil, not adding Authorization header")
 			}
 
 			if oc.machineIdProvider != nil {

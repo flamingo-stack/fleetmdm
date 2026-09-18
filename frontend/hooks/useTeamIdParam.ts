@@ -140,7 +140,7 @@ const rebuildQueryStringWithTeamId = (
 
         if (shouldReplace) {
           const newPart = `${paramName}=${replaceString}`;
-          if (paramIndex === -1) {
+          if (paramIndex !== -1) {
             parts.splice(paramIndex, 1, newPart);
           } else {
             parts.push(newPart);

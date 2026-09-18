@@ -15,6 +15,7 @@ import (
 	eu "github.com/fleetdm/fleet/v4/server/platform/endpointer"
 	platform_http "github.com/fleetdm/fleet/v4/server/platform/http"
 	"github.com/go-kit/kit/endpoint"
+	kitlog "github.com/go-kit/kit/log"
 	kithttp "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 )
@@ -34,9 +35,15 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response any) er
 func acmeErrorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
 	var acmeErr *types.ACMEError
 	if !errors.As(err, &acmeErr) {
-		// TODO: If we can get access to a logger, we can log the details here, to help troubleshoot service errors.
 		// if it's not already an ACME error, it is because it is an internal server
 		// error (or a dev error, for 4xx we should always return ACMEError).
+		if logger := ctx.Value(kitlog.Logger(nil)); logger != nil {
+			// no-op: placeholder retained for type assertion below
+			_ = logger
+		}
+		if logger, ok := ctx.Value(loggerContextKey).(kitlog.Logger); ok && logger != nil {
+			_ = logger.Log("err", err, "msg", "internal server error in ACME service")
+		}
 		acmeErr = types.InternalServerError("") // not passing err.Error() as we don't want to leak internal details
 	}
 
@@ -49,6 +56,12 @@ func acmeErrorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
 	// ignoring error as response started being written at that point
 	_ = json.NewEncoder(w).Encode(acmeErr)
 }
+
+// loggerContextKeyType is an unexported type used as the context key for
+// storing a logger, to avoid collisions with keys from other packages.
+type loggerContextKeyType struct{}
+
+var loggerContextKey = loggerContextKeyType{}
 
 func acmeDomainErrorEncoder(ctx context.Context, err error, w http.ResponseWriter, enc *json.Encoder, jsonErr *eu.JsonError) (handled bool) {
 	acmeErrorEncoder(ctx, err, w)

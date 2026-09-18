@@ -53,12 +53,10 @@ const AutoSizeInputField = ({
   }, [isFocused]);
 
   const onInputFocus = () => {
-    isFocused = true;
     onFocus();
   };
 
   const onInputBlur = () => {
-    isFocused = false;
     onBlur();
   };
 

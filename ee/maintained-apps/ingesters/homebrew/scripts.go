@@ -88,7 +88,7 @@ fi`, appPath)
 	return sb.String(), nil
 }
 
-func uninstallScriptForApp(cask *brewCask) string {
+func uninstallScriptForApp(cask *brewCask) (string, error) {
 	sb := newScriptBuilder()
 
 	for _, artifact := range cask.Artifacts {
@@ -129,7 +129,9 @@ func uninstallScriptForApp(cask *brewCask) string {
 				sb.Write(strings.Join(cask.PreUninstallScripts, "\n"))
 			}
 			for _, u := range artifact.Uninstall {
-				processUninstallArtifact(u, sb)
+				if err := processUninstallArtifact(u, sb); err != nil {
+					return "", fmt.Errorf("processing uninstall artifact: %w", err)
+				}
 			}
 			if len(cask.PostUninstallScripts) > 0 {
 				sb.Write(strings.Join(cask.PostUninstallScripts, "\n"))
@@ -137,12 +139,14 @@ func uninstallScriptForApp(cask *brewCask) string {
 		case len(artifact.Zap) > 0:
 			sortUninstall(artifact.Zap)
 			for _, z := range artifact.Zap {
-				processUninstallArtifact(z, sb)
+				if err := processUninstallArtifact(z, sb); err != nil {
+					return "", fmt.Errorf("processing zap artifact: %w", err)
+				}
 			}
 		}
 	}
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 // priority of uninstall directives is defined by homebrew here:
@@ -206,7 +210,7 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func processUninstallArtifact(u *brewUninstall, sb *scriptBuilder) {
+func processUninstallArtifact(u *brewUninstall, sb *scriptBuilder) error {
 	process := func(target optjson.StringOr[[]string], f func(path string)) {
 		if target.IsOther {
 			for _, path := range target.Other {
@@ -248,7 +252,7 @@ func processUninstallArtifact(u *brewUninstall, sb *scriptBuilder) {
 		addUserVar()
 		executable, ok := u.Script.Other["executable"].(string)
 		if !ok {
-			panic("executable not found or not a string in script")
+			return fmt.Errorf("executable not found or not a string in script")
 		}
 
 		// Build the command with arguments if present
@@ -259,12 +263,12 @@ func processUninstallArtifact(u *brewUninstall, sb *scriptBuilder) {
 		if argsVal, hasArgs := u.Script.Other["args"]; hasArgs {
 			args, ok := argsVal.([]interface{})
 			if !ok {
-				panic("args must be an array in script")
+				return fmt.Errorf("args must be an array in script")
 			}
 			for _, arg := range args {
 				argStr, ok := arg.(string)
 				if !ok {
-					panic("all args must be strings")
+					return fmt.Errorf("all args must be strings")
 				}
 				cmdParts = append(cmdParts, shellSingleQuote(argStr))
 			}
@@ -328,6 +332,8 @@ func processUninstallArtifact(u *brewUninstall, sb *scriptBuilder) {
 		sb.AddFunction("trash", trashFunc)
 		sb.Writef("trash $LOGGED_IN_USER %s", shellSingleQuote(path))
 	})
+
+	return nil
 }
 
 type scriptBuilder struct {

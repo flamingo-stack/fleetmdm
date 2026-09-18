@@ -95,7 +95,9 @@ const ManagedAccountModal = ({
           <>
             <div className={`${baseClass}__username`}>
               <span className={`${baseClass}__label`}>Username</span>
-              <span className={`${baseClass}__value`}>_fleetadmin</span>
+              <span className={`${baseClass}__value`}>
+                {managedAccountData?.username ?? "_fleetadmin"}
+              </span>
             </div>
             <InputFieldHiddenContent
               value={managedAccountData?.password ?? ""}
