@@ -71,9 +71,11 @@ func verifyLabelsToAssociate(ctx context.Context, ds fleet.Datastore, entityTeam
 		uniqueLabelNames = append(uniqueLabelNames, s)
 	}
 
-	if entityTeamID == nil { // no-team/all-teams entities can only access global labels
+	// >>> OPENFRAME(host-assignments): no-team/all-teams entities can only access global labels — openframe/docs/architecture-host-assignments.md
+	if entityTeamID == nil {
 		entityTeamID = ptr.Uint(0)
 	}
+	// <<< OPENFRAME(host-assignments)
 
 	labels, err := loadLabelsFromNames(ctx, ds, uniqueLabelNames, fleet.TeamFilter{User: user, TeamID: entityTeamID})
 	if err != nil {

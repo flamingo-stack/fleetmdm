@@ -1,3 +1,7 @@
+// >>> OPENFRAME(host-identity-team-scope): scopes the upstream hosts table's
+// osquery_host_id uniqueness constraint per-team instead of globally, so the
+// same device can enroll into more than one tenant team under shared-database
+// multitenancy — openframe/docs/upstream-sync-conflict-resolution.md
 package openframe
 
 import (
@@ -95,6 +99,51 @@ func Up_20260626000001(tx *sql.Tx) error {
 	return nil
 }
 
+// Down_20260626000001 restores the pre-migration schema: it re-creates the
+// original global UNIQUE(osquery_host_id) index and drops the per-team unique
+// index and its supporting generated column. This is only safe to run if no
+// rows currently violate a global-unique(osquery_host_id) constraint (i.e., no
+// device has actually been enrolled into more than one team since Up ran); if
+// such rows exist, re-adding idx_osquery_host_id will fail with a duplicate-key
+// error, which is the correct, safe failure mode for an unsound rollback.
 func Down_20260626000001(tx *sql.Tx) error {
+	const (
+		table     = "hosts"
+		oldIndex  = "idx_osquery_host_id"
+		newIndex  = "idx_hosts_team_osquery_host_id"
+		genColumn = "openframe_team_key"
+	)
+
+	hasOld, err := indexExists(tx, table, oldIndex)
+	if err != nil {
+		return fmt.Errorf("checking %s index: %w", oldIndex, err)
+	}
+	if !hasOld {
+		if _, err := tx.Exec("ALTER TABLE hosts ADD UNIQUE KEY idx_osquery_host_id (osquery_host_id)"); err != nil {
+			return fmt.Errorf("adding %s unique index: %w", oldIndex, err)
+		}
+	}
+
+	hasNew, err := indexExists(tx, table, newIndex)
+	if err != nil {
+		return fmt.Errorf("checking %s index: %w", newIndex, err)
+	}
+	if hasNew {
+		if _, err := tx.Exec("ALTER TABLE hosts DROP INDEX idx_hosts_team_osquery_host_id"); err != nil {
+			return fmt.Errorf("dropping %s index: %w", newIndex, err)
+		}
+	}
+
+	hasCol, err := columnExists(tx, table, genColumn)
+	if err != nil {
+		return fmt.Errorf("checking %s column: %w", genColumn, err)
+	}
+	if hasCol {
+		if _, err := tx.Exec("ALTER TABLE hosts DROP COLUMN openframe_team_key"); err != nil {
+			return fmt.Errorf("dropping %s column: %w", genColumn, err)
+		}
+	}
 	return nil
 }
+
+// <<< OPENFRAME(host-identity-team-scope)

@@ -72,9 +72,9 @@ func (ds *Datastore) OverwriteQueryResultRows(ctx context.Context, rows []*fleet
 		insertStmt := `
 		INSERT IGNORE INTO query_results (` + insertCols + `) VALUES
 	` + strings.Join(valueStrings, ",")
-		// <<< OPENFRAME(mysql-multitenancy)
 
 		result, err = tx.ExecContext(ctx, insertStmt, valueArgs...)
+		// <<< OPENFRAME(mysql-multitenancy)
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "inserting new rows")
 		}

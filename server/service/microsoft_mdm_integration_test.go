@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// >>> OPENFRAME(windows-mdm-reconcile-tests): fork-specific Windows MDM profile reconcile test helpers and tests
 // enrollWindowsHostInMDMForTest inserts a Windows MDM enrollment for the host and mirrors what osquery's
 // directIngestMDMWindows does (host_mdm.enrolled = 1 once the device's registry confirms MDM enrollment), making the
 // host eligible for the Windows profile reconcilers. Returns the enrolled device row, reloaded so its ID is set.
@@ -163,3 +164,5 @@ func TestReconcileWindowsProfilesForEnrollingHost(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, cmdsAgain, 1, "second per-host reconcile run must not enqueue another command")
 }
+
+// <<< OPENFRAME(windows-mdm-reconcile-tests)
