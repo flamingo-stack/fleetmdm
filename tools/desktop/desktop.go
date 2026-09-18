@@ -235,11 +235,11 @@ func createMacOSApp(version, authority string, notarize bool) error {
 		defer os.Remove(notarizationZip)
 
 		if err := packaging.Notarize(notarizationZip, "com.fleetdm.desktop"); err != nil {
-			return err
+			return fmt.Errorf("notarize app: %w", err)
 		}
 
 		if err := packaging.Staple(appDir); err != nil {
-			return err
+			return fmt.Errorf("staple app: %w", err)
 		}
 
 	}

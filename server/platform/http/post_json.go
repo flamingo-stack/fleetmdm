@@ -33,13 +33,13 @@ func (e *errWithStatus) StatusCode() int {
 func PostJSONWithTimeout(ctx context.Context, url string, v any, logger *slog.Logger) error {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal json body: %w", err)
 	}
 
 	client := fleethttp.NewClient(fleethttp.WithTimeout(30 * time.Second))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBytes))
 	if err != nil {
-		return err
+		return fmt.Errorf("build POST request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
