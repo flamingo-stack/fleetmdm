@@ -35,11 +35,6 @@ func TestUp_20250502222222(t *testing.T) {
 		Fullname string `db:"fullname"`
 	}
 
-	// type legacyEnrollRef struct {
-	// 	HostUUID  string `db:"host_uuid"`
-	// 	EnrollRef string `db:"enroll_ref"`
-	// }
-
 	type legacyAccount struct {
 		ID             uint      `db:"id"`
 		HostUUID       string    `db:"host_uuid"`
@@ -50,11 +45,6 @@ func TestUp_20250502222222(t *testing.T) {
 		EmailUpdatedAt time.Time `db:"email_updated_at"`
 		AccountUUID    string    `db:"account_uuid"`
 	}
-
-	// type hostMDMAccount struct {
-	// 	HostUUID    string `db:"host_uuid"`
-	// 	AccountUUID string `db:"account_uuid"`
-	// }
 
 	newHost := func(id uint, platform string) uint {
 		return uint(execNoErrLastID(t, db, //nolint:gosec // dismiss G115

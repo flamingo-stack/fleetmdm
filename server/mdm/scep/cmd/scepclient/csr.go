@@ -51,7 +51,10 @@ func loadOrMakeCSR(path string, opts *csrOptions) (*x509.CertificateRequest, err
 		template.ChallengePassword = opts.challenge
 	}
 
-	derBytes, _ := x509util.CreateCertificateRequest(rand.Reader, &template, opts.key)
+	derBytes, err := x509util.CreateCertificateRequest(rand.Reader, &template, opts.key)
+	if err != nil {
+		return nil, err
+	}
 	pemBlock := &pem.Block{
 		Type:  csrPEMBlockType,
 		Bytes: derBytes,

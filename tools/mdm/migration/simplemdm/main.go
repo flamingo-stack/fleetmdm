@@ -32,40 +32,6 @@ func newSimpleClient(apiToken string) *simpleClient {
 	}
 }
 
-// // TODO: Implement this to allow the webhook server to handle arbitrary serial numbers rather
-// // than the device ID provided via command line flag.
-//
-// getDeviceIDBySerial queries the SimpleMDM API to find the device ID by its serial number, see
-// https://api.simplemdm.com/v1#list-all-6
-// func (c *simpleClient) getDeviceIDBySerial(serial string) (uint, error) {
-// 	client := fleethttp.NewClient()
-// 	path := "https://a.simplemdm.com/api/v1/devices"
-// 	if search != "" {
-// 		path += fmt.Sprintf("?search=%s", serial)
-// 	}
-
-// 	req, err := http.NewRequest("GET", path, nil)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	req.SetBasicAuth(*apiTokenFlag, "")
-// 	req.Header.Set("Content-Type", "application/json")
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	defer resp.Body.Close()
-// 	bodyText, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	log.Printf("Listing devices with search term: %s\n%s", serial, bodyText)
-//
-// // TODO: Parse the response to find the device ID by serial number
-//
-// 	return 0, nil
-// }
-
 // unenroll sends a request to the SimpleMDM API unenroll a device by its ID, see
 // https://api.simplemdm.com/v1#unenroll
 func (c *simpleClient) unenroll(deviceID uint) error {
@@ -120,19 +86,13 @@ func main() {
 		}
 		log.Printf("%s %s %s\n", request.Method, request.URL.Path, detail)
 
-		// TODO: Parse request body to extract device serial from payload,
-		// for example:
-		// {
-		//   "timestamp": "0000-00-00T00:00:00Z",
-		//   "host": {
-		//     "id": 1,
-		//     "uuid": "1234-5678-9101-1121",
-		//     "hardware_serial": "V2RG6Y7VYL"
-		//   }
-		// }
-
-		// TODO: Use getDeviceIDBySerial to find the device ID by serial number
-		// For now, we just use the device ID provided via command line flag.
+		// NOTE: this webhook handler currently only supports unenrolling the single
+		// device ID provided via the --device-id command line flag, regardless of
+		// which device's webhook fired. See
+		// https://github.com/fleetdm/fleet/issues (tracked separately) for the
+		// follow-up work needed to parse the webhook payload's device serial number
+		// and look up the corresponding device ID via the SimpleMDM API
+		// (https://api.simplemdm.com/v1#list-all-6) before unenrolling.
 
 		time.Sleep(DELAY)
 
