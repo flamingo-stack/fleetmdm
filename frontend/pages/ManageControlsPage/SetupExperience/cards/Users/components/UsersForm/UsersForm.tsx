@@ -99,8 +99,12 @@ const UsersForm = ({
     e.preventDefault();
 
     setIsUpdating(true);
-    const canLockEndUserInfo =
-      formData.endUserAuthEnabled && formData.lockEndUserInfo;
+    // Only collapse lockEndUserInfo based on endUserAuthEnabled when Apple
+    // MDM is configured. Otherwise the checkbox is read-only and reflects a
+    // value preserved from the backend, so it should be sent as-is.
+    const lockEndUserInfoToSend = isMacMdmEnabledAndConfigured
+      ? formData.endUserAuthEnabled && formData.lockEndUserInfo
+      : formData.lockEndUserInfo;
 
     try {
       await mdmAPI.updateSetupExperienceSettings({
@@ -108,7 +112,7 @@ const UsersForm = ({
         enable_end_user_authentication: formData.endUserAuthEnabled,
         // Apple-only fields are omitted when Apple MDM isn't configured.
         ...(isMacMdmEnabledAndConfigured && {
-          lock_end_user_info: canLockEndUserInfo,
+          lock_end_user_info: lockEndUserInfoToSend,
           enable_managed_local_account: effectiveEnableManagedLocalAccount(
             formData
           ),
@@ -122,7 +126,10 @@ const UsersForm = ({
 
     setIsUpdating(false);
     if (isMacMdmEnabledAndConfigured) {
-      setFormData((prev) => ({ ...prev, lockEndUserInfo: canLockEndUserInfo }));
+      setFormData((prev) => ({
+        ...prev,
+        lockEndUserInfo: lockEndUserInfoToSend,
+      }));
     }
   };
 

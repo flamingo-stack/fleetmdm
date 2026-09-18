@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fleetdm/fleet/v4/orbit/pkg/constant"
@@ -45,6 +46,12 @@ type CVE struct {
 	debug            bool
 	WaitTimeForRetry time.Duration
 	MaxTryAttempts   int
+
+	// cachedCVEFeedsMu guards cachedCVEFeeds below.
+	cachedCVEFeedsMu sync.Mutex
+	// cachedCVEFeeds caches per-year legacy CVE feeds for this instance's dbDir
+	// while a VulnCheck sync is in progress, to avoid repeated file reads/writes.
+	cachedCVEFeeds map[int]*schema.NVDCVEFeedJSON10
 }
 
 var (
@@ -92,6 +99,7 @@ func NewCVE(dbDir string, opts ...CVEOption) (*CVE, error) {
 		logger:           slog.New(slog.DiscardHandler),
 		MaxTryAttempts:   maxRetryAttempts,
 		WaitTimeForRetry: waitTimeForRetry,
+		cachedCVEFeeds:   map[int]*schema.NVDCVEFeedJSON10{},
 	}
 	for _, fn := range opts {
 		fn(&s)
@@ -201,12 +209,19 @@ func (s *CVE) update(ctx context.Context) error {
 	return nil
 }
 
-func (s *CVE) updateYearFile(ctx context.Context, year int, cves []nvdapi.CVEItem) error {
+// legacyFeedYear clamps the given year to the earliest year supported by the
+// legacy NVD feed format used by the github.com/fleetdm/fleet/v4/server/vulnerabilities/nvd/tools
+// package (and originally the facebookincubator/nvdtools package it was forked from).
+func legacyFeedYear(year int) int {
 	// The NVD legacy feed files start at year 2002.
-	// This is assumed by the github.com/fleetdm/fleet/v4/server/vulnerabilities/nvd/tools package.
 	if year < 2002 {
-		year = 2002
+		return 2002
 	}
+	return year
+}
+
+func (s *CVE) updateYearFile(ctx context.Context, year int, cves []nvdapi.CVEItem) error {
+	year = legacyFeedYear(year)
 
 	// Read the CVE file for the year.
 	readStart := time.Now()
@@ -257,20 +272,17 @@ func (s *CVE) updateYearFile(ctx context.Context, year int, cves []nvdapi.CVEIte
 	return nil
 }
 
-var cachedCVEFeeds = map[int]*schema.NVDCVEFeedJSON10{}
-
 func (s *CVE) updateVulnCheckYearFile(ctx context.Context, year int, cves []VulnCheckCVE, modCount, addCount *int) error {
-	// The NVD legacy feed files start at year 2002.
-	// This is assumed by the facebookincubator/nvdtools package.
-	if year < 2002 {
-		year = 2002
-	}
+	year = legacyFeedYear(year)
 
 	updateStart := time.Now()
 
+	s.cachedCVEFeedsMu.Lock()
+	defer s.cachedCVEFeedsMu.Unlock()
+
 	var storedCVEFeed *schema.NVDCVEFeedJSON10
 	var err error
-	if feed, ok := cachedCVEFeeds[year]; ok && feed != nil {
+	if feed, ok := s.cachedCVEFeeds[year]; ok && feed != nil {
 		storedCVEFeed = feed
 	} else {
 		storedCVEFeed, err = readCVEsLegacyFormat(s.dbDir, year)
@@ -325,7 +337,7 @@ func (s *CVE) updateVulnCheckYearFile(ctx context.Context, year int, cves []Vuln
 	storedCVEFeed.CVEDataNumberOfCVEs = strconv.FormatInt(int64(len(storedCVEFeed.CVEItems)), 10)
 
 	// Store the file for the year.
-	cachedCVEFeeds[year] = storedCVEFeed
+	s.cachedCVEFeeds[year] = storedCVEFeed
 	return nil
 }
 
@@ -333,7 +345,7 @@ func (s *CVE) updateVulnCheckYearFile(ctx context.Context, year int, cves []Vuln
 func (s *CVE) writeLastModStartDateFile(lastModStartDate string) error {
 	normalized, err := parseAndFormatForNVD(lastModStartDate)
 	if err != nil {
-		return err
+		return fmt.Errorf("writeLastModStartDateFile: %w", err)
 	}
 
 	return os.WriteFile(
@@ -703,7 +715,9 @@ func (s *CVE) processVulnCheckFile(ctx context.Context, fileName string) error {
 		return zipReader.File[i].Name > zipReader.File[j].Name
 	})
 
-	cachedCVEFeeds = map[int]*schema.NVDCVEFeedJSON10{} // clear feeds cache for consistency
+	s.cachedCVEFeedsMu.Lock()
+	s.cachedCVEFeeds = map[int]*schema.NVDCVEFeedJSON10{} // clear feeds cache for consistency
+	s.cachedCVEFeedsMu.Unlock()
 
 	// files are in reverse chronological order by modification date
 	// so we can stop processing files once we find one that is older
@@ -765,6 +779,9 @@ func (s *CVE) processVulnCheckFile(ctx context.Context, fileName string) error {
 
 	// only save updated files post-vulncheck-hydration
 	storeStart := time.Now()
+	s.cachedCVEFeedsMu.Lock()
+	cachedCVEFeeds := s.cachedCVEFeeds
+	s.cachedCVEFeedsMu.Unlock()
 	for year, storedCVEFeed := range cachedCVEFeeds {
 		if err := storeCVEsInLegacyFormat(s.dbDir, year, storedCVEFeed); err != nil {
 			return err

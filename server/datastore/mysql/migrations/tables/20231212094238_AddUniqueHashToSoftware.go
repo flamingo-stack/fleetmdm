@@ -45,11 +45,11 @@ SET
 				version,
 				source,
 				COALESCE(bundle_identifier, ''),
-				` + "`release`" + `,
-				arch,
-				vendor,
-				browser,
-				extension_id
+				COALESCE(` + "`release`" + `, ''),
+				COALESCE(arch, ''),
+				COALESCE(vendor, ''),
+				COALESCE(browser, ''),
+				COALESCE(extension_id, '')
 			)
 		)
 	)
