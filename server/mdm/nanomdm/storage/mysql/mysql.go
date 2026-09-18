@@ -142,6 +142,7 @@ func (s *MySQLStorage) StoreAuthenticate(r *mdm.Request, msg *mdm.Authenticate) 
 	if r.Certificate != nil {
 		pemCert = cryptoutil.PEMCertificate(r.Certificate.Raw)
 	}
+	// >>> OPENFRAME(nanomdm-bootstrap-token-renewal): preserve bootstrap token across SCEP renewal — openframe/docs/nanomdm.md
 	// When a device undergoes SCEP certificate renewal, it sends a new
 	// Authenticate message. We must preserve the existing bootstrap token
 	// during renewal; clearing it causes commands that depend on it (e.g.
@@ -170,6 +171,7 @@ UPDATE
     authenticate_at = CURRENT_TIMESTAMP;`,
 		r.ID, pemCert, nullEmptyString(msg.SerialNumber), msg.Raw, r.ID, r.ID,
 	)
+	// <<< OPENFRAME(nanomdm-bootstrap-token-renewal)
 
 	return err
 }
@@ -378,3 +380,4 @@ func (s *MySQLStorage) SetRecoveryLockFailed(ctx context.Context, hostUUID strin
 	s.logger.ErrorContext(ctx, "MySQLStorage.SetRecoveryLockFailed not implemented")
 	return nil
 }
+

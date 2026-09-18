@@ -31,6 +31,10 @@ type addFleetMaintainedAppRequest struct {
 	Categories        []string `json:"categories"`
 }
 
+// >>> OPENFRAME(maintained-apps-decode-request): DecodeRequest adds fleet_id/team_id
+// aliasing and base64-encoded script field decoding to bypass WAF rules that may
+// block requests containing shell/PowerShell script patterns. — openframe/docs/FLEETMDM-001.md
+
 // DecodeRequest implements the RequestDecoder interface to support base64-encoded
 // script fields. This allows bypassing WAF rules that may block requests containing
 // shell/PowerShell script patterns. When the X-Fleet-Scripts-Encoded header is set
@@ -82,6 +86,8 @@ func (addFleetMaintainedAppRequest) DecodeRequest(ctx context.Context, r *http.R
 
 	return &req, nil
 }
+
+// <<< OPENFRAME(maintained-apps-decode-request)
 
 type addFleetMaintainedAppResponse struct {
 	SoftwareTitleID uint  `json:"software_title_id,omitempty"`
