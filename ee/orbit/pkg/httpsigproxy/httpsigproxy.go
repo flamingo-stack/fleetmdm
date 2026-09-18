@@ -139,6 +139,9 @@ func (p *Proxy) Serve() error {
 		return errors.New("listener and handler must not be nil -- initialize Proxy via NewProxy")
 	}
 	err := p.server.Serve(p.listener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
 	return fmt.Errorf("servetls returned: %w", err)
 }
 
@@ -226,7 +229,7 @@ type signingRoundTripper struct {
 func (s *signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Sign the request before sending
 	if err := s.signer.Sign(req); err != nil {
-		return nil, fmt.Errorf("signing request: %#v", err)
+		return nil, fmt.Errorf("signing request: %w", err)
 	}
 
 	// Remove X-Forwarded-For because we are forwarding from 127.0.0.1,

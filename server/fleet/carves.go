@@ -15,7 +15,7 @@ type CarveMetadata struct {
 	Name string `json:"name" db:"name"`
 	// BlockCount is the number of blocks in the carve.
 	BlockCount int64 `json:"block_count" db:"block_count"`
-	// BlcokSize is the size of each block in the carve.
+	// BlockSize is the size of each block in the carve.
 	BlockSize int64 `json:"block_size" db:"block_size"`
 	// CarveSize is the total size of the carve.
 	CarveSize int64 `json:"carve_size" db:"carve_size"`

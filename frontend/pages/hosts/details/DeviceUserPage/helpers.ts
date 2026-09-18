@@ -74,5 +74,5 @@ export const isIPad = (navigator: Navigator) =>
     navigator.maxTouchPoints > 1);
 // Android does not have access to this UI
 export const isMac = (navigator: Navigator) =>
-  (/Macintosh/i.test(navigator.userAgent) && !isIPad) ||
+  (/Macintosh/i.test(navigator.userAgent) && !isIPad(navigator)) ||
   /Mac OS X/i.test(navigator.userAgent);

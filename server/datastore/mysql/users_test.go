@@ -458,7 +458,7 @@ func testUsersSaveMany(t *testing.T, ds *Datastore) {
 	require.NoError(t, err)
 	assert.True(t, strings.HasSuffix(gotU1.Email, "fleet.com"))
 
-	gotU2, err := ds.UserByID(context.Background(), u3.ID)
+	gotU2, err := ds.UserByID(context.Background(), u2.ID)
 	require.NoError(t, err)
 	assert.True(t, strings.HasSuffix(gotU2.Email, "fleet.com"))
 
