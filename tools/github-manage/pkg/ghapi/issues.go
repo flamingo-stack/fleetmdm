@@ -4,6 +4,7 @@ package ghapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -124,7 +125,7 @@ func RemoveIssueFromProject(issueNumber int, projectID int) error {
 	itemID, err := GetProjectItemID(issueNumber, projectID)
 	if err != nil {
 		// If the issue is not found in the project, that's not an error
-		if err.Error() == fmt.Sprintf("issue #%d not found in project %d", issueNumber, projectID) {
+		if errors.Is(err, ErrIssueNotFoundInProject) {
 			return nil
 		}
 		return fmt.Errorf("failed to get project item ID: %v", err)
@@ -371,7 +372,10 @@ listLoop:
 
 	for i, issue := range issues {
 		// if we find an error, we'll drain concurrent executions and then bail
-		if stopError != nil {
+		mu.Lock()
+		currentErr := stopError
+		mu.Unlock()
+		if currentErr != nil {
 			break
 		}
 
@@ -400,7 +404,9 @@ listLoop:
 						fmt.Fprintf(os.Stderr, " ERROR\n")
 						mu.Unlock()
 					}
+					mu.Lock()
 					stopError = err
+					mu.Unlock()
 					logger.Errorf("Error checking timeline for issue #%d: %v", iss.Number, err)
 					return
 				}

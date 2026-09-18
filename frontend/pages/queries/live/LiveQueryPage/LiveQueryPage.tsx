@@ -85,15 +85,17 @@ const RunQueryPage = ({
   const disabledLiveQuery = config?.server_settings.live_query_disabled;
 
   // Reroute users out of live flow when live queries are globally disabled
-  if (disabledLiveQuery) {
-    const path = queryId ? PATHS.REPORT_DETAILS(queryId) : PATHS.NEW_REPORT;
+  useEffect(() => {
+    if (disabledLiveQuery) {
+      const path = queryId ? PATHS.REPORT_DETAILS(queryId) : PATHS.NEW_REPORT;
 
-    router.push(
-      getPathWithQueryParams(path, {
-        fleet_id: currentTeamId,
-      })
-    );
-  }
+      router.push(
+        getPathWithQueryParams(path, {
+          fleet_id: currentTeamId,
+        })
+      );
+    }
+  }, [disabledLiveQuery, currentTeamId, queryId, router]);
 
   // disabled on page load so we can control the number of renders
   // else it will re-populate the context on occasion
@@ -164,7 +166,7 @@ const RunQueryPage = ({
     const path = queryId ? PATHS.EDIT_REPORT(queryId) : PATHS.NEW_REPORT;
 
     router.push(getPathWithQueryParams(path, { fleet_id: currentTeamId }));
-  }, []);
+  }, [queryId, currentTeamId, router]);
 
   const renderScreen = () => {
     const step1Props = {

@@ -38,7 +38,7 @@ const platform = (() => {
   }
 })();
 
-const binName = platform === "windows" ? "fleetctl.exe" : "fleetctl";
+const binName = platform.startsWith("windows") ? "fleetctl.exe" : "fleetctl";
 const binPath = join(installDir, binName);
 
 const install = async () => {
@@ -55,6 +55,7 @@ const install = async () => {
 
     // Need to return a promise with the writer to ensure we can await for it to complete.
     return new Promise((resolve, reject) => {
+      response.data.on("error", reject);
       tarWriter.on("finish", resolve);
       tarWriter.on("error", reject);
     });
@@ -121,3 +122,4 @@ const run = async () => {
 };
 
 run();
+

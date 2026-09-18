@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"strings"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -44,7 +45,8 @@ var (
 		"ipados_apps":       "ipados_apps",
 		"jetbrains_plugins": "jetbrains_plugins",
 	}
-	vendorPool = make(map[string]string) // populated during load
+	vendorPool   = make(map[string]string) // populated during load
+	vendorPoolMu sync.Mutex                // guards vendorPool
 )
 
 // internString returns an interned version of s from the vendor pool, reducing memory usage
@@ -52,6 +54,8 @@ func internString(s string) string {
 	if s == "" {
 		return ""
 	}
+	vendorPoolMu.Lock()
+	defer vendorPoolMu.Unlock()
 	if interned, ok := vendorPool[s]; ok {
 		return interned
 	}
@@ -318,6 +322,8 @@ func LoadFromDatabase(dbPath string) (*DB, error) {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='software'").Scan(&count)
 	if err != nil || count == 0 {
+		db.Close()
+		os.Remove(dbPath) // Clean up partial/corrupt database so next run can regenerate it
 		return nil, errors.New("database exists but 'software' table not found\n\nPlease initialize the database:\n  cd cmd/osquery-perf/software-library\n  sqlite3 software.db < software.sql")
 	}
 
@@ -381,19 +387,37 @@ func generateDatabaseFromSQL(dbPath, sqlPath string) error {
 	return nil
 }
 
+// sourcePlaceholders returns a comma-separated list of "?" placeholders, one per source,
+// for use with parameterized queries.
+func sourcePlaceholders(sources []string) string {
+	placeholders := make([]string, len(sources))
+	for i := range sources {
+		placeholders[i] = "?"
+	}
+	return strings.Join(placeholders, ", ")
+}
+
+// sourcesToArgs converts a slice of source strings to a slice of interface{} for use as
+// query arguments.
+func sourcesToArgs(sources []string) []interface{} {
+	args := make([]interface{}, len(sources))
+	for i, s := range sources {
+		args[i] = s
+	}
+	return args
+}
+
 // loadDarwinSoftware loads all macOS/iOS software from the database for the given sources
 func loadDarwinSoftware(db *sql.DB, sources []string) ([]DarwinSoftware, error) {
-	sourceList := "'" + strings.Join(sources, "', '") + "'"
-	// nolint:gosec // sources are hardcoded, not user input
 	query := fmt.Sprintf(`
 		SELECT name, version, source, bundle_identifier, vendor, extension_id, extension_for
 		FROM software
 		WHERE source IN (%s)
 		ORDER BY RANDOM()
 		LIMIT %d
-	`, sourceList, MaxSoftwarePerPlatform)
+	`, sourcePlaceholders(sources), MaxSoftwarePerPlatform)
 
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, sourcesToArgs(sources)...)
 	if err != nil {
 		return nil, fmt.Errorf("querying darwin software: %w", err)
 	}
@@ -439,17 +463,15 @@ func loadDarwinSoftware(db *sql.DB, sources []string) ([]DarwinSoftware, error) 
 
 // loadWindowsSoftware loads all Windows software from the database for the given sources
 func loadWindowsSoftware(db *sql.DB, sources []string) ([]WindowsSoftware, error) {
-	sourceList := "'" + strings.Join(sources, "', '") + "'"
-	// nolint:gosec // sources are hardcoded, not user input
 	query := fmt.Sprintf(`
 		SELECT name, version, source, vendor, upgrade_code, extension_id, extension_for
 		FROM software
 		WHERE source IN (%s)
 		ORDER BY RANDOM()
 		LIMIT %d
-	`, sourceList, MaxSoftwarePerPlatform)
+	`, sourcePlaceholders(sources), MaxSoftwarePerPlatform)
 
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, sourcesToArgs(sources)...)
 	if err != nil {
 		return nil, fmt.Errorf("querying windows software: %w", err)
 	}
@@ -495,17 +517,15 @@ func loadWindowsSoftware(db *sql.DB, sources []string) ([]WindowsSoftware, error
 
 // loadUbuntuSoftware loads all Ubuntu/Linux software from the database for the given sources
 func loadUbuntuSoftware(db *sql.DB, sources []string) ([]UbuntuSoftware, error) {
-	sourceList := "'" + strings.Join(sources, "', '") + "'"
-	// nolint:gosec // sources are hardcoded, not user input
 	query := fmt.Sprintf(`
 		SELECT name, version, source, vendor, arch, release, extension_id, extension_for
 		FROM software
 		WHERE source IN (%s)
 		ORDER BY RANDOM()
 		LIMIT %d
-	`, sourceList, MaxSoftwarePerPlatform)
+	`, sourcePlaceholders(sources), MaxSoftwarePerPlatform)
 
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, sourcesToArgs(sources)...)
 	if err != nil {
 		return nil, fmt.Errorf("querying ubuntu software: %w", err)
 	}

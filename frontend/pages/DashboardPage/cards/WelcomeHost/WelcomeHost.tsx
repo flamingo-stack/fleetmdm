@@ -7,6 +7,7 @@ import { NotificationContext } from "context/notification";
 import { IHost, IHostResponse } from "interfaces/host";
 import { IHostPolicy } from "interfaces/policy";
 import hostAPI from "services/entities/hosts";
+import { AppContext } from "context/app";
 
 import Spinner from "components/Spinner";
 import Button from "components/buttons/Button";
@@ -22,7 +23,6 @@ interface IWelcomeHostCardProps {
 }
 
 const baseClass = "welcome-host";
-const HOST_ID = 1;
 const POLICY_PASS = "pass";
 const POLICY_FAIL = "fail";
 
@@ -31,6 +31,8 @@ const WelcomeHost = ({
   toggleAddHostsModal,
 }: IWelcomeHostCardProps): JSX.Element => {
   const { renderFlash } = useContext(NotificationContext);
+  const { currentUser } = useContext(AppContext);
+  const hostId = currentUser?.id_verified_host_id;
   const [refetchStartTime, setRefetchStartTime] = useState<number | null>(null);
   const [currentPolicyShown, setCurrentPolicyShown] = useState<IHostPolicy>();
   const [showPolicyModal, setShowPolicyModal] = useState(false);
@@ -46,8 +48,9 @@ const WelcomeHost = ({
     refetch: fullyReloadHost,
   } = useQuery<IHostResponse, Error, IHost>(
     ["host"],
-    () => hostAPI.loadHostDetails(HOST_ID),
+    () => hostAPI.loadHostDetails(hostId as number),
     {
+      enabled: !!hostId,
       retry: false,
       select: (data: IHostResponse) => data.host,
       onSuccess: (returnedHost) => {
@@ -229,6 +232,7 @@ const WelcomeHost = ({
             if (p.response) {
               return (
                 <Button
+                  key={p.id}
                   variant="unstyled"
                   onClick={() => handlePolicyModal(p.id)}
                 >
@@ -308,3 +312,4 @@ const WelcomeHost = ({
 };
 
 export default WelcomeHost;
+
