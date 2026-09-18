@@ -16,7 +16,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      # - '.github/**'
+      - '.github/**'
       - "**/*.md"
   workflow_dispatch:
     inputs:
@@ -227,7 +227,11 @@ jobs:
     name: "Create Release"
     needs: [version, changes, build, build_client, build_helm]
     runs-on: ubuntu-latest
-    if: ${{ !failure() && !cancelled() }} 
+    if: >-
+      !failure() && !cancelled() &&
+      (needs.build.result == 'success' ||
+      needs.build_client.result == 'success' ||
+      needs.build_helm.result == 'success')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -239,6 +243,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           mkdir -p final-artifacts/clients
