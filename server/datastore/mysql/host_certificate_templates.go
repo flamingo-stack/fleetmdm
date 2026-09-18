@@ -372,12 +372,12 @@ func (ds *Datastore) UpsertCertificateStatus(ctx context.Context, update *fleet.
 		WHERE host_uuid = :host_uuid AND certificate_template_id = :certificate_template_id`
 	result, err := sqlx.NamedExecContext(ctx, ds.writer(ctx), updateStmt, update)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "update host certificate template status")
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "get rows affected for host certificate template status update")
 	}
 
 	// If no records were updated, then insert a new status.
@@ -837,3 +837,4 @@ func (ds *Datastore) GetOrCreateFleetChallengeForCertificateTemplate(
 	}
 	return challenge, nil
 }
+
