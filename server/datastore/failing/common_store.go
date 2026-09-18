@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 )
 
 // commonFailingStore is an implementation of CommonStore
@@ -30,6 +32,7 @@ func (c commonFailingStore) Cleanup(ctx context.Context, usedIconIDs []string, r
 	return 0, nil
 }
 
-func (c commonFailingStore) Sign(_ context.Context, _ string, _ time.Duration) (string, error) {
-	return "", fmt.Errorf("%s store not properly configured", c.Entity)
+func (c commonFailingStore) Sign(ctx context.Context, _ string, _ time.Duration) (string, error) {
+	return "", ctxerr.New(ctx, fmt.Sprintf("%s store not properly configured", c.Entity))
 }
+

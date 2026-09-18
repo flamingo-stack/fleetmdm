@@ -5,12 +5,13 @@ import (
 	"crypto/x509"
 	_ "embed"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -22,25 +23,27 @@ const (
 var pubKeyPEM []byte
 
 // loadPublicKey loads the public key from pubkey.pem.
-func loadPublicKey() (*ecdsa.PublicKey, error) {
+func loadPublicKey(ctx context.Context) (*ecdsa.PublicKey, error) {
 	block, _ := pem.Decode(pubKeyPEM)
 	if block == nil {
-		return nil, errors.New("no key block found in pem")
+		return nil, ctxerr.New(ctx, "no key block found in pem")
 	}
 
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse ecdsa key: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "failed to parse ecdsa key")
 	}
 
 	if pub, ok := pub.(*ecdsa.PublicKey); ok {
 		return pub, nil
 	}
-	return nil, fmt.Errorf("%T is not *ecdsa.PublicKey", pub)
+	return nil, ctxerr.Errorf(ctx, "%T is not *ecdsa.PublicKey", pub)
 }
 
 // LoadLicense loads and validates the license key.
 func LoadLicense(licenseKey string) (*fleet.LicenseInfo, error) {
+	ctx := context.Background()
+
 	// No license key
 	if licenseKey == "" {
 		return &fleet.LicenseInfo{Tier: fleet.TierFree}, nil
@@ -51,7 +54,7 @@ func LoadLicense(licenseKey string) (*fleet.LicenseInfo, error) {
 		&licenseClaims{},
 		// Always use the same public key
 		func(*jwt.Token) (interface{}, error) {
-			return loadPublicKey()
+			return loadPublicKey(ctx)
 		},
 	)
 	if err != nil {
@@ -59,14 +62,14 @@ func LoadLicense(licenseKey string) (*fleet.LicenseInfo, error) {
 
 		// if the ONLY error is that it's expired, then we ignore it
 		if v == nil || v.Errors != jwt.ValidationErrorExpired {
-			return nil, fmt.Errorf("parse license: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "parse license")
 		}
 		parsedToken.Valid = true
 	}
 
-	license, err := validate(parsedToken)
+	license, err := validate(ctx, parsedToken)
 	if err != nil {
-		return nil, fmt.Errorf("validate license: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "validate license")
 	}
 
 	// for backwards compatibility we'll convert basic tier to premium
@@ -84,38 +87,38 @@ type licenseClaims struct {
 	AllowDisableTelemetry bool   `json:"notel"`
 }
 
-func validate(token *jwt.Token) (*fleet.LicenseInfo, error) {
+func validate(ctx context.Context, token *jwt.Token) (*fleet.LicenseInfo, error) {
 	// token.IssuedAt, token.ExpiresAt, token.NotBefore already validated by JWT
 	// library.
 	if !token.Valid {
 		// ParseWithClaims should have errored already, but double-check here
-		return nil, errors.New("token invalid")
+		return nil, ctxerr.New(ctx, "token invalid")
 	}
 
 	if token.Method.Alg() != expectedAlgorithm {
-		return nil, fmt.Errorf("unexpected algorithm %s", token.Method.Alg())
+		return nil, ctxerr.Errorf(ctx, "unexpected algorithm %s", token.Method.Alg())
 	}
 
 	var claims *licenseClaims
 	claims, ok := token.Claims.(*licenseClaims)
 	if !ok || claims == nil {
-		return nil, fmt.Errorf("unexpected claims type %T", token.Claims)
+		return nil, ctxerr.Errorf(ctx, "unexpected claims type %T", token.Claims)
 	}
 
 	if claims.Devices == 0 {
-		return nil, errors.New("missing devices")
+		return nil, ctxerr.New(ctx, "missing devices")
 	}
 
 	if claims.Tier == "" {
-		return nil, errors.New("missing tier")
+		return nil, ctxerr.New(ctx, "missing tier")
 	}
 
 	if claims.ExpiresAt == 0 {
-		return nil, errors.New("missing exp")
+		return nil, ctxerr.New(ctx, "missing exp")
 	}
 
 	if claims.Issuer != expectedIssuer {
-		return nil, fmt.Errorf("unexpected issuer %s", claims.Issuer)
+		return nil, ctxerr.Errorf(ctx, "unexpected issuer %s", claims.Issuer)
 	}
 
 	return &fleet.LicenseInfo{

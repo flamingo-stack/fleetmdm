@@ -64,7 +64,7 @@ func (svc *Service) InviteNewUser(ctx context.Context, payload fleet.InvitePaylo
 	// find the user who created the invite
 	v, ok := viewer.FromContext(ctx)
 	if !ok {
-		return nil, errors.New("missing viewer context for create invite")
+		return nil, ctxerr.New(ctx, "missing viewer context for create invite")
 	}
 	inviter := v.User
 

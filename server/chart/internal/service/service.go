@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -46,6 +47,7 @@ func (s *Service) RegisterDataset(ds api.Dataset) {
 }
 
 func (s *Service) CollectDatasets(ctx context.Context, now time.Time, scope api.CollectScopeFn) error {
+	var errs []error
 	for name, dataset := range s.datasets {
 		var disabledFleetIDs []uint
 		if scope != nil {
@@ -57,10 +59,15 @@ func (s *Service) CollectDatasets(ctx context.Context, now time.Time, scope api.
 		}
 		if err := dataset.Collect(ctx, s.store, now, disabledFleetIDs); err != nil {
 			// Log and continue — don't let one dataset failure block others.
+			wrapped := ctxerr.Wrap(ctx, err, "collect chart dataset")
 			if s.logger != nil {
-				s.logger.ErrorContext(ctx, "collect chart dataset", "dataset", name, "err", ctxerr.Wrap(ctx, err, "collect chart dataset"))
+				s.logger.ErrorContext(ctx, "collect chart dataset", "dataset", name, "err", wrapped)
 			}
+			errs = append(errs, wrapped)
 		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	return nil
 }
@@ -94,18 +101,18 @@ func (s *Service) GetChartData(ctx context.Context, metric string, opts api.Requ
 
 	dataset, ok := s.datasets[metric]
 	if !ok {
-		return nil, &platform_http.BadRequestError{Message: fmt.Sprintf("unknown chart metric: %s", metric)}
+		return nil, ctxerr.Wrap(ctx, &platform_http.BadRequestError{Message: fmt.Sprintf("unknown chart metric: %s", metric)}, "get chart data")
 	}
 
 	// Don't allow requesting more days than the charts are designed to handle.
 	// This mostly prevents expensive queries for large day ranges.
 	if opts.Days < 1 || opts.Days > 31 {
-		return nil, &platform_http.BadRequestError{Message: fmt.Sprintf("invalid days value: %d (must be between 1 and 31)", opts.Days)}
+		return nil, ctxerr.Wrap(ctx, &platform_http.BadRequestError{Message: fmt.Sprintf("invalid days value: %d (must be between 1 and 31)", opts.Days)}, "get chart data")
 	}
 
 	// Resolution must be 0 or a positive divisor of 24.
 	if opts.Resolution < 0 || (opts.Resolution != 0 && 24%opts.Resolution != 0) {
-		return nil, &platform_http.BadRequestError{Message: fmt.Sprintf("invalid resolution value: %d (must be 0 or a positive divisor of 24)", opts.Resolution)}
+		return nil, ctxerr.Wrap(ctx, &platform_http.BadRequestError{Message: fmt.Sprintf("invalid resolution value: %d (must be 0 or a positive divisor of 24)", opts.Resolution)}, "get chart data")
 	}
 
 	hours := opts.Resolution
