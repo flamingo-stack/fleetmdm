@@ -23,7 +23,7 @@ func (svc *Service) LinuxHostDiskEncryptionStatus(ctx context.Context, host flee
 				Status: &actionRequired,
 			}, nil
 		}
-		return fleet.HostMDMDiskEncryption{}, err
+		return fleet.HostMDMDiskEncryption{}, ctxerr.Wrap(ctx, err)
 	}
 
 	if key.ClientError != "" {
