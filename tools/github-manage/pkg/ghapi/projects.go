@@ -58,6 +58,16 @@ func getAliasKeys() []string {
 	return keys
 }
 
+// escapeGraphQLString escapes backslashes and double quotes so a value can be
+// safely embedded inside a double-quoted GraphQL string literal.
+func escapeGraphQLString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	return s
+}
+
 // ParseJSONtoProjectItems converts JSON data to a slice of ProjectItem structs.
 func ParseJSONtoProjectItems(jsonData []byte, limit int) ([]ProjectItem, int, error) {
 	var items ProjectItemsResponse
@@ -257,7 +267,7 @@ func SetProjectItemFieldValue(itemID string, projectID int, fieldName, value str
 		// For number fields (like Estimate) - try different possible type names
 		if field.Type == "NUMBER" || field.Type == "ProjectV2Field" || strings.Contains(strings.ToLower(field.Type), "number") {
 			command := fmt.Sprintf(`gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: "%s", itemId: "%s", fieldId: "%s", value: { number: %s } }) { projectV2Item { id } } }'`,
-				projectNodeID, itemID, field.ID, value)
+				escapeGraphQLString(projectNodeID), escapeGraphQLString(itemID), escapeGraphQLString(field.ID), escapeGraphQLString(value))
 
 			_, err := RunCommandAndReturnOutput(command)
 			if err != nil {
@@ -288,7 +298,7 @@ func SetProjectItemFieldValue(itemID string, projectID int, fieldName, value str
 			}
 
 			command := fmt.Sprintf(`gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: "%s", itemId: "%s", fieldId: "%s", value: { singleSelectOptionId: "%s" } }) { projectV2Item { id } } }'`,
-				projectNodeID, itemID, field.ID, optionID)
+				escapeGraphQLString(projectNodeID), escapeGraphQLString(itemID), escapeGraphQLString(field.ID), escapeGraphQLString(optionID))
 
 			_, err = RunCommandAndReturnOutput(command)
 			if err != nil {
@@ -313,7 +323,7 @@ func SetProjectItemFieldValue(itemID string, projectID int, fieldName, value str
 
 				// Use GraphQL mutation with the actual current iteration ID
 				command := fmt.Sprintf(`gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: "%s", itemId: "%s", fieldId: "%s", value: { iterationId: "%s" } }) { projectV2Item { id } } }'`,
-					projectNodeID, itemID, field.ID, currentIterationID)
+					escapeGraphQLString(projectNodeID), escapeGraphQLString(itemID), escapeGraphQLString(field.ID), escapeGraphQLString(currentIterationID))
 
 				out, err := RunCommandAndReturnOutput(command)
 				if err != nil {
@@ -332,7 +342,7 @@ func SetProjectItemFieldValue(itemID string, projectID int, fieldName, value str
 		// For text fields
 		if field.Type == "TEXT" || strings.Contains(strings.ToLower(field.Type), "text") {
 			command := fmt.Sprintf(`gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: "%s", itemId: "%s", fieldId: "%s", value: { text: "%s" } }) { projectV2Item { id } } }'`,
-				projectNodeID, itemID, field.ID, value)
+				escapeGraphQLString(projectNodeID), escapeGraphQLString(itemID), escapeGraphQLString(field.ID), escapeGraphQLString(value))
 
 			_, err := RunCommandAndReturnOutput(command)
 			if err != nil {
@@ -344,7 +354,7 @@ func SetProjectItemFieldValue(itemID string, projectID int, fieldName, value str
 		// If we can't determine the type, try to infer from field name or context
 		if strings.EqualFold(fieldName, "Estimate") || strings.Contains(strings.ToLower(fieldName), "estimate") {
 			command := fmt.Sprintf(`gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: "%s", itemId: "%s", fieldId: "%s", value: { number: %s } }) { projectV2Item { id } } }'`,
-				projectNodeID, itemID, field.ID, value)
+				escapeGraphQLString(projectNodeID), escapeGraphQLString(itemID), escapeGraphQLString(field.ID), escapeGraphQLString(value))
 
 			_, err := RunCommandAndReturnOutput(command)
 			if err != nil {

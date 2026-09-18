@@ -134,7 +134,7 @@ remove_receipt_files() {
   fi
 
   echo "sudo pkgutil --only-files --files \"$PKGID\" | sed \"s|^|${FULL_INSTALL_LOCATION}/|\" | tr '\\\\n' '\\\\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf"
-  sudo pkgutil --only-files --files "$PKGID" | sed "s|^|/${INSTALL_LOCATION}/|" | tr '\n' '\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf
+  sudo pkgutil --only-files --files "$PKGID" | sed "s|^|${FULL_INSTALL_LOCATION}/|" | tr '\n' '\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf
 
   echo "sudo pkgutil --only-dirs --files \"$PKGID\" | sed \"s|^|${FULL_INSTALL_LOCATION}/|\" | grep '\\.app$' | tr '\\\\n' '\\\\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf"
   sudo pkgutil --only-dirs --files "$PKGID" | sed "s|^|${FULL_INSTALL_LOCATION}/|" | grep '\.app$' | tr '\n' '\0' | /usr/bin/sudo -u root -E -- /usr/bin/xargs -0 -- /bin/rm -rf
@@ -236,4 +236,5 @@ trash $LOGGED_IN_USER '~/Library/Mail/Bundles/GPGMail.mailbundle'
 trash $LOGGED_IN_USER '~/Library/PreferencePanes/GPGPreferences.prefPane'
 trash $LOGGED_IN_USER '~/Library/Preferences/org.gpgtools.*'
 trash $LOGGED_IN_USER '~/Library/Services/GPGServices.service'
+
 

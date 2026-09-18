@@ -220,8 +220,8 @@ const CommandResultsModal = ({
       return {
         results: resp.results.map?.((r) => ({
           ...r,
-          payload: atob(r.payload),
-          result: atob(r.result),
+          payload: r.payload ? atob(r.payload) : r.payload,
+          result: r.result ? atob(r.result) : r.result,
         })),
       };
     },
@@ -246,3 +246,4 @@ const CommandResultsModal = ({
 };
 
 export default CommandResultsModal;
+
