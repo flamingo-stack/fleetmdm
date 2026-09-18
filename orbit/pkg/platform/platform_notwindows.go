@@ -76,7 +76,6 @@ func GetProcessesByName(name string) ([]*gopsutil_process.Process, error) {
 
 		if strings.HasPrefix(processName, name) {
 			foundProcesses = append(foundProcesses, process)
-			break
 		}
 	}
 
@@ -119,3 +118,4 @@ func killProcessByName(name string) error {
 
 	return nil
 }
+

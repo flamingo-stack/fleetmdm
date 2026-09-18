@@ -339,7 +339,9 @@ func processFailingHostExistingCalendarEvent(
 			return errors.New("could not reserve calendar lock")
 		}
 		lockReserved = true
-		done := make(chan struct{})
+		// done is buffered so the goroutine below can always send its result and exit,
+		// even if the outer select below has already timed out and stopped listening.
+		done := make(chan struct{}, 1)
 		go func() {
 			for {
 				// Keep trying to get the lock.

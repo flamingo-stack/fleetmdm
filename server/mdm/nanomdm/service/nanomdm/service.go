@@ -1,4 +1,4 @@
-// Pacakge nanomdm is an MDM service.
+// Package nanomdm is an MDM service.
 package nanomdm
 
 import (

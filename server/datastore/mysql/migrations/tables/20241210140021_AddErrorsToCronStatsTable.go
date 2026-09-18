@@ -6,10 +6,10 @@ import (
 )
 
 func init() {
-	MigrationClient.AddMigration(Up_20241126140021, Down_20241126140021)
+	MigrationClient.AddMigration(Up_20241210140021, Down_20241210140021)
 }
 
-func Up_20241126140021(tx *sql.Tx) error {
+func Up_20241210140021(tx *sql.Tx) error {
 	// Idempotent migration.
 	// Add columns
 	if !columnExists(tx, "cron_stats", "errors") {
@@ -21,6 +21,6 @@ func Up_20241126140021(tx *sql.Tx) error {
 	return nil
 }
 
-func Down_20241126140021(tx *sql.Tx) error {
+func Down_20241210140021(tx *sql.Tx) error {
 	return nil
 }

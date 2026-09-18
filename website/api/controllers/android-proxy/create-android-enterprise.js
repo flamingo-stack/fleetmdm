@@ -38,6 +38,10 @@ module.exports = {
     invalidEnterpriseToken: {
       description: 'The provided enterprise token is invalid or expired.',
       responseType: 'badRequest'
+    },
+    invalidRequestToAndroidManagementApi: {
+      description: 'The request to the Android Management API was invalid.',
+      responseType: 'badRequest'
     }
   },
 
@@ -165,8 +169,8 @@ module.exports = {
 
       sails.log.warn('Error details when creating Android enterprise with Android Management API (from 400):', require('util').inspect(err));
 
-      // For other 400 errors, still return as invalid token (client error)
-      return {'invalidEnterpriseToken': 'Invalid request to Android Management API.'};
+      // For other 400 errors (e.g. malformed enterprise object, quota, validation errors), return a distinct exit instead of conflating them with an invalid/expired token.
+      return {'invalidRequestToAndroidManagementApi': 'Invalid request to Android Management API.'};
     }).intercept({ status: 401 }, (err) => {
       sails.log.warn('Error details when creating Android enterprise with Android Management API (from 401):', require('util').inspect(err));
       return {'invalidEnterpriseToken': 'Authorization failed with Android Management API.'};
@@ -208,3 +212,4 @@ module.exports = {
 
 
 };
+
