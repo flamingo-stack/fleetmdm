@@ -352,11 +352,13 @@ const EditIconModal = ({
   // useQuery does not handle dimension extraction, so this is required for updating
   // state with image details after loading the icon blob in the browser
   useEffect(() => {
+    let isCancelled = false;
+
     // If the icon fetch failed, stop showing the spinner and fall back
     if (isCustomIconError && isFirstLoadWithCustomIcon) {
       setIsFirstLoadWithCustomIcon(false);
       resetIconState();
-      return;
+      return undefined;
     }
 
     // Handle API custom icon blob conversion and initialization
@@ -368,22 +370,23 @@ const EditIconModal = ({
     ) {
       const img = new Image();
       img.onload = () => {
-        fetch(customIconData.url)
-          .then((res) => {
-            const filename = customIconData.filename || "icon.png";
-            return res.blob().then((blob) => ({ blob, filename }));
-          })
-          .then(({ blob, filename }) => {
-            setCurrentApiCustomIcon(
-              new File([blob], filename, { type: "image/png" }),
-              img.width,
-              customIconData.url
-            );
-            setIsFirstLoadWithCustomIcon(false);
-          });
+        if (isCancelled) {
+          return;
+        }
+        const filename = customIconData.filename || "icon.png";
+        const file = new File([customIconData.blob], filename, {
+          type: "image/png",
+        });
+        if (isCancelled) {
+          return;
+        }
+        setCurrentApiCustomIcon(file, img.width, customIconData.url);
+        setIsFirstLoadWithCustomIcon(false);
       };
       img.src = customIconData.url;
-      return; // Don't run fallback block below on initial load
+      return () => {
+        isCancelled = true;
+      };
     }
 
     // Or handle VPP fallback initialization (only when not using API custom icon)
@@ -396,6 +399,10 @@ const EditIconModal = ({
         status: "fallback",
       });
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [
     customIconData,
     isCustomIconError,
