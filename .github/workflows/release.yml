@@ -26,6 +26,10 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ${{ github.event_name == 'push' && 'fleet-release-latest' || 'fleet-release-manual' }}
+  queue: max
+
 env:
   REGISTRY: ghcr.io
   BINARY_NAME: fleet
@@ -228,9 +232,6 @@ jobs:
     needs: [version, changes, build, build_client, build_helm]
     runs-on: ubuntu-latest
     if: ${{ !failure() && !cancelled() }} 
-    concurrency:
-      group: ${{ github.event_name == 'push' && 'release-latest' || github.run_id }}
-      queue: max
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -264,14 +265,16 @@ jobs:
 
       - name: Check client assets
         run: |
+          missing=()
           if [ "${{ needs.build_client.result }}" = "success" ]; then
             for d in fleet-mac-universal fleet-windows-amd64; do
-              [ -d "release-artifacts/$d" ] || { echo "::error::$d build artifact is missing"; exit 1; }
+              [ -d "release-artifacts/$d" ] || missing+=("$d build artifact")
             done
           fi
           for f in fleet-macos-universal.tar.gz fleet-windows-amd64.zip; do
-            [ -s "final-artifacts/clients/$f" ] || { echo "::error::$f is missing"; exit 1; }
+            [ -s "final-artifacts/clients/$f" ] || missing+=("$f")
           done
+          [ ${#missing[@]} -eq 0 ] || { echo "::error::missing client assets: ${missing[*]}"; exit 1; }
 
       - name: Generate release header
         run: |
