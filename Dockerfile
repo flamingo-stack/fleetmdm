@@ -11,3 +11,4 @@ USER fleet
 COPY fleet /usr/bin/
 
 CMD ["fleet", "serve"]
+
