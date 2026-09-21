@@ -95,7 +95,8 @@ func TestWritePathInvalidation(t *testing.T) {
 					ds.UpdateHostRefetchCriticalQueriesUntilFunc = func(_ context.Context, _ uint, _ *time.Time) error { return nil }
 				},
 				invoke: func(ctx context.Context, d *Datastore, id uint, _ string) error {
-					return d.UpdateHostRefetchCriticalQueriesUntil(ctx, id, new(time.Unix(1, 0)))
+					until := time.Unix(1, 0)
+					return d.UpdateHostRefetchCriticalQueriesUntil(ctx, id, &until)
 				},
 				invoked: func(ds *mock.Store) bool { return ds.UpdateHostRefetchCriticalQueriesUntilFuncInvoked },
 			},
