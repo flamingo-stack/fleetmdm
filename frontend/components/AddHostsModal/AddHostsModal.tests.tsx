@@ -253,6 +253,14 @@ describe("AddHostsModal", () => {
     expect(extensionId).toBeInTheDocument();
     expect(screen.queryByText(/--enable-scripts/i)).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("tab", { name: "iOS & iPadOS" }));
+    expect(screen.queryByText(/Turn on Apple MDM/i)).toBeInTheDocument();
+    expect(screen.queryByText(/--enable-scripts/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Android" }));
+    expect(screen.queryByText(/Turn on Android MDM/i)).toBeInTheDocument();
+    expect(screen.queryByText(/--enable-scripts/i)).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
     const advancedText = screen.getByText(/--type=YOUR_TYPE/i);
     expect(advancedText).toBeInTheDocument();
@@ -270,3 +278,4 @@ describe("AddHostsModal", () => {
     expect(screen.queryByText(/--enable-scripts/i)).not.toBeInTheDocument();
   });
 });
+
