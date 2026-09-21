@@ -101,7 +101,7 @@ func TestHandlerExcludeAny(t *testing.T) {
 	t.Run("dynamic label created after host's last scan -> true (exclude)", func(t *testing.T) {
 		labels := []fleet.MDMProfileLabelRef{
 			{
-				LabelID:             new(uint(1)),
+				LabelID:             func() *uint { v := uint(1); return &v }(),
 				CreatedAt:           time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 				LabelMembershipType: int(fleet.LabelMembershipTypeDynamic),
 			},
@@ -111,7 +111,7 @@ func TestHandlerExcludeAny(t *testing.T) {
 	t.Run("host vital label created after host's last scan -> false (include)", func(t *testing.T) {
 		labels := []fleet.MDMProfileLabelRef{
 			{
-				LabelID:             new(uint(1)),
+				LabelID:             func() *uint { v := uint(1); return &v }(),
 				CreatedAt:           time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 				LabelMembershipType: int(fleet.LabelMembershipTypeHostVitals),
 			},
@@ -121,7 +121,7 @@ func TestHandlerExcludeAny(t *testing.T) {
 	t.Run("manual label created after host's last scan -> still false (include)", func(t *testing.T) {
 		labels := []fleet.MDMProfileLabelRef{
 			{
-				LabelID:             new(uint(1)),
+				LabelID:             func() *uint { v := uint(1); return &v }(),
 				CreatedAt:           time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 				LabelMembershipType: int(fleet.LabelMembershipTypeManual),
 			},
