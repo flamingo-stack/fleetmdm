@@ -33,6 +33,23 @@ interface IDataErrorProps {
 
 const DEFAULT_DESCRIPTION = "Refresh the page or log in again.";
 
+const getVerticalPaddingClass = (verticalPaddingSize?: Padding) =>
+  verticalPaddingSize && `${baseClass}__vertical-${verticalPaddingSize}`;
+
+const renderFileIssueLink = (
+  wrapperClassName: string,
+  copy: string
+) => (
+  <div className={wrapperClassName}>
+    {copy}&nbsp;
+    <CustomLink
+      url="https://github.com/fleetdm/fleet/issues/new/choose"
+      text="file an issue"
+      newTab
+    />
+  </div>
+);
+
 const DataError = ({
   description = DEFAULT_DESCRIPTION,
   excludeIssueLink = false,
@@ -51,10 +68,9 @@ const DataError = ({
     return (
       <div className={classes}>
         <div
-          className={`${baseClass}__inner ${
-            verticalPaddingSize &&
-            `${baseClass}__vertical-${verticalPaddingSize}`
-          }`}
+          className={`${baseClass}__inner ${getVerticalPaddingClass(
+            verticalPaddingSize
+          )}`}
         >
           <div className={`${baseClass}__content`}>
             <span
@@ -73,10 +89,9 @@ const DataError = ({
     return (
       <div className={classes}>
         <div
-          className={`${baseClass}__inner-new ${
-            verticalPaddingSize &&
-            `${baseClass}__vertical-${verticalPaddingSize}`
-          }`}
+          className={`${baseClass}__inner-new ${getVerticalPaddingClass(
+            verticalPaddingSize
+          )}`}
         >
           <Graphic name="data-error" />
           <div className={`${baseClass}__header`}>
@@ -87,16 +102,11 @@ const DataError = ({
               <div className={`${baseClass}__description`}>
                 Refresh to try again.
               </div>
-              {!excludeIssueLink && (
-                <div className={`${baseClass}__file-issue`}>
-                  If this keeps happening please&nbsp;
-                  <CustomLink
-                    url="https://github.com/fleetdm/fleet/issues/new/choose"
-                    text="file an issue"
-                    newTab
-                  />
-                </div>
-              )}
+              {!excludeIssueLink &&
+                renderFileIssueLink(
+                  `${baseClass}__file-issue`,
+                  "If this keeps happening please"
+                )}
             </>
           )}
         </div>
@@ -107,9 +117,9 @@ const DataError = ({
   return (
     <div className={classes}>
       <div
-        className={`${baseClass}__inner ${
-          verticalPaddingSize && `${baseClass}__vertical-${verticalPaddingSize}`
-        }`}
+        className={`${baseClass}__inner ${getVerticalPaddingClass(
+          verticalPaddingSize
+        )}`}
       >
         <div className={`${baseClass}__content`}>
           <span className={`${baseClass}__header`}>
@@ -125,16 +135,11 @@ const DataError = ({
                     {description}
                   </span>
                 )}
-                {!excludeIssueLink && (
-                  <span className={`${baseClass}__file-issue`}>
-                    If this keeps happening, please&nbsp;
-                    <CustomLink
-                      url="https://github.com/fleetdm/fleet/issues/new/choose"
-                      text="file an issue"
-                      newTab
-                    />
-                  </span>
-                )}
+                {!excludeIssueLink &&
+                  renderFileIssueLink(
+                    `${baseClass}__file-issue`,
+                    "If this keeps happening, please"
+                  )}
               </>
             )}
           </>
