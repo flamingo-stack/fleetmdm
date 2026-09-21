@@ -263,8 +263,6 @@ jobs:
 
           ls -lh final-artifacts/clients/
 
-      - name: Check client assets
-        run: |
           missing=()
           if [ "${{ needs.build_client.result }}" = "success" ]; then
             for d in fleet-mac-universal fleet-windows-amd64; do
