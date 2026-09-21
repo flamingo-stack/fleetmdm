@@ -157,8 +157,16 @@ const Modal = ({
 
   const handleContainerMouseUp = (e: React.MouseEvent) => e.stopPropagation();
 
-  const handleContainerInput = () => {
-    isFormDirtyRef.current = true;
+  const handleContainerInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLInputElement;
+    if (
+      target instanceof HTMLInputElement &&
+      typeof target.defaultValue === "string"
+    ) {
+      isFormDirtyRef.current = target.value !== target.defaultValue;
+    } else {
+      isFormDirtyRef.current = true;
+    }
   };
 
   const handleContainerClick = (e: React.MouseEvent) => {
@@ -166,8 +174,17 @@ const Modal = ({
     const isCheckbox =
       target instanceof HTMLInputElement && target.type === "checkbox";
     const isToggle = !!target.closest('button[role="switch"]');
-    if (isCheckbox || isToggle) {
-      isFormDirtyRef.current = true;
+    if (isCheckbox) {
+      isFormDirtyRef.current =
+        (target as HTMLInputElement).checked !==
+        (target as HTMLInputElement).defaultChecked;
+    } else if (isToggle) {
+      const toggleButton = target.closest('button[role="switch"]');
+      const isPressed =
+        toggleButton?.getAttribute("aria-checked") === "true";
+      const wasPressed =
+        toggleButton?.getAttribute("data-default-checked") === "true";
+      isFormDirtyRef.current = isPressed !== wasPressed;
     }
   };
 
