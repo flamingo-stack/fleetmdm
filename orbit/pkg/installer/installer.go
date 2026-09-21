@@ -97,6 +97,10 @@ type Runner struct {
 	// installerNotFoundMu.
 	installerNotFoundFirstSeen map[string]time.Time
 	installerNotFoundMu        sync.Mutex
+
+	// installerNotFoundSweepOnce ensures the periodic cleanup goroutine for
+	// installerNotFoundFirstSeen is only started once per Runner.
+	installerNotFoundSweepOnce sync.Once
 }
 
 const extractionDirectoryName = "extracted"
@@ -104,6 +108,11 @@ const extractionDirectoryName = "extracted"
 // installerNotFoundRetryWindow bounds how long orbit silently retries a 404
 // from GetInstallerDetails before it reports a synthetic failure (#44084).
 var installerNotFoundRetryWindow = 5 * time.Minute
+
+// installerNotFoundSweepInterval controls how often the background sweep
+// removes stale entries from installerNotFoundFirstSeen for execIDs that
+// stopped being retried before the retry window elapsed (#44084).
+var installerNotFoundSweepInterval = time.Minute
 
 func NewRunner(client Client, socketPath string, scriptsEnabled func() bool, rootDirPath string) *Runner {
 	r := &Runner{
@@ -129,6 +138,8 @@ func (r *Runner) Run(config *fleet.OrbitConfig) error {
 		}
 	}
 
+	r.startInstallerNotFoundSweep()
+
 	connectOsqueryFn := r.connectOsquery
 	if connectOsqueryFn == nil {
 		connectOsqueryFn = connectOsquery
@@ -138,6 +149,46 @@ func (r *Runner) Run(config *fleet.OrbitConfig) error {
 		return fmt.Errorf("software installer runner connecting to osquery: %w", err)
 	}
 	return r.run(context.Background(), config)
+}
+
+// startInstallerNotFoundSweep starts a background goroutine that periodically
+// removes entries from installerNotFoundFirstSeen that are older than
+// installerNotFoundRetryWindow, regardless of whether handleInstallerNotFound
+// is ever called again for that execID. This bounds the memory used by the
+// map even if an installerID stops appearing in
+// PendingSoftwareInstallerIDs before the retry window elapses (#44084).
+func (r *Runner) startInstallerNotFoundSweep() {
+	r.installerNotFoundSweepOnce.Do(func() {
+		go func() {
+			for {
+				time.Sleep(installerNotFoundSweepInterval)
+				r.sweepInstallerNotFound()
+			}
+		}()
+	})
+}
+
+// sweepInstallerNotFound removes stale entries from
+// installerNotFoundFirstSeen whose retry window has already elapsed (#44084).
+func (r *Runner) sweepInstallerNotFound() {
+	r.installerNotFoundMu.Lock()
+	defer r.installerNotFoundMu.Unlock()
+
+	if len(r.installerNotFoundFirstSeen) == 0 {
+		return
+	}
+
+	nowFn := r.nowFn
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	now := nowFn()
+
+	for execID, firstSeen := range r.installerNotFoundFirstSeen {
+		if now.Sub(firstSeen) >= installerNotFoundRetryWindow {
+			delete(r.installerNotFoundFirstSeen, execID)
+		}
+	}
 }
 
 func connectOsquery(r *Runner) error {
