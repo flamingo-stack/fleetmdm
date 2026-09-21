@@ -178,7 +178,7 @@ const PolicyDetailsPage = ({
     ["team", policyTeamId],
     () => teamsAPI.load(policyTeamId as number),
     {
-      enabled: policyTeamId != null && policyTeamId >= API_NO_TEAM_ID,
+      enabled: policyTeamId != null && policyTeamId > API_NO_TEAM_ID,
       refetchOnWindowFocus: false,
     }
   );
