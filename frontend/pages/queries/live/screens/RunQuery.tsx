@@ -110,18 +110,22 @@ const RunQuery = ({
         queryIsRunning: true,
       }));
 
-      websocket?.send(
-        JSON.stringify({
-          type: "auth",
-          data: { token: authToken.get() },
-        })
-      );
-      websocket?.send(
-        JSON.stringify({
-          type: "select_campaign",
-          data: { campaign_id: returnedCampaign.id },
-        })
-      );
+      try {
+        websocket?.send(
+          JSON.stringify({
+            type: "auth",
+            data: { token: authToken.get() },
+          })
+        );
+        websocket?.send(
+          JSON.stringify({
+            type: "select_campaign",
+            data: { campaign_id: returnedCampaign.id },
+          })
+        );
+      } catch (sendError) {
+        teardownDistributedQuery();
+      }
     };
 
     websocket.onmessage = ({ data }: { data: string }) => {
