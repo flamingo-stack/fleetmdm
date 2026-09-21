@@ -257,9 +257,34 @@ func (s *CVE) updateYearFile(ctx context.Context, year int, cves []nvdapi.CVEIte
 	return nil
 }
 
-var cachedCVEFeeds = map[int]*schema.NVDCVEFeedJSON10{}
+// cachedCVEFeeds caches the in-progress, in-memory year feeds used while
+// hydrating vulncheck data during a single processVulnCheckFile run. It is
+// scoped to a single CVE syncer instance (rather than being a package-level
+// global) and is explicitly reset at the start/end of each run so it cannot
+// accumulate unbounded state across a long-running sync process.
+type cveFeedCache struct {
+	feeds map[int]*schema.NVDCVEFeedJSON10
+}
 
-func (s *CVE) updateVulnCheckYearFile(ctx context.Context, year int, cves []VulnCheckCVE, modCount, addCount *int) error {
+func newCVEFeedCache() *cveFeedCache {
+	return &cveFeedCache{feeds: map[int]*schema.NVDCVEFeedJSON10{}}
+}
+
+func (c *cveFeedCache) get(year int) (*schema.NVDCVEFeedJSON10, bool) {
+	feed, ok := c.feeds[year]
+	return feed, ok
+}
+
+func (c *cveFeedCache) set(year int, feed *schema.NVDCVEFeedJSON10) {
+	c.feeds[year] = feed
+}
+
+// reset clears all cached feeds, releasing the underlying memory.
+func (c *cveFeedCache) reset() {
+	c.feeds = map[int]*schema.NVDCVEFeedJSON10{}
+}
+
+func (s *CVE) updateVulnCheckYearFile(ctx context.Context, cache *cveFeedCache, year int, cves []VulnCheckCVE, modCount, addCount *int) error {
 	// The NVD legacy feed files start at year 2002.
 	// This is assumed by the facebookincubator/nvdtools package.
 	if year < 2002 {
@@ -270,7 +295,7 @@ func (s *CVE) updateVulnCheckYearFile(ctx context.Context, year int, cves []Vuln
 
 	var storedCVEFeed *schema.NVDCVEFeedJSON10
 	var err error
-	if feed, ok := cachedCVEFeeds[year]; ok && feed != nil {
+	if feed, ok := cache.get(year); ok && feed != nil {
 		storedCVEFeed = feed
 	} else {
 		storedCVEFeed, err = readCVEsLegacyFormat(s.dbDir, year)
@@ -325,7 +350,7 @@ func (s *CVE) updateVulnCheckYearFile(ctx context.Context, year int, cves []Vuln
 	storedCVEFeed.CVEDataNumberOfCVEs = strconv.FormatInt(int64(len(storedCVEFeed.CVEItems)), 10)
 
 	// Store the file for the year.
-	cachedCVEFeeds[year] = storedCVEFeed
+	cache.set(year, storedCVEFeed)
 	return nil
 }
 
@@ -703,7 +728,11 @@ func (s *CVE) processVulnCheckFile(ctx context.Context, fileName string) error {
 		return zipReader.File[i].Name > zipReader.File[j].Name
 	})
 
-	cachedCVEFeeds = map[int]*schema.NVDCVEFeedJSON10{} // clear feeds cache for consistency
+	// cache is scoped to this single run and is discarded (and its memory
+	// released) once processing completes, instead of living in a
+	// package-level global that would accumulate across sync runs.
+	cache := newCVEFeedCache()
+	defer cache.reset()
 
 	// files are in reverse chronological order by modification date
 	// so we can stop processing files once we find one that is older
@@ -754,7 +783,7 @@ func (s *CVE) processVulnCheckFile(ctx context.Context, fileName string) error {
 		s.logger.DebugContext(ctx, "read vulncheck file", "file", file.Name)
 
 		for year, cvesInYear := range cvesByYear {
-			if err := s.updateVulnCheckYearFile(ctx, year, cvesInYear, &modCount, &addCount); err != nil {
+			if err := s.updateVulnCheckYearFile(ctx, cache, year, cvesInYear, &modCount, &addCount); err != nil {
 				return err
 			}
 		}
@@ -765,7 +794,7 @@ func (s *CVE) processVulnCheckFile(ctx context.Context, fileName string) error {
 
 	// only save updated files post-vulncheck-hydration
 	storeStart := time.Now()
-	for year, storedCVEFeed := range cachedCVEFeeds {
+	for year, storedCVEFeed := range cache.feeds {
 		if err := storeCVEsInLegacyFormat(s.dbDir, year, storedCVEFeed); err != nil {
 			return err
 		}
