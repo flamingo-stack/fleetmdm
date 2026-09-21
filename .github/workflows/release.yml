@@ -26,6 +26,10 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ${{ github.event_name == 'push' && 'fleet-release-latest' || 'fleet-release-manual' }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   BINARY_NAME: fleet
@@ -239,6 +243,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           mkdir -p final-artifacts/clients
@@ -256,6 +262,9 @@ jobs:
           fi
 
           ls -lh final-artifacts/clients/
+          for f in fleet-macos-universal.tar.gz fleet-windows-amd64.zip; do
+            [ -s "final-artifacts/clients/$f" ] || { echo "::error::missing client assets: $f"; exit 1; }
+          done
 
       - name: Generate release header
         run: |
@@ -289,6 +298,7 @@ jobs:
           prerelease: ${{ github.event_name == 'push' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           body_path: RELEASE_HEADER.md
+          fail_on_unmatched_files: true
           files: |
             final-artifacts/clients/*.zip
             final-artifacts/clients/*.tar.gz
