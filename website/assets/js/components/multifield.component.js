@@ -170,7 +170,7 @@ parasails.registerComponent('multifield', {
           }
         }
         this.optionsForSelect = _.clone(this.selectOptions);
-        if(this.currentFieldValues === [null]){
+        if(_.isEqual(this.currentFieldValues, [null]) || _.isEqual(this.currentFieldValues, [undefined])){
           this.currentFieldValues = [];
 
         }
