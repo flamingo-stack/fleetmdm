@@ -28,7 +28,7 @@ on:
 
 concurrency:
   group: ${{ github.event_name == 'push' && 'fleet-release-latest' || 'fleet-release-manual' }}
-  queue: max
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
