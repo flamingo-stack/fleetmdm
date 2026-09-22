@@ -390,6 +390,15 @@ cache:
   # >>> OPENFRAME(helm): upstream defaults this to 0, so a boot without Redis dies at once — openframe/docs/helm-chart.md
   connectRetryAttempts: 10
   # <<< OPENFRAME(helm)
+  # >>> OPENFRAME(helm): fork-added Redis TLS, mirrors database.tls — openframe/docs/helm-chart.md
+  # Managed Redis (Memorystore) answers only over TLS. The CA rides in an externally managed Secret,
+  # mounted whole at /secrets/redis, exactly like the MySQL server CA.
+  tls:
+    enabled: false
+    existingSecret: ""  # defaults to cache.secretName
+    caCertKey: ""       # key inside that Secret holding the server CA in PEM
+    serverName: ""      # only when the certificate names a host the address does not
+  # <<< OPENFRAME(helm)
   # >>> OPENFRAME(redis-key-prefix): fork-added per-tenant Redis key prefix — openframe/docs/redis-key-prefix.md
   # When set, wires FLEET_REDIS_KEY_PREFIX from existingConfigMap[keyPrefixKey].
   # Required when sharing one Redis across multiple Fleet servers (multi-tenant).

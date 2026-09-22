@@ -269,6 +269,20 @@ spec:
               # <<< OPENFRAME(helm)
               - name: FLEET_REDIS_DATABASE
                 value: "{{ .Values.cache.database }}"
+              # >>> OPENFRAME(helm): fork-added Redis TLS — openframe/docs/helm-chart.md
+              {{- if .Values.cache.tls.enabled }}
+              - name: FLEET_REDIS_USE_TLS
+                value: "true"
+              {{- if .Values.cache.tls.caCertKey }}
+              - name: FLEET_REDIS_TLS_CA
+                value: "/secrets/redis/{{ .Values.cache.tls.caCertKey }}"
+              {{- end }}
+              {{- if .Values.cache.tls.serverName }}
+              - name: FLEET_REDIS_TLS_SERVER_NAME
+                value: "{{ .Values.cache.tls.serverName }}"
+              {{- end }}
+              {{- end }}
+              # <<< OPENFRAME(helm)
               {{- if .Values.cache.usePassword }}
               - name: FLEET_REDIS_PASSWORD
                 valueFrom:
@@ -325,6 +339,11 @@ spec:
                 readOnly: true
                 mountPath: /secrets/mysql
               {{- end }}
+              {{- if .Values.cache.tls.enabled }}
+              - name: redis-tls
+                readOnly: true
+                mountPath: /secrets/redis
+              {{- end }}
               # >>> OPENFRAME(helm): fork-added CA truststore volume mount — openframe/docs/helm-chart.md
               {{- if include "fleet.additionalCAs.enabled" . }}
               - name: ca-certs
@@ -379,6 +398,11 @@ spec:
                 # >>> OPENFRAME(helm): the server CA rides in the same externally managed Secret
                 secretName: "{{ default .Values.database.secretName .Values.database.existingSecret }}"
                 # <<< OPENFRAME(helm)
+            {{- end }}
+            {{- if .Values.cache.tls.enabled }}
+            - name: redis-tls
+              secret:
+                secretName: "{{ default .Values.cache.secretName .Values.cache.tls.existingSecret }}"
             {{- end }}
             # >>> OPENFRAME(helm): fork-added CA truststore volumes (configmaps/secrets) — openframe/docs/helm-chart.md
             {{- if include "fleet.additionalCAs.enabled" . }}
