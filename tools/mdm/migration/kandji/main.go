@@ -17,6 +17,7 @@ import (
 var (
 	subdomainFlag = flag.String("subdomain", "", "Account subdomain")
 	apiTokenFlag  = flag.String("api-token", "", "API token")
+	authTokenFlag = flag.String("auth-token", "", "Shared secret required in X-Auth-Token header of incoming requests")
 )
 
 func main() {
@@ -27,6 +28,12 @@ func main() {
 	}
 
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		if *authTokenFlag == "" || request.Header.Get("X-Auth-Token") != *authTokenFlag {
+			fmt.Println("ERROR: missing or invalid X-Auth-Token header")
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
 		body, err := io.ReadAll(request.Body)
 		if err != nil {
 			fmt.Printf("ERROR: reading request body: %s\n", err)
@@ -86,25 +93,29 @@ func unenroll(serialNumber string) error {
 	client := fleethttp.NewClient()
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s.api.kandji.io/api/v1/devices?serial_number=%s", *subdomainFlag, serialNumber), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("building kandji device lookup request: %w", err)
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiTokenFlag))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("performing kandji device lookup request: %w", err)
 	}
 	defer resp.Body.Close()
 	bodyText, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading kandji device lookup response body: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("kandji device lookup returned status %d, serial: %s, body: %s", resp.StatusCode, serialNumber, string(bodyText))
 	}
 
 	var deviceInfo []struct {
 		DeviceID string `json:"device_id"`
 	}
 	if err = json.Unmarshal(bodyText, &deviceInfo); err != nil {
-		return err
+		return fmt.Errorf("unmarshalling kandji device lookup response: %w", err)
 	}
 	if len(deviceInfo) == 0 {
 		return fmt.Errorf("empty deviceInfo response, serial: %s", serialNumber)
@@ -114,12 +125,12 @@ func unenroll(serialNumber string) error {
 	// https://api-docs.kandji.io/#97deb582-d86c-444a-aa3b-3528b9a8478f
 	req, err = http.NewRequest("DELETE", fmt.Sprintf("https://%s.api.kandji.io/api/v1/devices/%s", *subdomainFlag, deviceInfo[0].DeviceID), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("building kandji device delete request: %w", err)
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiTokenFlag))
 	resp, err = client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("performing kandji device delete request: %w", err)
 	}
 	fmt.Println("resp.StatusCode, serialNumber, device", resp.StatusCode, serialNumber, deviceInfo[0].DeviceID)
 
