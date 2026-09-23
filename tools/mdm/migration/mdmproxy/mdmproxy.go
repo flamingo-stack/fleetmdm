@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/subtle"
 	"errors"
 	"flag"
 	"fmt"
@@ -147,7 +148,7 @@ func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Authorization header must start with \"Bearer \"", http.StatusUnauthorized)
 		return
 	}
-	if authHeader != "Bearer "+m.token {
+	if subtle.ConstantTimeCompare([]byte(authHeader), []byte("Bearer "+m.token)) != 1 {
 		http.Error(w, "Authorization header does not match", http.StatusUnauthorized)
 		return
 	}
@@ -192,7 +193,7 @@ func (m *mdmProxy) handleUpdateMigrateUDIDs(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Authorization header must start with \"Bearer \"", http.StatusUnauthorized)
 		return
 	}
-	if authHeader != "Bearer "+m.token {
+	if subtle.ConstantTimeCompare([]byte(authHeader), []byte("Bearer "+m.token)) != 1 {
 		http.Error(w, "Authorization header does not match", http.StatusUnauthorized)
 		return
 	}
