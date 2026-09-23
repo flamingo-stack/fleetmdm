@@ -348,6 +348,10 @@ export default {
     osSettings,
     diskEncryptionStatus,
     vulnerability,
+    scriptBatchExecutionStatus,
+    scriptBatchExecutionId,
+    depProfileError,
+    depAssignProfileResponse,
   }: IActionByFilter) => {
     const { HOSTS_DELETE } = endpoints;
     return sendRequest("POST", HOSTS_DELETE, {
@@ -374,6 +378,10 @@ export default {
         os_settings: osSettings,
         os_settings_disk_encryption: diskEncryptionStatus,
         vulnerability,
+        [HOSTS_QUERY_PARAMS.SCRIPT_BATCH_EXECUTION_STATUS]: scriptBatchExecutionStatus,
+        [HOSTS_QUERY_PARAMS.SCRIPT_BATCH_EXECUTION_ID]: scriptBatchExecutionId,
+        dep_profile_error: depProfileError,
+        dep_assing_profile_response: depAssignProfileResponse,
       },
     });
   },
