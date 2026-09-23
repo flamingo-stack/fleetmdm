@@ -33,7 +33,7 @@ func Up_20241203130032(tx *sql.Tx) error {
   CONSTRAINT verification_tokens_users FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE ON DELETE CASCADE
 )`)
 	if err != nil {
-		return fmt.Errorf("failed to craete verification_tokens table: %w", err)
+		return fmt.Errorf("failed to create verification_tokens table: %w", err)
 	}
 
 	return nil
