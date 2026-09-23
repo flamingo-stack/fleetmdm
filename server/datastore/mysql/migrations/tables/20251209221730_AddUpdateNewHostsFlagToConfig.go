@@ -45,7 +45,7 @@ func Up_20251209221730(tx *sql.Tx) error {
 		teams = append(teams, t)
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return fmt.Errorf("closing teams rows: %w", err)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterating team configs: %w", err)
