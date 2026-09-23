@@ -7,11 +7,11 @@ import (
 	"crypto/x509"
 	"database/sql"
 	_ "embed"
-	"errors"
 	"fmt"
 	"math/big"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/assets"
 	"github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
@@ -39,14 +39,15 @@ func newSCEPDepot(db *sql.DB, ds fleet.Datastore) (*SCEPDepot, error) {
 // CA returns the CA's certificate and private key.
 func (d *SCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 	// TODO(roberto): nano interfaces doesn't receive a context for this method.
-	cert, err := assets.CAKeyPair(context.Background(), d.ds)
+	ctx := context.Background()
+	cert, err := assets.CAKeyPair(ctx, d.ds)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting assets: %w", err)
+		return nil, nil, ctxerr.Wrap(ctx, err, "getting assets")
 	}
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(ctx, "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -88,7 +89,7 @@ func (d *SCEPDepot) Put(name string, crt *x509.Certificate) error {
 		name = fmt.Sprintf("%x", sha256.Sum256(crt.Raw))
 	}
 	if !crt.SerialNumber.IsInt64() {
-		return errors.New("cannot represent serial number as int64")
+		return ctxerr.New(context.Background(), "cannot represent serial number as int64")
 	}
 	certPEM := certificate.EncodeCertPEM(crt)
 	_, err := d.db.Exec(`
