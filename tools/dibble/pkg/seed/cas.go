@@ -191,6 +191,11 @@ func ndesRow() caRow {
 	}
 }
 
+// >>> OPENFRAME(cas-schema): this INSERT hard-codes the column layout of the
+// upstream fleetdm/fleet `certificate_authorities` table. If an upstream
+// migration renames, reorders, or adds columns to that table, this seeder
+// will silently break or insert into the wrong columns with no compiler
+// error. See openframe/docs/upstream-fork-drift.md for the sync checklist.
 const insertCAStmt = `INSERT INTO certificate_authorities (
 	type, name, url,
 	api_token_encrypted, profile_id, certificate_common_name,
@@ -199,6 +204,7 @@ const insertCAStmt = `INSERT INTO certificate_authorities (
 	password_encrypted, challenge_encrypted,
 	client_id, client_secret_encrypted
 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+// <<< OPENFRAME(cas-schema)
 
 func insertCA(ctx context.Context, db *sql.DB, r caRow) error {
 	_, err := db.ExecContext(ctx, insertCAStmt,
