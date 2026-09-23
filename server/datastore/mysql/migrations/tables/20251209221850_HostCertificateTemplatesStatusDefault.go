@@ -38,3 +38,4 @@ func Up_20251209221850(tx *sql.Tx) error {
 func Down_20251209221850(tx *sql.Tx) error {
 	return nil
 }
+
