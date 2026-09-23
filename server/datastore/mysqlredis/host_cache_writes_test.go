@@ -144,7 +144,7 @@ func TestWritePathInvalidation(t *testing.T) {
 			// production mysql.EnrollOrbit, which doesn't set NodeKey or
 			// OrbitNodeKey on its returned struct. This exercises the ID-based
 			// reverse-index invalidation path that production actually takes.
-			ds := new(mock.DataStore)
+			ds := new(mock.Store)
 			ds.EnrollOrbitFunc = func(_ context.Context, _ ...fleet.DatastoreEnrollOrbitOption) (*fleet.Host, error) {
 				return &fleet.Host{ID: 6}, nil
 			}
@@ -169,7 +169,7 @@ func TestWritePathInvalidation(t *testing.T) {
 			// cache for the freshly-enrolled host's first /orbit/* requests.
 			t.Cleanup(func() { cleanupHostCacheKeys(t, pool) })
 			onk := "onk-pre-enroll-race"
-			ds := new(mock.DataStore)
+			ds := new(mock.Store)
 			ds.EnrollOrbitFunc = func(_ context.Context, _ ...fleet.DatastoreEnrollOrbitOption) (*fleet.Host, error) {
 				// Mirror mysql.EnrollOrbit's return: ID set, OrbitNodeKey nil.
 				return &fleet.Host{ID: 99}, nil
