@@ -67,16 +67,18 @@ func (ds *Datastore) NewUser(ctx context.Context, user *fleet.User) (*fleet.User
 			user.GlobalRole,
 			user.InviteID,
 		)
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "create new user")
+		}
 
 		// set timestamp as close as possible to insert query to be as accurate as possible without needing to SELECT
 		user.CreatedAt = time.Now().UTC().Truncate(time.Second) // truncating because DB is at second resolution
 		user.UpdatedAt = user.CreatedAt
 
+		id, err := result.LastInsertId()
 		if err != nil {
-			return ctxerr.Wrap(ctx, err, "create new user")
+			return ctxerr.Wrap(ctx, err, "get last insert id for new user")
 		}
-
-		id, _ := result.LastInsertId()
 		user.ID = uint(id) //nolint:gosec // dismiss G115
 
 		if err := saveTeamsForUserDB(ctx, tx, user); err != nil {
@@ -319,6 +321,10 @@ func saveUserDB(ctx context.Context, tx sqlx.ExtContext, user *fleet.User) error
 		if err := replaceUserAPIEndpoints(ctx, tx, user.ID, user.APIEndpoints); err != nil {
 			return err
 		}
+	} else {
+		if err := replaceUserAPIEndpoints(ctx, tx, user.ID, nil); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -441,9 +447,9 @@ func saveTeamsForUserDB(ctx context.Context, tx sqlx.ExtContext, user *fleet.Use
 	return nil
 }
 
-// DeleteUser deletes the associated user
-func (ds *Datastore) DeleteUser(ctx context.Context, id uint) error {
-	// Transfer user data to deleted_users table for audit/activity purposes
+// copyUserToDeletedUsersDB copies the given user's audit-relevant fields into the
+// users_deleted table (or updates the existing entry if one already exists for the ID).
+func copyUserToDeletedUsersDB(ctx context.Context, tx sqlx.ExtContext, id uint) error {
 	stmt := `
 		INSERT INTO users_deleted (id, name, email)
 		SELECT u.id, u.name, u.email
@@ -452,9 +458,17 @@ func (ds *Datastore) DeleteUser(ctx context.Context, id uint) error {
 		ON DUPLICATE KEY UPDATE
 			name       = u.name,
 			email      = u.email`
-	_, err := ds.writer(ctx).ExecContext(ctx, stmt, id)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, stmt, id); err != nil {
 		return ctxerr.Wrap(ctx, err, "populate users_deleted entry")
+	}
+	return nil
+}
+
+// DeleteUser deletes the associated user
+func (ds *Datastore) DeleteUser(ctx context.Context, id uint) error {
+	// Transfer user data to deleted_users table for audit/activity purposes
+	if err := copyUserToDeletedUsersDB(ctx, ds.writer(ctx), id); err != nil {
+		return err
 	}
 
 	return ds.deleteEntity(ctx, usersTable, id)
@@ -476,16 +490,8 @@ func (ds *Datastore) DeleteUserIfNotLastAdmin(ctx context.Context, id uint) erro
 		}
 
 		// Transfer user data to deleted_users table for audit/activity purposes.
-		stmt := `
-			INSERT INTO users_deleted (id, name, email)
-			SELECT u.id, u.name, u.email
-			FROM users AS u
-			WHERE u.id = ?
-			ON DUPLICATE KEY UPDATE
-				name       = u.name,
-				email      = u.email`
-		if _, err := tx.ExecContext(ctx, stmt, id); err != nil {
-			return ctxerr.Wrap(ctx, err, "populate users_deleted entry")
+		if err := copyUserToDeletedUsersDB(ctx, tx, id); err != nil {
+			return err
 		}
 
 		res, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
