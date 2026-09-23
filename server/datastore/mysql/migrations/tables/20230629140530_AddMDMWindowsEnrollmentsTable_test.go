@@ -64,6 +64,7 @@ func TestUp_20230629140530(t *testing.T) {
 	require.NotZero(t, enrolledHost.CreatedAt)
 	require.NotZero(t, enrolledHost.UpdatedAt)
 
-	_, err = db.Exec(`UPDATE mdm_windows_enrollments SET created_at = NOW()`)
+	_, err = db.Exec(`UPDATE mdm_windows_enrollments SET created_at = NOW() WHERE mdm_device_id = ?`, mdm_device_id)
 	require.NoError(t, err)
 }
+
