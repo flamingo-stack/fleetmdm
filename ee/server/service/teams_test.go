@@ -463,7 +463,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 		authz: authorizer,
 	}
 
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
 	t.Run("case-only self rename succeeds", func(t *testing.T) {
@@ -472,7 +472,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 			return nil, nil
 		}
 
-		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: new("abc")})
+		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: ptr.String("abc")})
 		require.NoError(t, err)
 		require.NotNil(t, team)
 		require.Equal(t, "abc", team.Name)
@@ -484,7 +484,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 			return &fleet.Team{ID: 6, Name: "def"}, nil
 		}
 
-		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: new("DEF")})
+		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: ptr.String("DEF")})
 		require.Error(t, err)
 		require.Nil(t, team)
 		var conflict *fleet.ConflictError
@@ -503,7 +503,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 	authorizer, err := authz.NewAuthorizer()
 	require.NoError(t, err)
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
 	newSvc := func() (*Service, *mock.Store) {
@@ -1312,3 +1312,4 @@ func TestApplyTeamSpecsClearBootstrapPackageAlreadyDeleted(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ds.SaveTeamFuncInvoked)
 }
+
