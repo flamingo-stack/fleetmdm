@@ -45,7 +45,7 @@ const renderTooltip = (
 
     return (
       <a href={href} target="__blank" className={classNames}>
-        ${FOOTNOTES.requires_user_context}
+        {FOOTNOTES.requires_user_context}
       </a>
     );
   };
