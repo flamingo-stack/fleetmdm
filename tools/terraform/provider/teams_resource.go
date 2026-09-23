@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"strconv"
+	"strings"
 	"terraform-provider-fleetdm/fleetdm_client"
 )
 
@@ -34,6 +35,17 @@ func NewTeamsResource() resource.Resource {
 // teamsResource is the resource implementation.
 type teamsResource struct {
 	client *fleetdm_client.FleetDMClient
+}
+
+// isNotFoundError attempts to detect whether an error returned by the Fleet
+// API client represents a 404 (resource not found) response. The client
+// does not currently expose a typed error for this, so we fall back to
+// inspecting the error message for a "404" status indicator.
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "404")
 }
 
 // Configure adds the provider configured client to the resource.
@@ -155,6 +167,10 @@ func (r *teamsResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	apiTeam, err := r.client.GetTeam(state.Id.ValueInt64())
 	if err != nil {
+		if isNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 			"Failed to get team",
 			fmt.Sprintf("Failed to get team: %s", err)))
@@ -229,6 +245,10 @@ func (r *teamsResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		if ao != "" {
 			upTeam, err = r.client.UpdateAgentOptions(state.Id.ValueInt64(), ao)
 			if err != nil {
+				if isNotFoundError(err) {
+					resp.State.RemoveResource(ctx)
+					return
+				}
 				resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 					"Failed to update agent options",
 					fmt.Sprintf("Failed to update agent options: %s", err)))
@@ -240,6 +260,10 @@ func (r *teamsResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if name != nil || description != nil {
 		upTeam, err = r.client.UpdateTeam(state.Id.ValueInt64(), name, description)
 		if err != nil {
+			if isNotFoundError(err) {
+				resp.State.RemoveResource(ctx)
+				return
+			}
 			resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 				"Failed to update team",
 				fmt.Sprintf("Failed to update team: %s", err)))
@@ -289,6 +313,10 @@ func (r *teamsResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	err := r.client.DeleteTeam(state.Id.ValueInt64())
 	if err != nil {
+		if isNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 			"Failed to delete team",
 			fmt.Sprintf("Failed to delete team: %s", err)))
@@ -297,3 +325,4 @@ func (r *teamsResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	resp.State.RemoveResource(ctx)
 }
+
