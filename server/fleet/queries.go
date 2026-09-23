@@ -47,6 +47,10 @@ type QueryPayload struct {
 	LabelsIncludeAny []string `json:"labels_include_any"`
 	// LabelsIncludeAll scopes the query to hosts that are members of ALL of the listed labels.
 	LabelsIncludeAll []string `json:"labels_include_all"`
+	// >>> OPENFRAME(host-assignments): direct host targeting for queries — openframe/docs/architecture-host-assignments.md
+	// HostsIncludeAny restricts this query to run only on the specified hosts.
+	HostsIncludeAny []string `json:"hosts_include_any"`
+	// <<< OPENFRAME(host-assignments)
 	// >>> OPENFRAME(managed-queries): let the platform mark the query it owns — openframe/docs/managed-queries.md
 	OpenframeManaged *bool `json:"openframe_managed"`
 	// <<< OPENFRAME(managed-queries)
@@ -269,7 +273,9 @@ func (q *QueryPayload) Verify() error {
 			return err
 		}
 	}
-	return verifyQueryLabelScopeMutualExclusion(q.LabelsIncludeAny, q.LabelsIncludeAll)
+	// >>> OPENFRAME(host-assignments): HostsIncludeAny is a third mutually-exclusive scope — openframe/docs/architecture-host-assignments.md
+	return verifyQueryScopeMutualExclusion(q.LabelsIncludeAny, q.LabelsIncludeAll, q.HostsIncludeAny)
+	// <<< OPENFRAME(host-assignments)
 }
 
 // Verify verifies the query fields are valid.
@@ -292,9 +298,13 @@ func (q *Query) Verify() error {
 	if err := verifyQueryPlatforms(q.Platform); err != nil {
 		return err
 	}
-	if len(q.LabelsIncludeAny) > 0 && len(q.LabelsIncludeAll) > 0 {
+	// >>> OPENFRAME(host-assignments): HostsIncludeAny is a third mutually-exclusive scope — openframe/docs/architecture-host-assignments.md
+	if (len(q.LabelsIncludeAny) > 0 && len(q.LabelsIncludeAll) > 0) ||
+		(len(q.LabelsIncludeAny) > 0 && len(q.HostsIncludeAny) > 0) ||
+		(len(q.LabelsIncludeAll) > 0 && len(q.HostsIncludeAny) > 0) {
 		return ErrQueryConflictingLabels
 	}
+	// <<< OPENFRAME(host-assignments)
 	return nil
 }
 
@@ -333,6 +343,28 @@ func verifyQueryLabelScopeMutualExclusion(includeAny, includeAll []string) error
 	}
 	return nil
 }
+
+// >>> OPENFRAME(host-assignments): extend scope mutual-exclusion to cover direct host targeting — openframe/docs/architecture-host-assignments.md
+// verifyQueryScopeMutualExclusion enforces that at most one of labelsIncludeAny,
+// labelsIncludeAll or hostsIncludeAny is set.
+func verifyQueryScopeMutualExclusion(labelsIncludeAny, labelsIncludeAll, hostsIncludeAny []string) error {
+	set := 0
+	if len(labelsIncludeAny) > 0 {
+		set++
+	}
+	if len(labelsIncludeAll) > 0 {
+		set++
+	}
+	if len(hostsIncludeAny) > 0 {
+		set++
+	}
+	if set > 1 {
+		return ErrQueryConflictingLabels
+	}
+	return nil
+}
+
+// <<< OPENFRAME(host-assignments)
 
 func verifyQueryName(name string) error {
 	if emptyString(name) {
