@@ -157,6 +157,7 @@ func NewNatsLogWriter(ctx context.Context, server, subject, credFile, nkeyFile, 
 	}
 
 	if err != nil {
+		client.Close()
 		return nil, fmt.Errorf("failed to create nats router: %w", err)
 	}
 
