@@ -11,7 +11,7 @@ import (
 func JsonlFile(file string, opts ...FlattenOpts) ([]Row, error) {
 	f, err := os.Open(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("opening file %s: %w", file, err)
 	}
 	defer f.Close()
 	return Jsonl(f, opts...)
