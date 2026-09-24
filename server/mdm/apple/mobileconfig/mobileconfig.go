@@ -269,7 +269,7 @@ func (mc *Mobileconfig) ScreenPayloads(allowCustomFileVault bool) error {
 			case FleetCustomSettingsPayloadType:
 				contains, err := ContainsFDEFileVaultOptionsPayload(*mc)
 				if err != nil {
-					return fmt.Errorf("checking for FDEVileVaultOptions payload: %w", err)
+					return fmt.Errorf("checking for FDEFileVaultOptions payload: %w", err)
 				}
 				if contains && !allowCustomFileVault {
 					return errors.New(DiskEncryptionProfileRestrictionErrMsg)

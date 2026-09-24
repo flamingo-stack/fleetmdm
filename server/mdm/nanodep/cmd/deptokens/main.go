@@ -83,6 +83,9 @@ func encodeEncryptedKeyPEM(key *rsa.PrivateKey, password string) ([]byte, error)
 // decrypting it with password.
 func decodeEncryptedKeyPEM(pemBytes []byte, password string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("failed to decode PEM block")
+	}
 	if block.Type != "RSA PRIVATE KEY" {
 		return nil, errors.New("PEM type is not RSA PRIVATE KEY")
 	}

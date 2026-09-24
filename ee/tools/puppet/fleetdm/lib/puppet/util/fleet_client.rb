@@ -175,7 +175,7 @@ module Puppet::Util
           end
         end
       rescue => e
-        out['error'] = e
+        out['error'] = e.message
       end
 
       out
@@ -196,7 +196,7 @@ module Puppet::Util
         message = 'server returned a non-ok status code without an error'
 
         if response.body
-          body = JSON.parse(response.body)
+          body = out['body']
           message = body['message']
 
           unless body['errors'].nil?

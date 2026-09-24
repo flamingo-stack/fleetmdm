@@ -7,6 +7,7 @@ import (
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mock"
+	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,7 +140,7 @@ func TestSubstituteFleetVarsInAndroidAppConfig(t *testing.T) {
 			return []uint{42}, nil
 		}
 		ds.ScimUserByHostIDFunc = func(ctx context.Context, hostID uint) (*fleet.ScimUser, error) {
-			return &fleet.ScimUser{UserName: "jdoe@example.com", GivenName: new("John"), FamilyName: new("Doe")}, nil
+			return &fleet.ScimUser{UserName: "jdoe@example.com", GivenName: ptr.String("John"), FamilyName: ptr.String("Doe")}, nil
 		}
 		ds.ListHostDeviceMappingFunc = func(ctx context.Context, hostID uint) ([]*fleet.HostDeviceMapping, error) {
 			return nil, nil
@@ -157,7 +158,7 @@ func TestSubstituteFleetVarsInAndroidAppConfig(t *testing.T) {
 			return []uint{42}, nil
 		}
 		ds.ScimUserByHostIDFunc = func(ctx context.Context, hostID uint) (*fleet.ScimUser, error) {
-			return &fleet.ScimUser{UserName: "jdoe@example.com", GivenName: new("John"), FamilyName: new("Doe")}, nil
+			return &fleet.ScimUser{UserName: "jdoe@example.com", GivenName: ptr.String("John"), FamilyName: ptr.String("Doe")}, nil
 		}
 		ds.ListHostDeviceMappingFunc = func(ctx context.Context, hostID uint) ([]*fleet.HostDeviceMapping, error) {
 			return nil, nil

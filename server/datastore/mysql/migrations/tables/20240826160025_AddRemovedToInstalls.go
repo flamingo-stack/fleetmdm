@@ -56,7 +56,7 @@ func Up_20240826160025(tx *sql.Tx) error {
 		return fmt.Errorf("failed to find host_software_installs to remove: %w", err)
 	}
 	if len(ids) > 0 {
-		stmt, args, err := sqlx.In("UPDATE host_software_installs SET removed = 1	WHERE id IN (?)", ids)
+		stmt, args, err := sqlx.In("UPDATE host_software_installs SET removed = 1 WHERE id IN (?)", ids)
 		if err != nil {
 			return fmt.Errorf("failed to expand slice value for host_software_installs: %w", err)
 		}
@@ -87,7 +87,7 @@ func Up_20240826160025(tx *sql.Tx) error {
 		return fmt.Errorf("failed to find host_vpp_software_installs to remove: %w", err)
 	}
 	if len(vppIDs) > 0 {
-		stmt, args, err := sqlx.In("UPDATE host_vpp_software_installs SET removed = 1	WHERE id IN (?)", vppIDs)
+		stmt, args, err := sqlx.In("UPDATE host_vpp_software_installs SET removed = 1 WHERE id IN (?)", vppIDs)
 		if err != nil {
 			return fmt.Errorf("failed to expand slice value for host_vpp_software_installs: %w", err)
 		}
