@@ -430,6 +430,9 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 	baseCtx := licensectx.NewContext(context.Background(), license)
 	ctx, cancelFunc := context.WithCancel(baseCtx)
 	defer cancelFunc()
+	// >>> OPENFRAME(osquery-schema-search): start per-replica schema auto-refresh — openframe/docs/api-osquery-schema-search.md
+	startOsquerySchemaRefresh(ctx, config.Osquery, logger)
+	// <<< OPENFRAME(osquery-schema-search)
 
 	// Channel used to trigger graceful shutdown on fatal DB errors (e.g. Aurora failover).
 	dbFatalCh := make(chan error, 1)

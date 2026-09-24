@@ -37,7 +37,7 @@ jobs:
             {
               "id": "server",
               "name": "fleet",
-              "paths": ["./server/**", "./cmd/**", "./pkg/**", "./ee/**", "./tools/**", "./Dockerfile", "./.goreleaser.yml"]
+              "paths": ["./server/**", "./cmd/**", "./pkg/**", "./schema/**", "./ee/**", "./tools/**", "./Dockerfile", "./.goreleaser.yml"]
             }
           ]'
 

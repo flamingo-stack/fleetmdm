@@ -448,6 +448,11 @@ environments:
   # you store this private key in a secret and use envsFrom to reference the secret below.
   # For more information, check out the docs: https://fleetdm.com/docs/configuration/fleet-server-configuration#server-private-key
   FLEET_SERVER_PRIVATE_KEY: ""
+  # >>> OPENFRAME(osquery-schema-search): keep the query-generation schema current in OpenFrame deployments
+  FLEET_OSQUERY_SCHEMA_REFRESH_ENABLED: "false"
+  FLEET_OSQUERY_SCHEMA_REFRESH_INTERVAL: "24h"
+  FLEET_OSQUERY_SCHEMA_REFRESH_URL: "https://raw.githubusercontent.com/flamingo-stack/fleetmdm/main/schema/osquery_fleet_schema.json"
+  # <<< OPENFRAME(osquery-schema-search)
 
 ## Section: Environment Variables from Secrets/CMs
 # envsFrom:

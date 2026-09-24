@@ -166,6 +166,9 @@ jobs:
         with:
           install-only: true
 
+      - name: Test OpenFrame osquery schema search and refresh
+        run: go test -race ./schema ./server/config ./server/service ./cmd/fleet -run 'Test(SearchOsquery|RefreshOsquery|RankOsquery|RunOsquery|OpenframeConfig|OsquerySchema)' -count=1
+
       - name: Build with GoReleaser
         env:
           REGISTRY: ${{ env.REGISTRY }}

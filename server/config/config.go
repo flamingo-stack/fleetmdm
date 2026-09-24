@@ -267,6 +267,11 @@ type OsqueryConfig struct {
 	LabelUpdateInterval  time.Duration `yaml:"label_update_interval"`
 	PolicyUpdateInterval time.Duration `yaml:"policy_update_interval"`
 	DetailUpdateInterval time.Duration `yaml:"detail_update_interval"`
+	// >>> OPENFRAME(osquery-schema-search): configurable schema auto-refresh — openframe/docs/api-osquery-schema-search.md
+	SchemaRefreshEnabled  bool          `yaml:"schema_refresh_enabled"`
+	SchemaRefreshInterval time.Duration `yaml:"schema_refresh_interval"`
+	SchemaRefreshURL      string        `yaml:"schema_refresh_url"`
+	// <<< OPENFRAME(osquery-schema-search)
 
 	// StatusLogFile is deprecated. It was replaced by FilesystemConfig.StatusLogFile.
 	//
@@ -327,6 +332,20 @@ func (o OsqueryConfig) Validate(initFatal func(err error, msg string)) {
 		initFatal(fmt.Errorf("%s is not a valid value for osquery_host_identifier", o.HostIdentifier),
 			"set host identifier")
 	}
+
+	// >>> OPENFRAME(osquery-schema-search): reject unsafe auto-refresh configuration — openframe/docs/api-osquery-schema-search.md
+	if !o.SchemaRefreshEnabled {
+		return
+	}
+	if o.SchemaRefreshInterval <= 0 {
+		initFatal(errors.New("osquery schema refresh interval must be greater than zero"), "validate osquery schema refresh")
+		return
+	}
+	sourceURL, err := url.Parse(o.SchemaRefreshURL)
+	if err != nil || sourceURL.Host == "" || sourceURL.Scheme != "http" && sourceURL.Scheme != "https" {
+		initFatal(errors.New("osquery schema refresh URL must use http or https"), "validate osquery schema refresh")
+	}
+	// <<< OPENFRAME(osquery-schema-search)
 }
 
 // AsyncTaskName is the type of names that identify tasks supporting
@@ -1453,6 +1472,14 @@ func (man Manager) addConfigs() {
 		"Interval to update host policy membership (i.e. 1h)")
 	man.addConfigDuration("osquery.detail_update_interval", 1*time.Hour,
 		"Interval to update host details (i.e. 1h)")
+	// >>> OPENFRAME(osquery-schema-search): register schema auto-refresh flags — openframe/docs/api-osquery-schema-search.md
+	man.addConfigBool("osquery.schema_refresh_enabled", false,
+		"Refresh the in-memory osquery schema from a remote JSON source")
+	man.addConfigDuration("osquery.schema_refresh_interval", 24*time.Hour,
+		"Interval between osquery schema refresh attempts")
+	man.addConfigString("osquery.schema_refresh_url", "https://raw.githubusercontent.com/fleetdm/fleet/2cb8509c210a7443f715bc9c2b64fc7bc85fd5f7/schema/osquery_fleet_schema.json",
+		"URL of the canonical osquery schema JSON")
+	// <<< OPENFRAME(osquery-schema-search)
 	man.addConfigString("osquery.status_log_file", "",
 		"(DEPRECATED: Use filesystem.status_log_file) Path for osqueryd status logs")
 	man.addConfigString("osquery.result_log_file", "",
@@ -1935,10 +1962,15 @@ func (man Manager) LoadConfig() FleetConfig {
 			// StatusLogFile is deprecated. FilesystemConfig.StatusLogFile is used instead.
 			StatusLogFile: man.getConfigString("osquery.status_log_file"),
 			// ResultLogFile is deprecated. FilesystemConfig.ResultLogFile is used instead.
-			ResultLogFile:                    man.getConfigString("osquery.result_log_file"),
-			LabelUpdateInterval:              man.getConfigDuration("osquery.label_update_interval"),
-			PolicyUpdateInterval:             man.getConfigDuration("osquery.policy_update_interval"),
-			DetailUpdateInterval:             man.getConfigDuration("osquery.detail_update_interval"),
+			ResultLogFile:        man.getConfigString("osquery.result_log_file"),
+			LabelUpdateInterval:  man.getConfigDuration("osquery.label_update_interval"),
+			PolicyUpdateInterval: man.getConfigDuration("osquery.policy_update_interval"),
+			DetailUpdateInterval: man.getConfigDuration("osquery.detail_update_interval"),
+			// >>> OPENFRAME(osquery-schema-search): read schema auto-refresh config — openframe/docs/api-osquery-schema-search.md
+			SchemaRefreshEnabled:  man.getConfigBool("osquery.schema_refresh_enabled"),
+			SchemaRefreshInterval: man.getConfigDuration("osquery.schema_refresh_interval"),
+			SchemaRefreshURL:      man.getConfigString("osquery.schema_refresh_url"),
+			// <<< OPENFRAME(osquery-schema-search)
 			EnableLogRotation:                man.getConfigBool("osquery.enable_log_rotation"),
 			MaxJitterPercent:                 man.getConfigInt("osquery.max_jitter_percent"),
 			EnableAsyncHostProcessing:        man.getConfigString("osquery.enable_async_host_processing"),
