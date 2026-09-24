@@ -54,7 +54,7 @@ require (
 	github.com/doug-martin/goqu/v9 v9.18.0
 	github.com/e-dard/netbug v0.0.0-20151029172837-e64d308a0b20
 	github.com/elazarl/go-bindata-assetfs v1.0.1
-	github.com/elimity-com/scim v0.0.0-20240320110924-172bf2aee9c8
+	github.com/elimity-com/scim v0.0.0-20260506142751-830e1caafcc3
 	github.com/expr-lang/expr v1.17.7
 	github.com/facebookincubator/flog v0.0.0-20190930132826-d2511d0ce33c
 	github.com/fatih/color v1.16.0
