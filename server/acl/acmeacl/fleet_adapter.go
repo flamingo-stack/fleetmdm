@@ -9,6 +9,7 @@ package acmeacl
 import (
 	"context"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/acme"
 )
@@ -31,7 +32,7 @@ var _ acme.DataProviders = (*FleetDatastoreAdapter)(nil)
 func (a *FleetDatastoreAdapter) ServerURL(ctx context.Context) (string, error) {
 	appCfg, err := a.ds.AppConfig(ctx)
 	if err != nil {
-		return "", err
+		return "", ctxerr.Wrap(ctx, err, "get app config for server URL")
 	}
 	return appCfg.MDMUrl(), nil
 }
@@ -39,7 +40,7 @@ func (a *FleetDatastoreAdapter) ServerURL(ctx context.Context) (string, error) {
 func (a *FleetDatastoreAdapter) GetCACertificatePEM(ctx context.Context) ([]byte, error) {
 	assets, err := a.ds.GetAllMDMConfigAssetsByName(ctx, []fleet.MDMAssetName{fleet.MDMAssetCACert}, nil)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get CA certificate asset")
 	}
 	return assets[fleet.MDMAssetCACert].Value, nil
 }
@@ -51,7 +52,7 @@ func (a *FleetDatastoreAdapter) CSRSigner(_ context.Context) (acme.CSRSigner, er
 func (a *FleetDatastoreAdapter) IsDEPEnrolled(ctx context.Context, serial string) (bool, error) {
 	assignments, err := a.ds.GetHostDEPAssignmentsBySerial(ctx, serial)
 	if err != nil {
-		return false, err
+		return false, ctxerr.Wrap(ctx, err, "get host DEP assignments by serial")
 	}
 	return len(assignments) > 0, nil
 }
