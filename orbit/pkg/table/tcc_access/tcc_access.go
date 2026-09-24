@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/osquery/osquery-go/plugin/table"
@@ -164,27 +165,35 @@ func buildTableRows(uid string, parsedRows [][]string) ([]map[string]string, err
 }
 
 func satisfiesConstraints(uid string, constraints []table.Constraint) (bool, error) {
+	uidNum, err := strconv.Atoi(uid)
+	if err != nil {
+		return false, fmt.Errorf("invalid uid %q: %w", uid, err)
+	}
 	for _, constraint := range constraints {
 		// for each constraint on the column
+		exprNum, err := strconv.Atoi(constraint.Expression)
+		if err != nil {
+			return false, fmt.Errorf("invalid uid constraint expression %q: %w", constraint.Expression, err)
+		}
 		switch constraint.Operator {
 		case table.OperatorEquals:
-			if constraint.Expression != uid {
+			if exprNum != uidNum {
 				return false, nil
 			}
 		case table.OperatorGreaterThan:
-			if constraint.Expression >= uid {
+			if exprNum >= uidNum {
 				return false, nil
 			}
 		case table.OperatorLessThan:
-			if constraint.Expression <= uid {
+			if exprNum <= uidNum {
 				return false, nil
 			}
 		case table.OperatorGreaterThanOrEquals:
-			if constraint.Expression > uid {
+			if exprNum > uidNum {
 				return false, nil
 			}
 		case table.OperatorLessThanOrEquals:
-			if constraint.Expression < uid {
+			if exprNum < uidNum {
 				return false, nil
 			}
 		default:

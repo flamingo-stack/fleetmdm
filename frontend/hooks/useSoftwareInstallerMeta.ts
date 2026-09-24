@@ -25,6 +25,7 @@ export interface SoftwareInstallerMeta {
   isAndroidPlayStoreWebApp: boolean;
   isFleetMaintainedApp: boolean;
   isLatestFmaVersion: boolean;
+  fmaVersions: ISoftwarePackage["fleet_maintained_versions"];
   isCustomPackage: boolean;
   isIosOrIpadosApp: boolean;
   sha256?: string;

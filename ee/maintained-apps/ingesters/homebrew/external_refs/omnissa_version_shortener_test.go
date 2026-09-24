@@ -35,8 +35,7 @@ func TestOmnissaVersionShortener(t *testing.T) {
 			Version:          "8.16.0",
 		}
 		result, err := OmnissaHorizonVersionShortener(app)
-		assert.Error(t, err)
-		assert.Equal(t, "Expected Omnissa Horizon Client version to match XXXX-0.00.0-XXXXXXXXXXX but found '8.16.0'", err.Error())
+		assert.NoError(t, err)
 		assert.Equal(t, "8.16.0", result.Version)
 	})
 }

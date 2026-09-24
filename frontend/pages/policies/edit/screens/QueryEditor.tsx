@@ -172,10 +172,12 @@ const QueryEditor = ({
         const policy: IPolicy = await createPolicy(payload).then(
           (data) => data.policy
         );
+        let automationsSaveFailed = false;
         if (saveAutomations) {
           try {
             await saveAutomations(policy);
           } catch (automationsErr) {
+            automationsSaveFailed = true;
             renderFlash(
               "error",
               "Policy was created, but its automations couldn't be saved."
@@ -187,7 +189,9 @@ const QueryEditor = ({
             fleet_id: policy.team_id,
           })
         );
-        renderFlash("success", "Policy created.");
+        if (!automationsSaveFailed) {
+          renderFlash("success", "Policy created.");
+        }
       } catch (createError) {
         if (getErrorReason(createError).includes("already exists")) {
           setBackendValidators({

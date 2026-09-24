@@ -52,6 +52,17 @@ const STATUS_CONFIG: Record<SoftwareInstallStatus, IStatusDisplayConfig> = {
       </>
     ),
   },
+  failed_uninstall: {
+    iconName: "error",
+    displayText: "Failed",
+    tooltip: ({ lastInstalledAt = "" }) => (
+      <>
+        Software failed to uninstall
+        {lastInstalledAt ? ` (${dateAgo(lastInstalledAt)})` : ""}. Select{" "}
+        <b>Retry</b> to install again, or contact your IT department.
+      </>
+    ),
+  },
 };
 
 interface IInstallerInfoProps {
@@ -170,7 +181,8 @@ const InstallerStatusAction = ({
     };
   }, []);
 
-  const showFailedInstallStatus = status === "failed_install";
+  const showFailedInstallStatus =
+    status === "failed_install" || status === "failed_uninstall";
 
   const renderPrimaryStatusAction = () => {
     if (ui_status === "updating") {

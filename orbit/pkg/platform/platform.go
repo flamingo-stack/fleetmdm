@@ -70,10 +70,12 @@ func KillAllProcessByName(namePrefix string) ([]Process, error) {
 	}
 
 	var killedProcesses []Process
+	var killErrors []error
 	for _, foundProcess := range foundProcesses {
 		processName, _ := foundProcess.Name()
 		if err := foundProcess.Kill(); err != nil {
-			return nil, fmt.Errorf("kill process %d: %w", foundProcess.Pid, err)
+			killErrors = append(killErrors, fmt.Errorf("kill process %d: %w", foundProcess.Pid, err))
+			continue
 		}
 		killedProcesses = append(killedProcesses, Process{
 			Name: processName,
@@ -81,5 +83,10 @@ func KillAllProcessByName(namePrefix string) ([]Process, error) {
 		})
 	}
 
+	if len(killErrors) > 0 {
+		return killedProcesses, errors.Join(killErrors...)
+	}
+
 	return killedProcesses, nil
 }
+

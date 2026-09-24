@@ -44,10 +44,10 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueIdentifi
 	defer cancel()
 
 	if err := validateSqlInput(appName); err != nil {
-		return false, fmt.Errorf("Invalid character found in appName: '%w'. Not executing query...", err)
+		return false, fmt.Errorf("invalid character found in appName, not executing query: %w", err)
 	}
 	if err := validateSqlInput(appPath); err != nil {
-		return false, fmt.Errorf("Invalid character found in appPath: '%w'. Not executing query...", err)
+		return false, fmt.Errorf("invalid character found in appPath, not executing query: %w", err)
 	}
 
 	logger.InfoContext(ctx, fmt.Sprintf("Looking for app: %s, version: %s", appName, appVersion))
@@ -63,7 +63,7 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueIdentifi
 	// on it as well.
 	if uniqueIdentifier != "" && uniqueIdentifier != appName {
 		if err := validateSqlInput(uniqueIdentifier); err != nil {
-			return false, fmt.Errorf("Invalid character found in uniqueIdentifier: '%w'. Not executing query...", err)
+			return false, fmt.Errorf("invalid character found in uniqueIdentifier, not executing query: %w", err)
 		}
 		query += `	OR LOWER(name) LIKE LOWER('%` + uniqueIdentifier + `%')`
 	}
