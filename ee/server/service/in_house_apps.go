@@ -295,7 +295,11 @@ func (svc *Service) GetInHouseAppPackage(ctx context.Context, titleID uint, toke
 }
 
 // validateInHouseAppInstallToken collapses missing, expired, and title-mismatch
-// into the same permission error so callers can't distinguish them.
+// into the same permission error so callers can't distinguish them based on
+// the error returned or logged detail. Note that this does not make the
+// lookup constant-time: the length check short-circuits before any DB access,
+// and the DB lookup and title comparison have differing costs, so timing
+// side-channels are not eliminated by this function.
 func (svc *Service) validateInHouseAppInstallToken(
 	ctx context.Context,
 	urlTitleID uint,

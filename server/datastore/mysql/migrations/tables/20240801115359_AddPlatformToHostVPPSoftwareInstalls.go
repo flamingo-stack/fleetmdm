@@ -41,6 +41,16 @@ func Up_20240801115359(tx *sql.Tx) error {
 		return fmt.Errorf("updating platform in host_vpp_software_installs part 2: %w", err)
 	}
 
+	// Remove any orphaned records that still have no platform set (i.e., no matching host and no
+	// matching vpp_apps entry), since these would otherwise violate the foreign key added below.
+	deleteOrphansStmt := `
+		DELETE FROM host_vpp_software_installs WHERE platform = ''`
+
+	_, err = tx.Exec(deleteOrphansStmt)
+	if err != nil {
+		return fmt.Errorf("deleting orphaned records in host_vpp_software_installs: %w", err)
+	}
+
 	// Idempotent migration.
 	if indexExistsTx(tx, "host_vpp_software_installs", "adam_id") {
 		_, err = tx.Exec(`ALTER TABLE host_vpp_software_installs DROP INDEX adam_id`)

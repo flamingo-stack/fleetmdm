@@ -256,7 +256,10 @@ func (ds *Datastore) InitiateManagedLocalAccountRotation(ctx context.Context, ho
 		return ctxerr.Wrap(ctx, err, "initiate managed local account rotation")
 	}
 
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "get rows affected for managed local account rotation")
+	}
 	if rows > 0 {
 		return nil
 	}

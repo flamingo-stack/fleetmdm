@@ -37,6 +37,12 @@ func Up_20251117020200(tx *sql.Tx) error {
 	if !ok {
 		return fmt.Errorf("invalid type for mdm: %T", mdm)
 	}
+
+	if _, ok := mdmMap["enable_turn_on_windows_mdm_manually"]; ok {
+		// Already set (either by a previous run of this migration or by an
+		// admin/app write since). Do not overwrite an existing value.
+		return nil
+	}
 	mdmMap["enable_turn_on_windows_mdm_manually"] = false
 
 	b, err := json.Marshal(config)

@@ -54,7 +54,7 @@ export interface IMdmVppToken {
 }
 
 export const getMdmServerUrl = ({ server_url }: IConfigServerSettings) => {
-  return server_url.concat("/mdm/apple/mdm");
+  return server_url.replace(/\/+$/, "").concat("/mdm/apple/mdm");
 };
 
 /** These are the values the API will send back to the UI for mdm enrollment status */

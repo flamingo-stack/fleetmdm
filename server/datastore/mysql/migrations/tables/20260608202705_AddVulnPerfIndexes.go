@@ -9,7 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20260608202705, Down_20260608202705)
 }
 
-// Up_20260515000600 adds three indexes to speed up the /api/v1/fleet/vulnerabilities
+// Up_20260608202705 adds three indexes to speed up the /api/v1/fleet/vulnerabilities
 // and /api/v1/fleet/software/versions endpoints, which were doing full-table scans
 // for filter and scope predicates. All three are created with ALGORITHM=INPLACE,
 // LOCK=NONE so they can be applied online without blocking writers.
