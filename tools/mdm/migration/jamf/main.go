@@ -125,7 +125,7 @@ func (j *jamfClient) doWithRequest(req *http.Request) ([]byte, error) {
 func (j *jamfClient) do(method, path string) ([]byte, error) {
 	req, err := http.NewRequest(method, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Add("accept", "application/xml")
 	req.Header.Add("Authorization", "Bearer "+j.token)
@@ -134,26 +134,29 @@ func (j *jamfClient) do(method, path string) ([]byte, error) {
 
 func (j *jamfClient) unmanageDevice(jamfID string) error {
 	_, err := j.do("POST", fmt.Sprintf("%s/JSSResource/computercommands/command/UnmanageDevice/id/%s", *url, jamfID))
-	return err
+	if err != nil {
+		return fmt.Errorf("unmanaging device: %w", err)
+	}
+	return nil
 }
 
 func (j *jamfClient) getBearerToken(username, password string) (string, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/auth/token", *url), nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("creating auth token request: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 
 	body, err := j.doWithRequest(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting auth token: %w", err)
 	}
 
 	var tokenResponse struct {
 		Token string `json:"token"`
 	}
 	if err := json.Unmarshal(body, &tokenResponse); err != nil {
-		return "", err
+		return "", fmt.Errorf("unmarshalling auth token response: %w", err)
 	}
 
 	return tokenResponse.Token, nil
@@ -162,7 +165,7 @@ func (j *jamfClient) getBearerToken(username, password string) (string, error) {
 func (j *jamfClient) getJamfID(serial string) (string, error) {
 	body, err := j.do("GET", fmt.Sprintf("%s/JSSResource/computers/serialnumber/%s", *url, serial))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting jamf id: %w", err)
 	}
 
 	var data struct {
@@ -171,7 +174,7 @@ func (j *jamfClient) getJamfID(serial string) (string, error) {
 	}
 
 	if err := xml.Unmarshal(body, &data); err != nil {
-		return "", err
+		return "", fmt.Errorf("unmarshalling jamf id response: %w", err)
 	}
 
 	return data.ID, nil

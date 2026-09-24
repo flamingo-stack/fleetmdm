@@ -403,7 +403,7 @@ func deleteBulkUsersCommand() *cli.Command {
 func generateRandomPassword() (string, error) {
 	password, err := password.Generate(20, 2, 2, false, true)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("generate random password: %w", err)
 	}
 	return password, nil
 }

@@ -205,5 +205,9 @@ func getUpdater(disableUpdates bool, opt update.Options) (*update.Updater, error
 		log.Info().Msg("running with auto updates disabled")
 		return update.NewDisabled(opt), nil
 	}
-	return update.NewUpdater(opt)
+	updater, err := update.NewUpdater(opt)
+	if err != nil {
+		return nil, fmt.Errorf("create updater: %w", err)
+	}
+	return updater, nil
 }
