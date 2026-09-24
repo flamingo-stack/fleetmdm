@@ -220,25 +220,48 @@ func (ds *Datastore) VerifyEnrollSecret(ctx context.Context, secret string) (*fl
 }
 
 func (ds *Datastore) IsEnrollSecretAvailable(ctx context.Context, secret string, isNew bool, teamID *uint) (bool, error) {
-	secretTeamID := sql.NullInt64{}
-	err := sqlx.GetContext(ctx, ds.reader(ctx), &secretTeamID, "SELECT team_id FROM enroll_secrets WHERE secret = ?", secret)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return true, nil
+	var available bool
+	err := ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
+		secretTeamID := sql.NullInt64{}
+		// >>> OPENFRAME(mysql-multitenancy): scope the availability check to this process's pinned
+		// tenant, matching VerifyEnrollSecret/ApplyEnrollSecrets/GetEnrollSecrets, so a tenant can
+		// neither observe nor be blocked by another tenant's enroll secrets on a shared DB. The
+		// check is also performed with SELECT ... FOR UPDATE inside the same transaction as the
+		// caller's subsequent write to close the check-then-act race. No-op when unpinned.
+		stmt := "SELECT team_id FROM enroll_secrets WHERE secret = ? FOR UPDATE"
+		args := []interface{}{secret}
+		if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+			stmt = "SELECT team_id FROM enroll_secrets WHERE secret = ? AND team_id = ? FOR UPDATE"
+			args = append(args, pinned)
 		}
-		return false, ctxerr.Wrap(ctx, err, "check enroll secret availability")
-	}
-	if isNew {
-		// Secret is already in use, so a new team can't use it
-		return false, nil
-	}
-	// Secret is in use, but we're checking if it's already assigned to the team
-	if (teamID == nil && !secretTeamID.Valid) || (teamID != nil && secretTeamID.Valid && uint(secretTeamID.Int64) == *teamID) { //nolint:gosec // dismiss G115
-		return true, nil
-	}
+		// <<< OPENFRAME(mysql-multitenancy)
+		err := sqlx.GetContext(ctx, tx, &secretTeamID, stmt, args...)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				available = true
+				return nil
+			}
+			return ctxerr.Wrap(ctx, err, "check enroll secret availability")
+		}
+		if isNew {
+			// Secret is already in use, so a new team can't use it
+			available = false
+			return nil
+		}
+		// Secret is in use, but we're checking if it's already assigned to the team
+		if (teamID == nil && !secretTeamID.Valid) || (teamID != nil && secretTeamID.Valid && uint(secretTeamID.Int64) == *teamID) { //nolint:gosec // dismiss G115
+			available = true
+			return nil
+		}
 
-	// Secret is in use by another team or globally
-	return false, nil
+		// Secret is in use by another team or globally
+		available = false
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return available, nil
 }
 
 func (ds *Datastore) ApplyEnrollSecrets(ctx context.Context, teamID *uint, secrets []*fleet.EnrollSecret) error {

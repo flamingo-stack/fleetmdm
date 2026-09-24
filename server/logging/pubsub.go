@@ -95,6 +95,9 @@ func (w *pubSubLogWriter) Write(ctx context.Context, logs []json.RawMessage) err
 
 	// Wait for each message to be pushed to the server
 	for _, result := range results {
+		if result == nil {
+			continue
+		}
 		_, err := result.Get(ctx)
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "pubsub publish")

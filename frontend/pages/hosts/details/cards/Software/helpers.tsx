@@ -122,7 +122,9 @@ const comparePreRelease = (a: string, b: string): number => {
  * See helpers.tests.ts for examples and edge cases.
  *
  * Note: This is more robust than /utilities/helpers.tsx compareVersions function
- * which only splits on . and is not suitable for prerelese, metadata, and non-trad schemes
+ * which only splits on . and is not suitable for prerelese, metadata, and non-trad schemes.
+ * Named compareSoftwareVersions here (rather than compareVersions) to avoid
+ * ambiguity/collisions with the simpler /utilities/helpers.tsx compareVersions.
  *
  * Pitfalls & Known Limitations:
  * - Designed primarily for Semantic Versioning (SemVer, e.g., "1.2.3-alpha").
@@ -131,7 +133,7 @@ const comparePreRelease = (a: string, b: string): number => {
  *   - Pre-release and metadata handling depends on correct and complete `PRE_RELEASE_ORDER` and `comparePreRelease` helper.
  * - Versions with **mixed types per segment** (e.g., "1.0.0-beta" vs "1.0.0-5") may not follow SemVer rules precisely.
  */
-export const compareVersions = (v1: string, v2: string): number => {
+export const compareSoftwareVersions = (v1: string, v2: string): number => {
   if (typeof v1 !== "string" || typeof v2 !== "string") {
     console.warn(
       "Warning: Version comparison received non-string input.",
@@ -242,7 +244,7 @@ export const getUiStatus = (
     if (installerVersion && installed_versions) {
       if (
         installed_versions.some(
-          (iv) => compareVersions(iv.version, installerVersion) === -1
+          (iv) => compareSoftwareVersions(iv.version, installerVersion) === -1
         )
       ) {
         return "failed_install_update_available";
@@ -259,7 +261,7 @@ export const getUiStatus = (
     if (installerVersion && installed_versions) {
       if (
         installed_versions.some(
-          (iv) => compareVersions(iv.version, installerVersion) === -1
+          (iv) => compareSoftwareVersions(iv.version, installerVersion) === -1
         )
       ) {
         return "failed_uninstall_update_available";
@@ -279,7 +281,7 @@ export const getUiStatus = (
       installerVersion
     ) {
       const isUpdate = installed_versions.some(
-        (iv) => compareVersions(iv.version, installerVersion) === -1
+        (iv) => compareSoftwareVersions(iv.version, installerVersion) === -1
       );
       if (isUpdate) {
         return isHostOnline ? "updating" : "pending_update";
@@ -311,7 +313,7 @@ export const getUiStatus = (
     installerVersion &&
     installed_versions &&
     installed_versions.some(
-      (iv) => compareVersions(iv.version, installerVersion) === -1
+      (iv) => compareSoftwareVersions(iv.version, installerVersion) === -1
     )
   ) {
     if (!lastInstallDate) {
@@ -325,7 +327,9 @@ export const getUiStatus = (
       : "update_available";
   }
 
-  // 6. Recently installed (not an update)
+  // 6. Recently installed (not an update), including the tarballs edge case:
+  // since isInventoryDetectableSource is false for tgz_packages sources
+  // (per NO_VERSION_OR_HOST_DATA_SOURCES), this falls through to "installed" immediately.
   if (status === "installed") {
     if (
       lastInstallDate &&
@@ -340,12 +344,7 @@ export const getUiStatus = (
     return "installed";
   }
 
-  // 7. Tarballs edge case
-  if (source === "tgz_packages" && status === "installed") {
-    return "installed";
-  }
-
-  // 8. Default to installed or uninstalled based on installed_versions
+  // 7. Default to installed or uninstalled based on installed_versions
   if (installed_versions && installed_versions.length > 0) return "installed";
 
   return "uninstalled";

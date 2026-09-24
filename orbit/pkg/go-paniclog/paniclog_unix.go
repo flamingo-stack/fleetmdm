@@ -6,7 +6,7 @@
 package paniclog
 
 import (
-	"errors"
+	"fmt"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -16,12 +16,12 @@ func redirectStderr(f *os.File) (UndoFunction, error) {
 	stderrFd := int(os.Stderr.Fd())
 	oldfd, err := unix.Dup(stderrFd)
 	if err != nil {
-		return nil, errors.New("Failed to redirect stderr to file: " + err.Error())
+		return nil, fmt.Errorf("failed to redirect stderr to file: %w", err)
 	}
 
 	err = unix.Dup2(int(f.Fd()), stderrFd)
 	if err != nil {
-		return nil, errors.New("Failed to redirect stderr to file: " + err.Error())
+		return nil, fmt.Errorf("failed to redirect stderr to file: %w", err)
 	}
 
 	undo := func() error {
@@ -29,7 +29,7 @@ func redirectStderr(f *os.File) (UndoFunction, error) {
 		unix.Close(oldfd)
 
 		if undoErr != nil {
-			return errors.New("Failed to reverse stderr redirection: " + err.Error())
+			return fmt.Errorf("failed to reverse stderr redirection: %w", undoErr)
 		}
 
 		return nil
@@ -37,3 +37,4 @@ func redirectStderr(f *os.File) (UndoFunction, error) {
 
 	return undo, nil
 }
+

@@ -56,17 +56,18 @@ func (w *Webhook) CallWebhook(ctx context.Context, name string, isFetch bool, re
 	}
 	body, err := json.Marshal(event)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshaling webhook event: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.url, bytes.NewBuffer(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("creating webhook request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	httpResp, err := w.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("calling webhook: %w", err)
 	}
+	defer httpResp.Body.Close()
 	if httpResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected HTTP status: %s", httpResp.Status)
 	}
