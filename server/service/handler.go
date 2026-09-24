@@ -388,6 +388,9 @@ func attachFleetAPIRoutes(r *mux.Router, svc fleet.Service, config config.FleetC
 
 	ue.GET("/api/_version_/fleet/reports/{id:[0-9]+}", getQueryEndpoint, fleet.GetQueryRequest{})
 	ue.GET("/api/_version_/fleet/reports", listQueriesEndpoint, fleet.ListQueriesRequest{})
+	// >>> OPENFRAME(osquery-schema-search): canonical schema context for AI-generated live queries — openframe/docs/api-osquery-schema-search.md
+	ue.GET("/api/_version_/fleet/osquery/schema/search", searchOsquerySchemaEndpoint, searchOsquerySchemaRequest{})
+	// <<< OPENFRAME(osquery-schema-search)
 	ue.GET("/api/_version_/fleet/reports/{id:[0-9]+}/report", getQueryReportEndpoint, fleet.GetQueryReportRequest{})
 	ue.POST("/api/_version_/fleet/reports", createQueryEndpoint, fleet.CreateQueryRequest{})
 	ue.PATCH("/api/_version_/fleet/reports/{id:[0-9]+}", modifyQueryEndpoint, fleet.ModifyQueryRequest{})

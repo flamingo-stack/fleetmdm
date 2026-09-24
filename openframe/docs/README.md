@@ -41,6 +41,7 @@ The agent has its own switch, `--openframe-mode` / `ORBIT_OPENFRAME_MODE`.
 | [api-host-assignments.md](api-host-assignments.md) | REST API for the above (add/remove/replace/list hosts). |
 | [managed-policies.md](managed-policies.md) | `policies.openframe_managed` — platform-owned policies omitted from the policy list/count endpoints (and from GitOps deletion) while still running on hosts and reporting results. |
 | [managed-queries.md](managed-queries.md) | `queries.openframe_managed` — the queries twin: platform-owned queries omitted from the query listing and its count. |
+| [api-osquery-schema-search.md](api-osquery-schema-search.md) | Authenticated read-only search over Fleet's vendored canonical osquery schema for AI query generation. |
 | [api-expose-osquery-host-id.md](api-expose-osquery-host-id.md) | Exposes `osquery_host_id` in the host JSON so the OpenFrame control plane can match agents. |
 | [query-results-ttl-cleanup.md](query-results-ttl-cleanup.md) | Time-based cleanup of `query_results` (keeps the Debezium CDC pipeline alive without unbounded growth). Gated by OpenFrame mode **and** a positive TTL. |
 | [redis-key-prefix.md](redis-key-prefix.md) | Per-tenant Redis key/channel prefix (`FLEET_REDIS_KEY_PREFIX`) so tenants can share one Redis. |
