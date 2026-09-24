@@ -75,7 +75,7 @@ const generateReportColumnConfigsFromResults = (
         if (cellProps.column.id === "Host") {
           const hostID = cellProps.row.original.host_id as number;
           if (queryId === null) {
-            return <>cellProps.cell.value</>;
+            return <>{cellProps.cell.value}</>;
           }
           return (
             <LinkCell
