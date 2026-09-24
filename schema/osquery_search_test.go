@@ -96,6 +96,24 @@ func TestSearchOsqueryTablesValidatesInput(t *testing.T) {
 	require.ErrorContains(t, err, "query must not contain more than 32 searchable terms")
 }
 
+func TestNormalizeOsqueryPlatformAliases(t *testing.T) {
+	tests := []struct {
+		platform string
+		expected string
+	}{
+		{platform: "macos", expected: "darwin"},
+		{platform: "chromeos", expected: "chrome"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.platform, func(t *testing.T) {
+			platform, err := NormalizeOsqueryPlatform(tt.platform)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, platform)
+		})
+	}
+}
+
 func TestSearchTermsDeduplicatesTerms(t *testing.T) {
 	require.Equal(t, []string{"processes", "ports"}, searchTerms("processes processes ports processes", "all"))
 }

@@ -334,16 +334,15 @@ func (o OsqueryConfig) Validate(initFatal func(err error, msg string)) {
 	}
 
 	// >>> OPENFRAME(osquery-schema-search): reject unsafe auto-refresh configuration — openframe/docs/api-osquery-schema-search.md
-	if !o.SchemaRefreshEnabled {
-		return
-	}
-	if o.SchemaRefreshInterval <= 0 {
-		initFatal(errors.New("osquery schema refresh interval must be greater than zero"), "validate osquery schema refresh")
-		return
-	}
-	sourceURL, err := url.Parse(o.SchemaRefreshURL)
-	if err != nil || sourceURL.Host == "" || sourceURL.Scheme != "http" && sourceURL.Scheme != "https" {
-		initFatal(errors.New("osquery schema refresh URL must use http or https"), "validate osquery schema refresh")
+	if o.SchemaRefreshEnabled {
+		if o.SchemaRefreshInterval <= 0 {
+			initFatal(errors.New("osquery schema refresh interval must be greater than zero"), "validate osquery schema refresh")
+		} else {
+			sourceURL, err := url.Parse(o.SchemaRefreshURL)
+			if err != nil || sourceURL.Host == "" || sourceURL.Scheme != "http" && sourceURL.Scheme != "https" {
+				initFatal(errors.New("osquery schema refresh URL must use http or https"), "validate osquery schema refresh")
+			}
+		}
 	}
 	// <<< OPENFRAME(osquery-schema-search)
 }
