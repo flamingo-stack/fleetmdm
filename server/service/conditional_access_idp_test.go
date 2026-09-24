@@ -258,6 +258,15 @@ func TestConditionalAccessGetIdPAppleProfile(t *testing.T) {
 		require.Contains(t, profileStr, "com.fleetdm.conditional-access-preference")
 		require.Contains(t, profileStr, "com.fleetdm.chrome.certs")
 
+		// >>> OPENFRAME(conditional-access-renewal-id): fork-specific
+		// assertions. Upstream fleetdm/fleet does not have the renewal-ID
+		// marker, ConditionalAccessOktaProfileIdentifier, or
+		// ConditionalAccessOktaCertificateCN constants; these are net-new
+		// OpenFrame additions layered on top of upstream's conditional
+		// access IdP profile generation to support the InstallProfile-ack
+		// cleanup hook and SCEP auto-renewal. Wrapped here so upstream
+		// syncs can identify and preserve this fork-only logic.
+
 		// Top-level PayloadIdentifier and certificate CN must match the
 		// shared constants so the InstallProfile-ack cleanup hook can
 		// reliably gate on them.
@@ -274,6 +283,7 @@ func TestConditionalAccessGetIdPAppleProfile(t *testing.T) {
 			profileStr,
 			"renewal-ID marker must be in Subject OU, not CN",
 		)
+		// <<< OPENFRAME(conditional-access-renewal-id)
 	})
 
 	t.Run("missing CA certificate", func(t *testing.T) {

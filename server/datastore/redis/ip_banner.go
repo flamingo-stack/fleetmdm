@@ -1,3 +1,4 @@
+// >>> OPENFRAME(ip-banner): fork-only Redis IP-banning feature not present in upstream fleetdm/fleet — openframe/docs/ip-banner.md
 package redis
 
 import (
@@ -223,3 +224,5 @@ func getIPBannerTestValues() (test bool, allowedConsecutiveFailuresCount int, al
 	banDuration = testIPBannerBanDuration
 	return
 }
+
+// <<< OPENFRAME(ip-banner)

@@ -4,6 +4,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
+// >>> OPENFRAME(host-cache-envelope)
 // hostCacheEnvelope is the JSON wire format for cached host lookups. It
 // embeds fleet.Host so every normally-serializable field rides along
 // automatically, then shadows the four fields fleet.Host tags `json:"-"` to
@@ -60,3 +61,5 @@ func (e *hostCacheEnvelope) toHost() *fleet.Host {
 	h.HasHostIdentityCert = e.HasHostIdentityCert
 	return &h
 }
+
+// <<< OPENFRAME(host-cache-envelope)

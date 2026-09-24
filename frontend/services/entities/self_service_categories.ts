@@ -22,6 +22,7 @@ export default {
     return sendRequest("GET", `${SELF_SERVICE_CATEGORIES}?${queryString}`);
   },
 
+  // >>> OPENFRAME(self-service-categories): device-token-scoped self service categories — openframe/docs/self-service-categories.md
   // Device-token-scoped variant — the BE derives the fleet from the device
   // token so end users see the categories defined for their own fleet rather
   // than the global (fleet_id=0) set.
@@ -31,6 +32,7 @@ export default {
     const { DEVICE_SELF_SERVICE_CATEGORIES } = endpoints;
     return sendRequest("GET", DEVICE_SELF_SERVICE_CATEGORIES(deviceToken));
   },
+  // <<< OPENFRAME(self-service-categories)
 
   addCategory: (
     formData: ICreateSelfServiceCategoryFormData

@@ -23,6 +23,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// >>> OPENFRAME(nanomdm-lock): fork-specific lock conflict detection support — openframe/docs/mdm-lock.md
 // lockConflictError indicates a lock command already exists for the host
 type lockConflictError struct {
 	hostUUID string
@@ -50,6 +51,8 @@ func isConflict(err error) bool {
 	}
 	return false
 }
+
+// <<< OPENFRAME(nanomdm-lock)
 
 // NanoMDMStorage wraps a *nanomdm_mysql.MySQLStorage and overrides further functionality.
 type NanoMDMStorage struct {
@@ -100,6 +103,7 @@ func (ds *Datastore) NewTestMDMAppleMDMStorage(asyncCap int, asyncInterval time.
 	}, nil
 }
 
+// >>> OPENFRAME(nanomdm-push-cert-cache): in-memory push cert staleness caching — openframe/docs/mdm-lock.md
 type pushCertStalenessCheck struct {
 	hash      string
 	updatedAt time.Time
@@ -112,6 +116,8 @@ var (
 	pushCertStalenessMu sync.RWMutex
 )
 
+// <<< OPENFRAME(nanomdm-push-cert-cache)
+
 // RetrievePushCert partially implements nanomdm_storage.PushCertStore.
 //
 // Returns the push certificate and its MD5 checksum as the stale token.
@@ -122,12 +128,15 @@ func (s *NanoMDMStorage) RetrievePushCert(
 	if err != nil {
 		return nil, "", ctxerr.Wrap(ctx, err, "loading push certificate")
 	}
+	// >>> OPENFRAME(nanomdm-push-cert-cache): update in-memory staleness cache on retrieval — openframe/docs/mdm-lock.md
 	pushCertStalenessMu.Lock()
 	defer pushCertStalenessMu.Unlock()
 	checkInMemoryHash(checksum)
+	// <<< OPENFRAME(nanomdm-push-cert-cache)
 	return cert, checksum, nil
 }
 
+// >>> OPENFRAME(nanomdm-push-cert-cache): in-memory push cert staleness caching — openframe/docs/mdm-lock.md
 // checkInMemoryHash checks the incoming hash agains the in-memory hash.
 // if criteria is met, it updates the in-memory hash with the new hash and updatedAt = now.
 func checkInMemoryHash(hash string) {
@@ -175,10 +184,14 @@ func (s *NanoMDMStorage) IsPushCertStale(ctx context.Context, topic, staleToken 
 	return false, nil
 }
 
+// <<< OPENFRAME(nanomdm-push-cert-cache)
+
 // StorePushCert partially implements nanomdm_storage.PushCertStore.
 func (s *NanoMDMStorage) StorePushCert(ctx context.Context, pemCert, pemKey []byte) error {
 	return errors.New("please use fleet.Datastore to manage MDM assets")
 }
+
+// >>> OPENFRAME(nanomdm-lock): GetPendingLockCommand and EnqueueDeviceLockCommand lock-conflict logic — openframe/docs/mdm-lock.md
 
 // GetPendingLockCommand returns the most recent unacknowledged DeviceLock command
 // for the given host, along with its unlock PIN.
@@ -238,6 +251,17 @@ func (s *NanoMDMStorage) EnqueueDeviceLockCommand(
 	pin string,
 ) error {
 	return common_mysql.WithRetryTxx(ctx, s.db, func(tx sqlx.ExtContext) error {
+		// Ensure a row exists for this host before attempting to lock it, so that
+		// the subsequent SELECT ... FOR UPDATE has a row to lock and can serialize
+		// concurrent first-time lock requests instead of racing on the INSERT ...
+		// ON DUPLICATE KEY UPDATE below.
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO host_mdm_actions (host_id, fleet_platform) VALUES (?, ?)
+			ON DUPLICATE KEY UPDATE host_id = host_id`,
+			host.ID, host.FleetPlatform()); err != nil {
+			return ctxerr.Wrap(ctx, err, "ensuring host_mdm_actions row exists for lock")
+		}
+
 		// check if a lock already exists using SELECT FOR UPDATE to prevent a race
 		var existingLockRef *string
 		err := sqlx.GetContext(ctx, tx, &existingLockRef,
@@ -282,6 +306,8 @@ func (s *NanoMDMStorage) EnqueueDeviceLockCommand(
 		return nil
 	}, s.logger)
 }
+
+// <<< OPENFRAME(nanomdm-lock)
 
 func (s *NanoMDMStorage) EnqueueDeviceUnlockCommand(ctx context.Context, host *fleet.Host, cmd *mdm.Command) error {
 	return common_mysql.WithRetryTxx(ctx, s.db, func(tx sqlx.ExtContext) error {
