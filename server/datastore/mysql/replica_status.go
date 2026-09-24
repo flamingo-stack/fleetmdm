@@ -33,6 +33,7 @@ func (ds *Datastore) MasterStatus(ctx context.Context, mysqlVersion string) (Mas
 	// Since we don't control the column names, and we want to be future compatible,
 	// we only scan for the columns we care about.
 	ms := MasterStatus{}
+	var fileFound, positionFound bool
 	// Get the column names from the query
 	columns, err := rows.Columns()
 	if err != nil {
@@ -52,11 +53,13 @@ func (ds *Datastore) MasterStatus(ctx context.Context, mysqlVersion string) (Mas
 			switch columns[i] {
 			case "File":
 				ms.File = *col.(*string)
+				fileFound = true
 			case "Position":
 				ms.Position, err = strconv.ParseUint(*col.(*string), 10, 64)
 				if err != nil {
 					return ms, ctxerr.Wrap(ctx, err, "parse Position")
 				}
+				positionFound = true
 
 			}
 		}
@@ -64,7 +67,7 @@ func (ds *Datastore) MasterStatus(ctx context.Context, mysqlVersion string) (Mas
 	if err := rows.Err(); err != nil {
 		return ms, ctxerr.Wrap(ctx, err, "rows error")
 	}
-	if ms.File == "" || ms.Position == 0 {
+	if ms.File == "" || !fileFound || !positionFound {
 		return ms, ctxerr.New(ctx, "missing required fields in master status")
 	}
 	return ms, nil

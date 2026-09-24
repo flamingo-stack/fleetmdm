@@ -64,9 +64,9 @@ func listVulnerabilitiesEndpoint(ctx context.Context, req interface{}, svc fleet
 		return listVulnerabilitiesResponse{Err: err}, nil
 	}
 
-	updatedAt := time.Now()
+	var updatedAt time.Time
 	for _, vuln := range vulns {
-		if vuln.HostsCountUpdatedAt.Before(updatedAt) {
+		if vuln.HostsCountUpdatedAt.After(updatedAt) {
 			updatedAt = vuln.HostsCountUpdatedAt
 		}
 	}
@@ -234,3 +234,4 @@ func (svc *Service) ListSoftwareByCVE(ctx context.Context, cve string, teamID *u
 	}
 	return svc.ds.SoftwareByCVE(ctx, cve, teamID)
 }
+

@@ -11,10 +11,10 @@ func EightXEightWorkVersionShortener(app *maintained_apps.FMAManifestApp) (*main
 
 	// Strip everything after the first '-' (e.g., "8.28.2-3" -> "8.28.2")
 	parts := strings.Split(homebrewVersion, "-")
-	if len(parts) > 1 {
+	if len(parts) > 1 && parts[0] != "" {
 		app.Version = parts[0]
 	}
-	// If no '-' is found, keep the version as-is
+	// If no '-' is found, or the part before it is empty, keep the version as-is
 
 	return app, nil
 }

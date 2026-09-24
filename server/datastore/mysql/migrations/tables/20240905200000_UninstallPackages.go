@@ -155,6 +155,38 @@ func getOrInsertScript(txx sqlx.Tx, script string) (int64, error) {
 	return scriptID, nil
 }
 
-func Down_20240905200000(_ *sql.Tx) error {
+func Down_20240905200000(tx *sql.Tx) error {
+	if fkExists(tx, "software_installers", "fk_uninstall_script_content_id") {
+		if _, err := tx.Exec(`
+ALTER TABLE software_installers
+DROP FOREIGN KEY fk_uninstall_script_content_id`); err != nil {
+			return fmt.Errorf("failed to drop foreign key from software_installers: %w", err)
+		}
+	}
+
+	if columnsExists(tx, "software_installers", "package_ids", "extension", "uninstall_script_content_id", "updated_at") {
+		if _, err := tx.Exec(`
+ALTER TABLE software_installers
+DROP COLUMN package_ids,
+DROP COLUMN extension,
+DROP COLUMN uninstall_script_content_id,
+DROP COLUMN updated_at
+		`); err != nil {
+			return fmt.Errorf("failed to revert alter of software_installers: %w", err)
+		}
+	}
+
+	if columnsExists(tx, "host_software_installs", "uninstall_script_output", "uninstall_script_exit_code", "uninstall", "status") {
+		if _, err := tx.Exec(`
+ALTER TABLE host_software_installs
+DROP COLUMN uninstall_script_output,
+DROP COLUMN uninstall_script_exit_code,
+DROP COLUMN uninstall,
+DROP COLUMN status
+		`); err != nil {
+			return fmt.Errorf("failed to revert alter of host_software_installs: %w", err)
+		}
+	}
+
 	return nil
 }
