@@ -108,7 +108,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.12.6
 	github.com/nats-io/nats.go v1.49.0
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
-	github.com/ngrok/sqlmw v0.0.0-20211220175533-9d16fdc47b31
+	github.com/ngrok/sqlmw v0.0.0-20220520173518-97c9c04efc79
 	github.com/nukosuke/go-zendesk v0.13.1
 	github.com/oklog/run v1.1.0
 	github.com/olekukonko/tablewriter v0.0.5
