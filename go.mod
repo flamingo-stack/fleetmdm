@@ -58,7 +58,7 @@ require (
 	github.com/expr-lang/expr v1.17.7
 	github.com/facebookincubator/flog v0.0.0-20190930132826-d2511d0ce33c
 	github.com/fatih/color v1.16.0
-	github.com/foxboron/go-tpm-keyfiles v0.0.0-20250520203025-c3c3a4ec1653
+	github.com/foxboron/go-tpm-keyfiles v0.0.0-20260427185012-515ba073c4c1
 	github.com/fxamacker/cbor/v2 v2.9.1
 	github.com/getsentry/sentry-go v0.18.0
 	github.com/ghodss/yaml v1.0.0
@@ -78,7 +78,7 @@ require (
 	github.com/gomodule/redigo v1.8.9
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/v37 v37.0.0
-	github.com/google/go-tpm v0.9.8
+	github.com/google/go-tpm v0.9.9-0.20260124013517-8f8f42cba0de
 	github.com/google/uuid v1.6.0
 	github.com/goreleaser/nfpm/v2 v2.20.0
 	github.com/gorilla/mux v1.8.1
