@@ -900,6 +900,26 @@ func orbitAction(c *cli.Context) error {
 		orbitHostInfo.OsqueryIdentifier = osqueryHostInfo.InstanceID
 	}
 
+	// >>> OPENFRAME(agent-openframe-mode): instance id for clone diagnostics — openframe/docs/agent-openframe-mode.md
+	if c.Bool("openframe-mode") {
+		orbitHostInfo.InstanceID = osqueryHostInfo.InstanceID
+	}
+	// <<< OPENFRAME(agent-openframe-mode)
+
+	// >>> OPENFRAME(agent-openframe-mode): persist the enrolled identifier for `orbit uuid` — openframe/docs/agent-openframe-mode.md
+	if c.Bool("openframe-mode") {
+		enrolledIdentifier := orbitHostInfo.OsqueryIdentifier
+		if enrolledIdentifier == "" {
+			enrolledIdentifier = orbitHostInfo.HardwareUUID
+		}
+		if enrolledIdentifier != "" {
+			if err := writeOsqueryIdentifierFile(c.String("root-dir"), enrolledIdentifier); err != nil {
+				log.Error().Err(err).Msg("write osquery identifier file")
+			}
+		}
+	}
+	// <<< OPENFRAME(agent-openframe-mode)
+
 	var (
 		options []osquery.Option
 		// optionsAfterFlagfile is populated with options that will be set after the '--flagfile' argument
@@ -2749,14 +2769,31 @@ var uuidCommand = &cli.Command{
 			}
 		}
 
-		// Use temporary database for UUID query
-		tmpDBPath := filepath.Join(os.TempDir(), fmt.Sprintf("orbit-uuid-%s", uuid.NewString()))
-		defer os.RemoveAll(tmpDBPath)
-
-		hostUUID, err := getHostUUID(osquerydPath, tmpDBPath)
-		if err != nil {
-			return fmt.Errorf("failed to get host UUID: %w", err)
+		// >>> OPENFRAME(agent-openframe-mode): prefer the enrolled identifier; a throwaway osquery DB
+		// yields a fresh random UUID when the SMBIOS UUID is a placeholder — openframe/docs/agent-openframe-mode.md
+		var hostUUID string
+		if c.Bool("openframe-mode") {
+			identifierPath := filepath.Join(rootDir, constant.OsqueryIdentifierFileName)
+			switch b, err := os.ReadFile(identifierPath); {
+			case err == nil:
+				hostUUID = strings.TrimSpace(string(b))
+			case !errors.Is(err, fs.ErrNotExist):
+				log.Error().Err(err).Str("path", identifierPath).Msg("read osquery identifier file")
+			}
 		}
+
+		if hostUUID == "" {
+			// Use temporary database for UUID query
+			tmpDBPath := filepath.Join(os.TempDir(), fmt.Sprintf("orbit-uuid-%s", uuid.NewString()))
+			defer os.RemoveAll(tmpDBPath)
+
+			var err error
+			hostUUID, err = getHostUUID(osquerydPath, tmpDBPath)
+			if err != nil {
+				return fmt.Errorf("failed to get host UUID: %w", err)
+			}
+		}
+		// <<< OPENFRAME(agent-openframe-mode)
 
 		if c.Bool("json") {
 			fmt.Printf("{\"uuid\":\"%s\"}\n", hostUUID)
@@ -2766,6 +2803,34 @@ var uuidCommand = &cli.Command{
 		return nil
 	},
 }
+
+// >>> OPENFRAME(agent-openframe-mode): write+rename so `orbit uuid` never reads a torn identifier — openframe/docs/agent-openframe-mode.md
+func writeOsqueryIdentifierFile(rootDir, identifier string) error {
+	path := filepath.Join(rootDir, constant.OsqueryIdentifierFileName)
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".osquery-identifier-*")
+	if err != nil {
+		return fmt.Errorf("create temp osquery identifier file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmp.WriteString(identifier); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp osquery identifier file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp osquery identifier file: %w", err)
+	}
+	if err := os.Chmod(tmpPath, constant.DefaultFileMode); err != nil {
+		return fmt.Errorf("chmod temp osquery identifier file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename osquery identifier file: %w", err)
+	}
+	return nil
+}
+
+// <<< OPENFRAME(agent-openframe-mode)
 
 func getHostUUID(osqueryPath string, osqueryDBPath string) (string, error) {
 	// Make sure parent directory exists (`osqueryd -S` doesn't create the parent directories).
