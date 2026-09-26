@@ -1,3 +1,9 @@
+// >>> OPENFRAME(fleet-id-rename): This entire file implements OpenFrame's
+// fork-specific team_id→fleet_id (and related) JSON key aliasing mechanism.
+// It is fork-only business logic layered on top of the shared Fleet API
+// surface and does not exist upstream. When syncing from fleetdm/fleet,
+// preserve this file as-is unless the fork's team/fleet renaming strategy
+// changes. See FLEETMDM-001 for the sentinel convention.
 package endpointer
 
 import (
@@ -54,6 +60,11 @@ type JSONKeyRewriteReader struct {
 	reader  *bytes.Reader
 	initErr error
 
+	// initDone is set once construction (rewrite) has completed, whether it
+	// succeeded or failed. It guards UsedDeprecatedKeys against being called
+	// before the rewrite has actually run.
+	initDone bool
+
 	// Map from old (deprecated) key to its AliasRule for fast lookup.
 	oldKeyIndex map[string]AliasRule
 	// Map from new key to its AliasRule for fast lookup.
@@ -84,9 +95,11 @@ func NewJSONKeyRewriteReader(src io.Reader, rules []AliasRule) *JSONKeyRewriteRe
 	var buf bytes.Buffer
 	if err := rw.rewrite(src, &buf); err != nil {
 		rw.initErr = err
+		rw.initDone = true
 		return rw
 	}
 	rw.reader = bytes.NewReader(buf.Bytes())
+	rw.initDone = true
 	return rw
 }
 
@@ -94,7 +107,15 @@ func NewJSONKeyRewriteReader(src io.Reader, rules []AliasRule) *JSONKeyRewriteRe
 // encountered during reading. This should be called after the reader has been
 // fully consumed (i.e., after json.Decoder.Decode or similar has returned),
 // which guarantees the background goroutine has finished.
+//
+// If construction failed (see initErr) or has not completed yet, or if the
+// reader has not been fully read via Read, calling this returns an empty
+// slice rather than a misleading partial result; callers must check the
+// error returned by Read before relying on this method's output.
 func (r *JSONKeyRewriteReader) UsedDeprecatedKeys() []string {
+	if !r.initDone || r.initErr != nil {
+		return []string{}
+	}
 	keys := make([]string, 0, len(r.usedDeprecated))
 	for k := range r.usedDeprecated {
 		keys = append(keys, k)
@@ -176,6 +197,14 @@ func RewriteOldToNewKeys(data []byte, rules []AliasRule) ([]byte, error) {
 // install flag on those items collides with the `macos_setup`↔`setup_experience`
 // rename on the MDM section, so renames are skipped under this subtree. See
 // https://github.com/fleetdm/fleet/issues/44970.
+//
+// NOTE: this is a path-independent heuristic — it matches the literal key
+// name "software" anywhere in the document, not a specific structural
+// position (e.g. TeamSpec.Software). If a future payload introduces an
+// unrelated top-level "software" key, renames would be incorrectly suppressed
+// within that subtree too. A more robust fix would track the full key path
+// rather than a single depth counter; that is a larger structural change and
+// is not made here.
 const softwareScopeKey = "software"
 
 // rewrite reads tokens from src, rewrites deprecated keys, checks for alias
@@ -344,3 +373,7 @@ func (r *JSONKeyRewriteReader) rewrite(src io.Reader, w io.Writer) error {
 		}
 	}
 }
+
+// >>> OPENFRAME(fleet-id-rename): end of fork-specific JSON key aliasing
+// mechanism.
+// <<< OPENFRAME(fleet-id-rename)

@@ -129,7 +129,7 @@ fleet:
       existingSecret: ""  # Name of a K8s Secret. If set, secretKeyValue is ignored.
       secretKeyKey: "FLEET_SETUP_ADMIN_PASSWORD"  # Key name within the secret to read the value from.
       secretKeyValue: "fleet"  # Plain text password (for dev/test only). Ignored if secret is set.
-  # >>> OPENFRAME(mysql-multitenancy): OpenFrame feature block.
+  # >>> OPENFRAME(mysql-multitenancy): OpenFrame feature block — openframe/docs/mysql-multitenancy.md
   openframe:
     multiTenancy:
       enabled: false
@@ -473,3 +473,4 @@ mysql:
 
 redis:
   enabled: false
+

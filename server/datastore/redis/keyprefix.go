@@ -1,5 +1,12 @@
 package redis
 
+// OPENFRAME BEGIN: fork-specific multi-tenant key-prefixing wrapper.
+// This entire file is fork-only logic added on top of the shared upstream
+// fleetdm/fleet server/datastore/redis package. It implements Redis key/
+// channel prefixing for multi-tenant isolation and does not exist upstream.
+// On upstream syncs of this package, this file must be preserved as-is;
+// nothing here should be merged/overwritten from upstream.
+
 import (
 	"fmt"
 	"strings"
@@ -170,6 +177,11 @@ func bitopArgs(args []interface{}, prefix string) {
 }
 
 // objectArgs: OBJECT ENCODING/IDLETIME/FREQ/REFCOUNT key — key at args[1].
+// For any other/unrecognized subcommand (e.g. HELP, or a future subcommand
+// this list doesn't know about) we fail closed and prefix args[1] anyway if
+// present, since silently forwarding an unprefixed potential key argument
+// risks cross-tenant key access. HELP takes no key argument, so prefixing an
+// absent/irrelevant arg[1] is a no-op in practice for that case.
 func objectArgs(args []interface{}, prefix string) {
 	if len(args) < 2 {
 		return
@@ -178,10 +190,15 @@ func objectArgs(args []interface{}, prefix string) {
 	switch sub {
 	case "ENCODING", "IDLETIME", "FREQ", "REFCOUNT":
 		prefixOne(args, 1, prefix)
+	default:
+		prefixOne(args, 1, prefix)
 	}
 }
 
-// pubsubArgs: only NUMSUB/CHANNELS/SHARD* take channel args (at args[1..]).
+// pubsubArgs: NUMSUB/CHANNELS/SHARD* take channel args (at args[1..]). For
+// any other/unrecognized subcommand, fail closed by prefixing all remaining
+// args as channels too, since forwarding them unprefixed risks cross-tenant
+// channel leakage if a future subcommand also takes channel arguments.
 func pubsubArgs(args []interface{}, prefix string) {
 	if len(args) < 1 {
 		return
@@ -189,6 +206,10 @@ func pubsubArgs(args []interface{}, prefix string) {
 	sub := strings.ToUpper(toString(args[0]))
 	switch sub {
 	case "NUMSUB", "CHANNELS", "SHARDCHANNELS", "SHARDNUMSUB":
+		for i := 1; i < len(args); i++ {
+			prefixOne(args, i, prefix)
+		}
+	default:
 		for i := 1; i < len(args); i++ {
 			prefixOne(args, i, prefix)
 		}
@@ -358,3 +379,5 @@ var specialCmds = map[string]prefixRule{
 	"BZPOPMIN": blockingKeysArgs,
 	"BZPOPMAX": blockingKeysArgs,
 }
+
+// OPENFRAME END: fork-specific multi-tenant key-prefixing wrapper.

@@ -88,7 +88,16 @@ func (ds *Datastore) SaveDistributedQueryCampaign(ctx context.Context, camp *fle
 			user_id = ?
 		WHERE id = ?
 	`
-	result, err := ds.writer(ctx).ExecContext(ctx, sqlStatement, camp.QueryID, camp.Status, camp.UserID, camp.ID)
+	args := []interface{}{camp.QueryID, camp.Status, camp.UserID, camp.ID}
+	// >>> OPENFRAME(mysql-multitenancy): same fence as DistributedQueryCampaign — an UPDATE by bare
+	// campaign.ID must not let one tenant overwrite another tenant's campaign row. No-op when unpinned.
+	// — openframe/docs/mysql-multitenancy-feature.md
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sqlStatement += ` AND EXISTS (SELECT 1 FROM queries q WHERE q.id = distributed_query_campaigns.query_id AND q.team_id = ?)`
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	result, err := ds.writer(ctx).ExecContext(ctx, sqlStatement, args...)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "updating distributed query campaign")
 	}
@@ -154,6 +163,27 @@ func (ds *Datastore) DistributedQueryCampaignTargetIDs(ctx context.Context, id u
 }
 
 func (ds *Datastore) NewDistributedQueryCampaignTarget(ctx context.Context, target *fleet.DistributedQueryCampaignTarget) (*fleet.DistributedQueryCampaignTarget, error) {
+	// >>> OPENFRAME(mysql-multitenancy): a target references its campaign by bare ID — verify the
+	// campaign belongs to the caller's tenant (via its query's team) before inserting a target row
+	// against it, matching the fence on DistributedQueryCampaignTargetIDs. No-op when unpinned.
+	// — openframe/docs/mysql-multitenancy-feature.md
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		var exists bool
+		checkStmt := `
+			SELECT EXISTS (
+				SELECT 1 FROM distributed_query_campaigns dqc
+				JOIN queries q ON q.id = dqc.query_id
+				WHERE dqc.id = ? AND q.team_id = ?
+			)
+		`
+		if err := sqlx.GetContext(ctx, ds.reader(ctx), &exists, checkStmt, target.DistributedQueryCampaignID, teamID); err != nil {
+			return nil, ctxerr.Wrap(ctx, err, "checking distributed query campaign tenant")
+		}
+		if !exists {
+			return nil, notFound("DistributedQueryCampaign").WithID(target.DistributedQueryCampaignID)
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	sqlStatement := `
 		INSERT into distributed_query_campaign_targets (
 			type,

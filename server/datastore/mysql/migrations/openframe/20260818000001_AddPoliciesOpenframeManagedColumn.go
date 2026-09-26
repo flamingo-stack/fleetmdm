@@ -36,9 +36,11 @@ func Up_20260818000001(tx *sql.Tx) error {
 		return nil
 	}
 
+	// >>> OPENFRAME(policies-managed-column): ALTERs upstream `policies` table — openframe/docs/managed-policies.md
 	if _, err := tx.Exec("ALTER TABLE policies ADD COLUMN openframe_managed TINYINT(1) NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("adding %s.%s column: %w", table, column, err)
 	}
+	// <<< OPENFRAME(policies-managed-column)
 	return nil
 }
 
