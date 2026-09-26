@@ -9,13 +9,13 @@ import (
 	"github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
 )
 
-func initAssets(ds fleet.Datastore) error {
+func initAssets(ctx context.Context, ds fleet.Datastore) error {
 	// Check if we have existing certs and keys
 	expectedAssets := []fleet.MDMAssetName{
 		fleet.MDMAssetHostIdentityCACert,
 		fleet.MDMAssetHostIdentityCAKey,
 	}
-	savedAssets, err := ds.GetAllMDMConfigAssetsByName(context.Background(), expectedAssets, nil)
+	savedAssets, err := ds.GetAllMDMConfigAssetsByName(ctx, expectedAssets, nil)
 	if err != nil {
 		// allow not found errors as it means we're generating the assets for the first time.
 		if !fleet.IsNotFound(err) {
@@ -49,9 +49,10 @@ func initAssets(ds fleet.Datastore) error {
 			})
 		}
 
-		if err := ds.InsertMDMConfigAssets(context.Background(), assets, nil); err != nil {
+		if err := ds.InsertMDMConfigAssets(ctx, assets, nil); err != nil {
 			return fmt.Errorf("inserting host identity SCEP assets: %w", err)
 		}
 	}
 	return nil
 }
+

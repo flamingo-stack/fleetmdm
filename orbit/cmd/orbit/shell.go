@@ -155,7 +155,7 @@ var shellCommand = &cli.Command{
 			// thrift extensions?
 			pipeName := filepath.Join(c.String("root-dir"), "orbit-osquery.em")
 			if runtime.GOOS == "windows" {
-				pipeName = `\\\\.\\pipe\\orbit-osquery-extension`
+				pipeName = `\\.\pipe\orbit-osquery-extension`
 			}
 			registerExtensionRunner(
 				&g,

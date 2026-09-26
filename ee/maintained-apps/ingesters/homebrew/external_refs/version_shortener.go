@@ -15,7 +15,7 @@ import (
 func makeVersionShortener(keepSegments int) func(*maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
 	return func(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
 		if app.Version == "" {
-			return app, fmt.Errorf("empty version for app %s", app.Slug)
+			return app, errors.New(fmt.Sprintf("empty version for app %s", app.Slug))
 		}
 		parts := strings.Split(app.Version, ".")
 		if len(parts) <= keepSegments {
@@ -46,7 +46,7 @@ var (
 // the host version always greater, breaking patch policy detection.
 func SublimeVersionTransformer(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
 	if app.Version == "" {
-		return app, fmt.Errorf("empty version for Sublime app %s", app.Slug)
+		return app, errors.New(fmt.Sprintf("empty version for Sublime app %s", app.Slug))
 	}
 	if strings.HasPrefix(app.Version, "Build ") {
 		return app, nil

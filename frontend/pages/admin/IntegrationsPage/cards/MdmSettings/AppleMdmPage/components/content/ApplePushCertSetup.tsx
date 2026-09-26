@@ -29,6 +29,7 @@ const ApplePushCertSetup = ({
       try {
         await mdmAppleApi.uploadApplePushCertificate(files[0]);
         renderFlash("success", "MDM turned on successfully.");
+        setIsUploading(false);
         onSetupSuccess();
       } catch (e) {
         const msg = getErrorReason(e);

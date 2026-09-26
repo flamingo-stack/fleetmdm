@@ -17,6 +17,7 @@ var (
 
 	// MapProjectFieldNameToField caches project field metadata by project ID
 	MapProjectFieldNameToField = map[int]map[string]ProjectField{}
+	projectFieldsMutex         sync.RWMutex
 )
 
 // generateProjectItemCacheKey creates a unique key for project item cache.
@@ -42,6 +43,8 @@ func ClearProjectItemIDCache() {
 
 // ClearProjectFieldsCache clears the project fields cache.
 func ClearProjectFieldsCache() {
+	projectFieldsMutex.Lock()
+	defer projectFieldsMutex.Unlock()
 	MapProjectFieldNameToField = make(map[int]map[string]ProjectField)
 }
 
@@ -62,7 +65,9 @@ func GetCacheStats() map[string]interface{} {
 	projectItemIDCount := len(projectItemIDCache)
 	projectItemIDMutex.RUnlock()
 
+	projectFieldsMutex.RLock()
 	fieldCacheCount := len(MapProjectFieldNameToField)
+	projectFieldsMutex.RUnlock()
 
 	return map[string]interface{}{
 		"project_node_ids": projectNodeIDCount,
@@ -79,3 +84,4 @@ func InvalidateProjectItemID(issueNumber, projectID int) {
 	defer projectItemIDMutex.Unlock()
 	delete(projectItemIDCache, cacheKey)
 }
+

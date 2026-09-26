@@ -46,7 +46,7 @@ const AddEntraTenantModal = ({ onExit }: IAddEntraTenantModalProps) => {
   };
 
   const onAddTenant = async () => {
-    const { tenantId } = formData;
+    const tenantId = formData.tenantId?.trim().toLowerCase();
 
     const validation = validateFormData({ tenantId });
 

@@ -20,7 +20,8 @@ export interface IInfoBannerProps {
   cta?: JSX.Element;
   /** closable and link are mutually exclusive */
   closable?: boolean;
-  icon?: IconNames; // TODO: This is unused but several banners have icons within children that can be refactored to use this for consistent styling
+  /** Renders an icon at the start of the banner message */
+  icon?: IconNames;
 }
 
 const InfoBanner = ({
@@ -46,6 +47,9 @@ const InfoBanner = ({
 
   const content = (
     <>
+      {icon && (
+        <Icon name={icon} className={`${baseClass}__icon-image`} />
+      )}
       <div className={`${baseClass}__info`}>{children}</div>
 
       {(cta || closable) && (

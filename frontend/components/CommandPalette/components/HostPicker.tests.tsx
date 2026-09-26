@@ -105,16 +105,15 @@ describe("HostPicker", () => {
       team_name: "Engineering",
     });
 
-    // The shared QueryClient persists React Query's cache across tests
-    // in this file. Earlier tests register an empty result under
-    // queryKey ["commandPaletteHosts", ""], so subsequent renders with
-    // the same search would read that cached emptiness and never hit
-    // the mock. Each column test uses a unique search string to get a
-    // fresh queryFn invocation. The mock ignores the query value, so
-    // the same `hosts` is returned regardless.
-    it("renders a status dot next to the host name (no text)", async () => {
+    // Each test in this file renders with its own fresh QueryClient (see
+    // createCustomRenderer), so there is no cross-test cache to worry
+    // about here. The mock ignores the query value, so the same `hosts`
+    // is returned regardless of the search string used.
+    beforeEach(() => {
       mockedHosts.loadHosts.mockResolvedValue(hosts);
+    });
 
+    it("renders a status dot next to the host name (no text)", async () => {
       const { findByText, container } = renderPicker(
         <HostPicker search="col-dot-test" onSelect={jest.fn()} />
       );
@@ -131,8 +130,6 @@ describe("HostPicker", () => {
     });
 
     it("renders the host's team in the right-aligned column when showTeamColumn", async () => {
-      mockedHosts.loadHosts.mockResolvedValue(hosts);
-
       const { findByText } = renderPicker(
         <HostPicker search="col-team-on" showTeamColumn onSelect={jest.fn()} />
       );
@@ -140,8 +137,6 @@ describe("HostPicker", () => {
     });
 
     it("suppresses the team column by default (Free / Primo / single-fleet)", async () => {
-      mockedHosts.loadHosts.mockResolvedValue(hosts);
-
       const { findByText, queryByText } = renderPicker(
         <HostPicker search="col-team-off" onSelect={jest.fn()} />
       );
@@ -151,8 +146,6 @@ describe("HostPicker", () => {
     });
 
     it("highlights the matched substring of the host name", async () => {
-      mockedHosts.loadHosts.mockResolvedValue(hosts);
-
       const { findByText, container } = renderPicker(
         <HostPicker search="Rachel" onSelect={jest.fn()} />
       );
