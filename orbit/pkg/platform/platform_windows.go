@@ -163,7 +163,7 @@ func GetProcessesByName(name string) ([]*gopsutil_process.Process, error) {
 
 	// sanity check on returned snapshot handle
 	if snapshot == windows.InvalidHandle {
-		return nil, errors.New("the snapshot returned returned by CreateToolhelp32Snapshot is invalid")
+		return nil, errors.New("the snapshot returned by CreateToolhelp32Snapshot is invalid")
 	}
 	// Closing the handle to avoid handle leaks.
 	defer windows.CloseHandle(snapshot) //nolint:errcheck
@@ -322,7 +322,7 @@ func hardwareGetSMBiosUUID() (string, error) {
 			// UUID sanity check
 			isValidUUID, err := isValidUUID(uuidBytes)
 			if err != nil {
-				return "", fmt.Errorf("%v", err)
+				return "", fmt.Errorf("%w", err)
 			}
 
 			if !isValidUUID {

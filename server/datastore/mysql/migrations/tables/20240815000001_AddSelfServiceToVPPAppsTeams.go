@@ -13,7 +13,7 @@ func Up_20240815000001(tx *sql.Tx) error {
 	// Idempotent migration.
 	if !columnExists(tx, "vpp_apps_teams", "self_service") {
 		if _, err := tx.Exec("ALTER TABLE vpp_apps_teams ADD COLUMN self_service bool NOT NULL DEFAULT false"); err != nil {
-			return fmt.Errorf("Failed to add self_service to vpp_apps_teams: %w", err)
+			return fmt.Errorf("failed to add self_service to vpp_apps_teams: %w", err)
 		}
 	}
 	return nil
@@ -22,3 +22,4 @@ func Up_20240815000001(tx *sql.Tx) error {
 func Down_20240815000001(tx *sql.Tx) error {
 	return nil
 }
+

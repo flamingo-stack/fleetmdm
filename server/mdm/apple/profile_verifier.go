@@ -55,7 +55,7 @@ func VerifyHostMDMProfiles(ctx context.Context, ds fleet.ProfileVerificationStor
 
 	expectedByProfIdentifier, err := ds.GetHostMDMProfilesExpectedForVerification(ctx, host)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "getting expected MDM profiles for verification")
 	}
 
 	missing := make([]string, 0, len(expectedByProfIdentifier))
@@ -85,7 +85,7 @@ func VerifyHostMDMProfiles(ctx context.Context, ds fleet.ProfileVerificationStor
 	if len(missing) > 0 {
 		counts, err := ds.GetHostMDMProfilesRetryCounts(ctx, host)
 		if err != nil {
-			return err
+			return ctxerr.Wrap(ctx, err, "getting host MDM profile retry counts")
 		}
 		retriesByProfileIdentifier := make(map[string]uint, len(counts))
 		for _, r := range counts {
@@ -174,3 +174,4 @@ func HandleHostMDMProfileInstallResult(ctx context.Context, ds fleet.ProfileVeri
 	}
 	return nil
 }
+
