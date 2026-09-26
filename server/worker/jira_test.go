@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -81,7 +80,7 @@ func TestJiraRun(t *testing.T) {
 			}
 		}
 		if expectedNotInDescription != "" {
-			fmt.Println(string(body))
+			t.Log(string(body))
 			require.NotContains(t, string(body), expectedNotInDescription)
 		}
 
@@ -179,6 +178,7 @@ func TestJiraRun(t *testing.T) {
 				"https://fleetdm.com/hosts/1",
 				"** /some/path/1",
 				"** /some/path/2",
+				"Probability of exploit",
 			},
 			"",
 		},

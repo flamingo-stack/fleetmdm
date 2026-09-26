@@ -96,7 +96,8 @@ const EditUserPage = ({ router, params, location }: IEditUserPageProps) => {
           router.push(PATHS.ADMIN_USERS);
         })
         .catch((inviteErrors: { data: IApiError }) => {
-          if (inviteErrors.data.errors[0].reason.includes("already exists")) {
+          const reason = inviteErrors?.data?.errors?.[0]?.reason ?? "";
+          if (reason.includes("already exists")) {
             setFormErrors({
               email: "A user with this email address already exists",
             });
@@ -145,13 +146,12 @@ const EditUserPage = ({ router, params, location }: IEditUserPageProps) => {
         router.push(PATHS.ADMIN_USERS);
       })
       .catch((userErrors: { data: IApiError }) => {
-        if (userErrors.data.errors[0].reason.includes("already exists")) {
+        const reason = userErrors?.data?.errors?.[0]?.reason ?? "";
+        if (reason.includes("already exists")) {
           setFormErrors({
             email: "A user with this email address already exists",
           });
-        } else if (
-          userErrors.data.errors[0].reason.includes("required criteria")
-        ) {
+        } else if (reason.includes("required criteria")) {
           setFormErrors({
             password: "Password must meet the criteria below",
           });

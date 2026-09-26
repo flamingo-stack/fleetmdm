@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -48,15 +49,25 @@ func (d *DigiCertVarsFound) CAs() []string {
 }
 
 func (d *DigiCertVarsFound) ErrorMessage() string {
+	passwordMismatches := make([]string, 0, len(d.passwordCA))
 	for ca := range d.passwordCA {
 		if _, ok := d.dataCA[ca]; !ok {
-			return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarDigiCertDataPrefix, ca)
+			passwordMismatches = append(passwordMismatches, ca)
 		}
 	}
+	if len(passwordMismatches) > 0 {
+		sort.Strings(passwordMismatches)
+		return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarDigiCertDataPrefix, passwordMismatches[0])
+	}
+	dataMismatches := make([]string, 0, len(d.dataCA))
 	for ca := range d.dataCA {
 		if _, ok := d.passwordCA[ca]; !ok {
-			return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarDigiCertPasswordPrefix, ca)
+			dataMismatches = append(dataMismatches, ca)
 		}
+	}
+	if len(dataMismatches) > 0 {
+		sort.Strings(dataMismatches)
+		return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarDigiCertPasswordPrefix, dataMismatches[0])
 	}
 	return fmt.Sprintf("CA name mismatch between $FLEET_VAR_%s<ca_name> and $FLEET_VAR_%s<ca_name> in the profile.",
 		fleet.FleetVarDigiCertDataPrefix, fleet.FleetVarDigiCertPasswordPrefix)
@@ -197,15 +208,25 @@ func (cs *CustomSCEPVarsFound) ErrorMessage() string {
 		return fmt.Sprintf("SCEP profile for custom SCEP certificate authority requires: $FLEET_VAR_%s<CA_NAME>, $FLEET_VAR_%s<CA_NAME>, and $FLEET_VAR_%s variables.", fleet.FleetVarCustomSCEPChallengePrefix, fleet.FleetVarCustomSCEPProxyURLPrefix, fleet.FleetVarCertificateRenewalID)
 	}
 
+	challengeMismatches := make([]string, 0, len(cs.challengeCA))
 	for ca := range cs.challengeCA {
 		if _, ok := cs.urlCA[ca]; !ok {
-			return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarCustomSCEPProxyURLPrefix, ca)
+			challengeMismatches = append(challengeMismatches, ca)
 		}
 	}
+	if len(challengeMismatches) > 0 {
+		sort.Strings(challengeMismatches)
+		return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarCustomSCEPProxyURLPrefix, challengeMismatches[0])
+	}
+	urlMismatches := make([]string, 0, len(cs.urlCA))
 	for ca := range cs.urlCA {
 		if _, ok := cs.challengeCA[ca]; !ok {
-			return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarCustomSCEPChallengePrefix, ca)
+			urlMismatches = append(urlMismatches, ca)
 		}
+	}
+	if len(urlMismatches) > 0 {
+		sort.Strings(urlMismatches)
+		return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarCustomSCEPChallengePrefix, urlMismatches[0])
 	}
 
 	return fmt.Sprintf("CA name mismatch between $FLEET_VAR_%s<ca_name> and $FLEET_VAR_%s<ca_name> in the profile.",
@@ -299,15 +320,25 @@ func (cs *SmallstepVarsFound) ErrorMessage() string {
 	if !cs.renewalIdFound || len(cs.challengeCA) == 0 || len(cs.urlCA) == 0 {
 		return fmt.Sprintf("SCEP profile for Smallstep certificate authority requires: $FLEET_VAR_%s<CA_NAME>, $FLEET_VAR_%s<CA_NAME>, and $FLEET_VAR_%s variables.", fleet.FleetVarSmallstepSCEPChallengePrefix, fleet.FleetVarSmallstepSCEPProxyURLPrefix, fleet.FleetVarCertificateRenewalID)
 	}
+	challengeMismatches := make([]string, 0, len(cs.challengeCA))
 	for ca := range cs.challengeCA {
 		if _, ok := cs.urlCA[ca]; !ok {
-			return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarSmallstepSCEPProxyURLPrefix, ca)
+			challengeMismatches = append(challengeMismatches, ca)
 		}
 	}
+	if len(challengeMismatches) > 0 {
+		sort.Strings(challengeMismatches)
+		return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarSmallstepSCEPProxyURLPrefix, challengeMismatches[0])
+	}
+	urlMismatches := make([]string, 0, len(cs.urlCA))
 	for ca := range cs.urlCA {
 		if _, ok := cs.challengeCA[ca]; !ok {
-			return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarSmallstepSCEPChallengePrefix, ca)
+			urlMismatches = append(urlMismatches, ca)
 		}
+	}
+	if len(urlMismatches) > 0 {
+		sort.Strings(urlMismatches)
+		return fmt.Sprintf("Missing $FLEET_VAR_%s%s in the profile", fleet.FleetVarSmallstepSCEPChallengePrefix, urlMismatches[0])
 	}
 	return fmt.Sprintf("CA name mismatch between $FLEET_VAR_%s<ca_name> and $FLEET_VAR_%s<ca_name> in the profile.",
 		fleet.FleetVarSmallstepSCEPProxyURLPrefix, fleet.FleetVarSmallstepSCEPChallengePrefix)
@@ -373,6 +404,12 @@ func validateProfileCertificateAuthorityVariables(profileContents string, lic *f
 		smallstepVars  *SmallstepVarsFound
 		customSCEPVars *CustomSCEPVarsFound
 	)
+	// renewalIDSeen tracks whether a renewal-ID Fleet variable has already
+	// been observed in this profile, independent of which CA-type struct
+	// (Custom SCEP, NDES, or Smallstep) ends up being relevant, so that
+	// duplicate detection is correct even when only one of those struct
+	// types applies to the profile.
+	renewalIDSeen := false
 	for _, k := range fleetVars {
 		caFound := false
 		ok := true
@@ -460,14 +497,16 @@ func validateProfileCertificateAuthorityVariables(profileContents string, lic *f
 			// Custom SCEP, NDES, and Smallstep all share the renewal-ID
 			// Fleet variable. The legacy SCEP_RENEWAL_ID and the preferred
 			// CERTIFICATE_RENEWAL_ID names are interchangeable here.
+			// Duplicate detection is based on renewalIDSeen, which is
+			// independent of which CA-type struct is actually relevant for
+			// this profile, so a repeated renewal-ID variable is always
+			// correctly flagged.
 
-			customSCEPVars, ok = customSCEPVars.SetRenewalID()
-			if ok {
-				ndesVars, ok = ndesVars.SetRenewalID()
-				if ok {
-					smallstepVars, ok = smallstepVars.SetRenewalID()
-				}
-			}
+			ok = !renewalIDSeen
+			renewalIDSeen = true
+			customSCEPVars, _ = customSCEPVars.SetRenewalID()
+			ndesVars, _ = ndesVars.SetRenewalID()
+			smallstepVars, _ = smallstepVars.SetRenewalID()
 		}
 
 		if !ok {
@@ -492,7 +531,7 @@ func validateProfileCertificateAuthorityVariables(profileContents string, lic *f
 		if additionalDigiCertValidation != nil {
 			err := additionalDigiCertValidation(profileContents, digiCertVars)
 			if err != nil {
-				return err
+				return fmt.Errorf("additional DigiCert validation: %w", err)
 			}
 		}
 	}
@@ -532,7 +571,7 @@ func validateProfileCertificateAuthorityVariables(profileContents string, lic *f
 		if additionalCustomSCEPValidation != nil {
 			err := additionalCustomSCEPValidation(profileContents, customSCEPVars)
 			if err != nil {
-				return err
+				return fmt.Errorf("additional custom SCEP validation: %w", err)
 			}
 		}
 	}
@@ -543,7 +582,7 @@ func validateProfileCertificateAuthorityVariables(profileContents string, lic *f
 		if additionalNDESValidation != nil {
 			err := additionalNDESValidation(profileContents, ndesVars)
 			if err != nil {
-				return err
+				return fmt.Errorf("additional NDES validation: %w", err)
 			}
 		}
 	}
@@ -554,7 +593,7 @@ func validateProfileCertificateAuthorityVariables(profileContents string, lic *f
 		if additionalSmallstepValidation != nil {
 			err := additionalSmallstepValidation(profileContents, smallstepVars)
 			if err != nil {
-				return err
+				return fmt.Errorf("additional Smallstep validation: %w", err)
 			}
 		}
 	}

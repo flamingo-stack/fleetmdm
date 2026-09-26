@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -35,7 +36,8 @@ func (s *FileStorage) HasCertHash(r *mdm.Request, hash string) (bool, error) {
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), hash) {
+		parts := strings.SplitN(scanner.Text(), ",", 2)
+		if len(parts) == 2 && parts[1] == hash {
 			return true, nil
 		}
 	}
@@ -61,14 +63,17 @@ func (s *FileStorage) AssociateCertHash(r *mdm.Request, hash string, _ time.Time
 		0644,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("opening cert auth associations file: %w", err)
 	}
 	defer f.Close()
 	if _, err := f.WriteString(r.ID + "," + hash + "\n"); err != nil {
-		return err
+		return fmt.Errorf("writing cert auth association: %w", err)
 	}
 	e := s.newEnrollment(r.ID)
-	return e.writeFile(CertAuthFilename, []byte(hash))
+	if err := e.writeFile(CertAuthFilename, []byte(hash)); err != nil {
+		return fmt.Errorf("writing cert auth file: %w", err)
+	}
+	return nil
 }
 
 func (s *FileStorage) EnrollmentFromHash(_ context.Context, hash string) (string, error) {
@@ -80,11 +85,11 @@ func (s *FileStorage) EnrollmentFromHash(_ context.Context, hash string) (string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		text := scanner.Text()
-		if strings.Contains(text, hash) {
-			split := strings.Split(text, ",")
-			if len(split) < 2 {
-				return "", errors.New("hash and enrollment id not present on line")
-			}
+		split := strings.SplitN(text, ",", 2)
+		if len(split) < 2 {
+			continue
+		}
+		if split[1] == hash {
 			return split[0], nil
 		}
 	}

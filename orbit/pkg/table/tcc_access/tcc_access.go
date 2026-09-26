@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/osquery/osquery-go/plugin/table"
@@ -78,7 +79,7 @@ func Generate(ctx context.Context, queryContext table.QueryContext) ([]map[strin
 				}
 				return nil, err
 			}
-			uRs, err := getTCCAccessRows(uid, tccPath)
+			uRs, err := getTCCAccessRows(ctx, uid, tccPath)
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +97,7 @@ func Generate(ctx context.Context, queryContext table.QueryContext) ([]map[strin
 		}
 	}
 	if sysSatisfiesUidConstraints {
-		sRs, err := getTCCAccessRows("0", tccPathPrefix+tccPathSuffix)
+		sRs, err := getTCCAccessRows(ctx, "0", tccPathPrefix+tccPathSuffix)
 		if err != nil {
 			return nil, err
 		}
@@ -106,10 +107,10 @@ func Generate(ctx context.Context, queryContext table.QueryContext) ([]map[strin
 	return rows, nil
 }
 
-func getTCCAccessRows(uid, tccPath string) ([]map[string]string, error) {
+func getTCCAccessRows(ctx context.Context, uid, tccPath string) ([]map[string]string, error) {
 	// querying directly with sqlite3 avoids additional C compilation requirements that would be introduced by using
 	// https://github.com/mattn/go-sqlite3
-	cmd := exec.Command(sqlite3Path, tccPath, dbQuery)
+	cmd := exec.CommandContext(ctx, sqlite3Path, tccPath, dbQuery)
 	var dbOut bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &dbOut
@@ -134,8 +135,11 @@ func parseTCCDbReadOutput(dbOut []byte) [][]string {
 	if n == 0 {
 		return nil
 	}
-	// the end of the db response is "\n", making the final row "", which we want to omit
-	rawRows = rawRows[:n-1]
+	// the end of the db response is normally "\n", making the final row "", which we want to omit;
+	// only drop it if it is actually empty so we don't silently discard a real trailing row
+	if rawRows[n-1] == "" {
+		rawRows = rawRows[:n-1]
+	}
 
 	parsedRows := make([][]string, 0, len(rawRows))
 	for _, rawRow := range rawRows {
@@ -164,27 +168,35 @@ func buildTableRows(uid string, parsedRows [][]string) ([]map[string]string, err
 }
 
 func satisfiesConstraints(uid string, constraints []table.Constraint) (bool, error) {
+	uidNum, err := strconv.Atoi(uid)
+	if err != nil {
+		return false, fmt.Errorf("invalid uid %q: %w", uid, err)
+	}
 	for _, constraint := range constraints {
+		exprNum, err := strconv.Atoi(constraint.Expression)
+		if err != nil {
+			return false, fmt.Errorf("invalid uid constraint expression %q: %w", constraint.Expression, err)
+		}
 		// for each constraint on the column
 		switch constraint.Operator {
 		case table.OperatorEquals:
-			if constraint.Expression != uid {
+			if exprNum != uidNum {
 				return false, nil
 			}
 		case table.OperatorGreaterThan:
-			if constraint.Expression >= uid {
+			if uidNum <= exprNum {
 				return false, nil
 			}
 		case table.OperatorLessThan:
-			if constraint.Expression <= uid {
+			if uidNum >= exprNum {
 				return false, nil
 			}
 		case table.OperatorGreaterThanOrEquals:
-			if constraint.Expression > uid {
+			if uidNum < exprNum {
 				return false, nil
 			}
 		case table.OperatorLessThanOrEquals:
-			if constraint.Expression < uid {
+			if uidNum > exprNum {
 				return false, nil
 			}
 		default:
