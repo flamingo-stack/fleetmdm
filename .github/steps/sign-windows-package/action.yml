@@ -40,7 +40,7 @@ runs:
         echo "BINARY_PATH=$BinaryPath" >> $env:GITHUB_ENV
 
     - name: Sign Windows Executable
-      uses: azure/trusted-signing-action@v0.5.0
+      uses: azure/trusted-signing-action@95de1e51cbb1a115f0e4f47ba193da2ba0a4a806 # v0.5.0
       with:
         azure-tenant-id: ${{ inputs.azure_tenant_id }}
         azure-client-id: ${{ inputs.azure_client_id }}
@@ -83,3 +83,4 @@ runs:
         }
 
         Write-Host "Signature verified successfully!"
+

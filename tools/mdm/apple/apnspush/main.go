@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/WatchBeam/clock"
 	"github.com/fleetdm/fleet/v4/pkg/fleethttp"
@@ -33,6 +34,8 @@ import (
 
 func main() {
 	mysqlAddr := flag.String("mysql", "localhost:3306", "mysql address")
+	mysqlUsername := flag.String("mysql-username", "", "mysql username (defaults to the development 'fleet' user only when -mysql targets localhost)")
+	mysqlPassword := flag.String("mysql-password", "", "mysql password (defaults to the development 'insecure' password only when -mysql targets localhost)")
 	serverPrivateKey := flag.String("server-private-key", "", "fleet server's private key (to decrypt MDM assets)")
 
 	flag.Parse()
@@ -52,13 +55,30 @@ func main() {
 		serverPrivateKey = &truncatedServerPrivateKey
 	}
 
-	// this matches the development config in /cmd/fleet/main.go
+	isLocalMySQL := strings.HasPrefix(*mysqlAddr, "localhost:") || strings.HasPrefix(*mysqlAddr, "127.0.0.1:") || strings.HasPrefix(*mysqlAddr, "[::1]:")
+
+	username := *mysqlUsername
+	password := *mysqlPassword
+	if username == "" || password == "" {
+		if !isLocalMySQL {
+			log.Fatal("must provide -mysql-username and -mysql-password when -mysql does not target localhost")
+		}
+		// this matches the development config in /cmd/fleet/main.go, and is only used
+		// as a fallback when targeting a local development database.
+		if username == "" {
+			username = "fleet"
+		}
+		if password == "" {
+			password = "insecure"
+		}
+	}
+
 	cfg := config.MysqlConfig{
 		Protocol:        "tcp",
 		Address:         *mysqlAddr,
 		Database:        "fleet",
-		Username:        "fleet",
-		Password:        "insecure",
+		Username:        username,
+		Password:        password,
 		MaxOpenConns:    50,
 		MaxIdleConns:    50,
 		ConnMaxLifetime: 0,

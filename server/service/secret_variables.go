@@ -41,10 +41,14 @@ func (svc *Service) CreateSecretVariables(ctx context.Context, secretVariables [
 			&fleet.BadRequestError{Message: "Couldn't save secret variables. Missing required private key. Learn how to configure the private key here: https://fleetdm.com/learn-more-about/fleet-server-private-key"})
 	}
 
-	// Preprocess: strip FLEET_SECRET_ prefix from variable names
+	// Preprocess: strip FLEET_SECRET_ prefix from variable names.
+	// Copy into a new slice so we don't mutate the caller-provided slice in place.
+	processedSecretVariables := make([]fleet.SecretVariable, len(secretVariables))
 	for i, secretVariable := range secretVariables {
-		secretVariables[i].Name = fleet.Preprocess(strings.TrimPrefix(secretVariable.Name, SecretVariablePrefix))
+		processedSecretVariables[i] = secretVariable
+		processedSecretVariables[i].Name = fleet.Preprocess(strings.TrimPrefix(secretVariable.Name, SecretVariablePrefix))
 	}
+	secretVariables = processedSecretVariables
 
 	for _, secretVariable := range secretVariables {
 		if err := fleet.ValidateSecretVariableName(secretVariable.Name); err != nil {

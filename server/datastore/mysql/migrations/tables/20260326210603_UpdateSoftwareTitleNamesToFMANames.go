@@ -17,6 +17,14 @@ func Up_20260326210603(tx *sql.Tx) error {
 	// A later migration adds idx_software_bundle_identifier on software.bundle_identifier
 	// so the hourly FMA sync UPDATE below (and the runtime equivalent in
 	// UpsertMaintainedApp) is an indexed lookup instead of a full-table scan.
+	//
+	// WARNING: this UPDATE is destructive and irreversible. It overwrites
+	// software_titles.name and software.name in-place, and the Down migration
+	// below is a no-op. Anyone deploying this migration should take a backup
+	// of the software_titles and software tables (or a full database snapshot)
+	// before upgrading, in case the FMA data used here (fleet_maintained_apps.name)
+	// is later found to be wrong for some bundle_identifiers, since there is no
+	// automated way to restore the original osquery-reported names afterward.
 	_, err := tx.Exec(`
 		UPDATE software_titles st
 		JOIN fleet_maintained_apps fma
@@ -49,5 +57,10 @@ func Up_20260326210603(tx *sql.Tx) error {
 func Down_20260326210603(tx *sql.Tx) error {
 	// Down migration is a no-op because we cannot reliably restore the original
 	// osquery-reported names. The FMA names are the canonical/correct names anyway.
+	//
+	// Because this change is irreversible, operators should take a backup of the
+	// software_titles and software tables (or a full database snapshot) before
+	// running the Up migration, so that a manual restore is possible if the FMA
+	// data proves incorrect for any bundle_identifiers.
 	return nil
 }
