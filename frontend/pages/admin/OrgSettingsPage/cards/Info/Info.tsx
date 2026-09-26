@@ -184,25 +184,46 @@ const Info = ({
 
   const onInputChange = ({ name, value }: IInputFieldParseTarget) => {
     setFormData({ ...formData, [name]: value });
-    setFormErrors({});
+    setFormErrors((prevErrors) => {
+      const newFormData = { ...formData, [name]: value };
+      const newErrs = computeFormErrorsFor(newFormData);
+      const updatedErrors: IOrgInfoFormErrors = { ...prevErrors };
+      (Object.keys(prevErrors) as (keyof IOrgInfoFormErrors)[]).forEach(
+        (key) => {
+          if (!newErrs[key]) {
+            delete updatedErrors[key];
+          }
+        }
+      );
+      return updatedErrors;
+    });
   };
 
-  const computeFormErrors = (): IOrgInfoFormErrors => {
+  const computeFormErrorsFor = (
+    data: IOrgInfoFormData
+  ): IOrgInfoFormErrors => {
     const errors: IOrgInfoFormErrors = {};
 
-    if (!orgName) {
+    if (!data.orgName) {
       errors.org_name = "Organization name must be present";
     }
 
-    if (!orgSupportURL) {
+    if (!data.orgSupportURL) {
       errors.org_support_url = `Organization support URL must be present`;
     } else if (
-      !validUrl({ url: orgSupportURL, protocols: ["http", "https", "file"] })
+      !validUrl({
+        url: data.orgSupportURL,
+        protocols: ["http", "https", "file"],
+      })
     ) {
       errors.org_support_url = "Organization support URL is not a valid URL";
     }
 
     return errors;
+  };
+
+  const computeFormErrors = (): IOrgInfoFormErrors => {
+    return computeFormErrorsFor(formData);
   };
 
   const validateForm = () => {
@@ -323,6 +344,8 @@ const Info = ({
           await op();
           succeededModes.push(mode);
         } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error(`Failed to update ${mode} mode logo:`, e);
           failedModes.push(mode);
         }
       }
