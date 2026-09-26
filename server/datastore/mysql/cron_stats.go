@@ -69,7 +69,7 @@ func (ds *Datastore) UpdateCronStats(ctx context.Context, id int, status fleet.C
 	stmt := `UPDATE cron_stats SET status = ?, errors = ? WHERE id = ?`
 
 	errorsJSON := sql.NullString{}
-	if len(*cronErrors) > 0 {
+	if cronErrors != nil && len(*cronErrors) > 0 {
 		b, err := json.Marshal(cronErrors)
 		if err == nil {
 			errorsJSON.String = string(b)

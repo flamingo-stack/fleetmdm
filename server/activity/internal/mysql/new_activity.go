@@ -113,7 +113,10 @@ func (ds *Datastore) NewActivity(
 			var sb strings.Builder
 			if hostIDs := ah.HostIDs(); len(hostIDs) > 0 {
 				sb.WriteString(insertActHostStmt)
-				actID, _ := res.LastInsertId()
+				actID, lastIDErr := res.LastInsertId()
+				if lastIDErr != nil {
+					return ctxerr.Wrap(ctx, lastIDErr, "get last insert id for activity")
+				}
 				for _, hid := range hostIDs {
 					// >>> OPENFRAME(mysql-multitenancy)
 					if stampTeam {
