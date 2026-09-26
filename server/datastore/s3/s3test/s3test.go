@@ -46,6 +46,12 @@ func SetupBootstrapPackageStore(tb testing.TB, bucket, prefix string) *s3.Bootst
 // SetupSoftwareTitleIconStore returns a *s3.SoftwareTitleIconStore backed by
 // the local test bucket and registers cleanup to drop the bucket when the
 // test finishes.
+//
+// NOTE: s3.NewSoftwareTitleIconStore (and s3.NewOrgLogoStore) internally
+// reuse the SoftwareInstallers* config fields rather than having dedicated
+// SoftwareTitleIcon/OrgLogo fields, so setupStore only needs to populate the
+// SoftwareInstallers* fields below for this helper (and for a future
+// OrgLogo test helper) to work.
 func SetupSoftwareTitleIconStore(tb testing.TB, bucket, prefix string) *s3.SoftwareTitleIconStore {
 	return setupStore(tb, bucket, prefix, s3.NewSoftwareTitleIconStore)
 }
@@ -63,6 +69,10 @@ func setupStore[T testStore](tb testing.TB, bucket, prefix string, newFn func(co
 	checkEnv(tb)
 
 	store, err := newFn(config.S3Config{
+		// NOTE: these SoftwareInstallers* fields are also relied upon by
+		// s3.NewSoftwareTitleIconStore and s3.NewOrgLogoStore, which reuse
+		// them instead of having dedicated SoftwareTitleIcon/OrgLogo config
+		// fields. Do not remove or rename without checking those stores.
 		SoftwareInstallersBucket:           bucket,
 		SoftwareInstallersPrefix:           prefix,
 		SoftwareInstallersRegion:           "localhost",

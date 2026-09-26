@@ -10,6 +10,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/datastore/redis"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	redigo "github.com/gomodule/redigo/redis"
+	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -257,6 +258,9 @@ func (t *Task) GetHostLabelReportedAt(ctx context.Context, host *fleet.Host) tim
 			if reported := time.Unix(epoch, 0); reported.After(host.LabelUpdatedAt) {
 				return reported
 			}
+		} else if err != redigo.ErrNil {
+			log.Ctx(ctx).Info().Err(err).Uint("host_id", host.ID).
+				Msg("get host label reported at: redis error, falling back to host.LabelUpdatedAt")
 		}
 	}
 	return host.LabelUpdatedAt

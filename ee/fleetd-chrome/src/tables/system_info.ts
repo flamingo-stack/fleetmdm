@@ -17,11 +17,11 @@ export default class TableSystemInfo extends Table {
   getComputerName(hostname: string, hwSerial: string): string {
     const prefix = "Chromebook";
 
-    if (!!hostname?.length) {
+    if (!!hostname?.trim().length) {
       return hostname;
     }
 
-    if (!!hwSerial?.length) {
+    if (!!hwSerial?.trim().length) {
       return `${prefix} ${hwSerial}`;
     }
 

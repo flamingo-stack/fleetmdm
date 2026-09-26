@@ -409,7 +409,7 @@ func getDB(ds *mysql.Datastore) (*sqlx.DB, error) {
 	}
 
 	dsn := cfg.Username + ":" + cfg.Password + "@" + cfg.Protocol + "(" + cfg.Address + ")/" + cfg.Database + "?charset=utf8mb4&parseTime=True&loc=Local"
-	return sqlx.Open("mysql", dsn)
+	return sqlx.Connect("mysql", dsn)
 }
 
 func seedSoftwareCVEs(ctx context.Context, ds *mysql.Datastore, cves []string) error {

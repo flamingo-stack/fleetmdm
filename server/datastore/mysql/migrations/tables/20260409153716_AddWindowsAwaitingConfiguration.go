@@ -10,20 +10,35 @@ func init() {
 }
 
 func Up_20260409153716(tx *sql.Tx) error {
-	if columnExists(tx, "mdm_windows_enrollments", "awaiting_configuration") {
+	hasAwaitingConfiguration := columnExists(tx, "mdm_windows_enrollments", "awaiting_configuration")
+	hasAwaitingConfigurationAt := columnExists(tx, "mdm_windows_enrollments", "awaiting_configuration_at")
+
+	if hasAwaitingConfiguration && hasAwaitingConfigurationAt {
 		return nil
 	}
-	_, err := tx.Exec(`
-		ALTER TABLE mdm_windows_enrollments
-		ADD COLUMN awaiting_configuration TINYINT(1) NOT NULL DEFAULT 0,
-		ADD COLUMN awaiting_configuration_at DATETIME(6) DEFAULT NULL
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to add awaiting_configuration columns to mdm_windows_enrollments: %w", err)
+
+	if !hasAwaitingConfiguration {
+		if _, err := tx.Exec(`
+			ALTER TABLE mdm_windows_enrollments
+			ADD COLUMN awaiting_configuration TINYINT(1) NOT NULL DEFAULT 0
+		`); err != nil {
+			return fmt.Errorf("failed to add awaiting_configuration column to mdm_windows_enrollments: %w", err)
+		}
 	}
+
+	if !hasAwaitingConfigurationAt {
+		if _, err := tx.Exec(`
+			ALTER TABLE mdm_windows_enrollments
+			ADD COLUMN awaiting_configuration_at DATETIME(6) DEFAULT NULL
+		`); err != nil {
+			return fmt.Errorf("failed to add awaiting_configuration_at column to mdm_windows_enrollments: %w", err)
+		}
+	}
+
 	return nil
 }
 
 func Down_20260409153716(tx *sql.Tx) error {
 	return nil
 }
+
