@@ -147,8 +147,7 @@ func restore(homedir string) error {
 	}
 	index, _, err := prompt.Run()
 	if err != nil {
-		fmt.Printf("Prompt failed %v\n", err)
-		return err
+		return fmt.Errorf("selecting snapshot: %w", err)
 	}
 
 	// Prepare the restore script with the selected snapshot.
@@ -161,8 +160,6 @@ func restore(homedir string) error {
 
 	// Run the command.
 	err = cmd.Run()
-	output, _ := cmd.CombinedOutput()
-	fmt.Println(string(output))
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return err
@@ -250,8 +247,6 @@ func snapshot(homedir string) error {
 
 	// Run the command.
 	err = cmd.Run()
-	output, _ := cmd.CombinedOutput()
-	fmt.Println(string(output))
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return err

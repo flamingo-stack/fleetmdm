@@ -21,6 +21,10 @@ const (
 
 // MakeMacOSFatExecutable makes a macOS fat executable from the given binaries.
 func MakeMacOSFatExecutable(outPath string, inPaths ...string) error {
+	if len(inPaths) == 0 {
+		return errors.New("no input files provided")
+	}
+
 	// Read input files.
 	type input struct {
 		data   []byte
@@ -33,7 +37,7 @@ func MakeMacOSFatExecutable(outPath string, inPaths ...string) error {
 	for _, i := range inPaths {
 		data, err := os.ReadFile(i)
 		if err != nil {
-			return err
+			return fmt.Errorf("read input file %s: %w", i, err)
 		}
 		if len(data) < 12 {
 			return fmt.Errorf("file %s too small", i)
@@ -63,11 +67,14 @@ func MakeMacOSFatExecutable(outPath string, inPaths ...string) error {
 	// Make output file.
 	out, err := os.Create(outPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("create output file %s: %w", outPath, err)
 	}
+	defer out.Close()
+
 	err = out.Chmod(0o755)
 	if err != nil {
-		return err
+		os.Remove(outPath)
+		return fmt.Errorf("chmod output file %s: %w", outPath, err)
 	}
 
 	// Build a fat_header.
@@ -102,7 +109,8 @@ func MakeMacOSFatExecutable(outPath string, inPaths ...string) error {
 	// endianness of the contained files.
 	err = binary.Write(out, binary.BigEndian, hdr)
 	if err != nil {
-		return err
+		os.Remove(outPath)
+		return fmt.Errorf("write fat header to %s: %w", outPath, err)
 	}
 	offset = int64(4 * len(hdr))
 
@@ -111,19 +119,22 @@ func MakeMacOSFatExecutable(outPath string, inPaths ...string) error {
 		if offset < i.offset {
 			_, err = out.Write(make([]byte, i.offset-offset))
 			if err != nil {
-				return err
+				os.Remove(outPath)
+				return fmt.Errorf("write padding to %s: %w", outPath, err)
 			}
 			offset = i.offset
 		}
 		_, err := out.Write(i.data)
 		if err != nil {
-			return err
+			os.Remove(outPath)
+			return fmt.Errorf("write input data to %s: %w", outPath, err)
 		}
 		offset += int64(len(i.data))
 	}
 	err = out.Close()
 	if err != nil {
-		return err
+		os.Remove(outPath)
+		return fmt.Errorf("close output file %s: %w", outPath, err)
 	}
 
 	return nil

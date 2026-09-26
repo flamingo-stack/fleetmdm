@@ -168,6 +168,10 @@ func (cf cpeFile) Sync(ctx context.Context, src SourceConfig, localdir string) e
 
 func (cf cpeFile) needsUpdate(ctx context.Context, targetURL, localdir string) (bool, error) {
 	flog.V(1).Infof("checking etag for %q", targetURL)
+	if _, err := os.Stat(filepath.Join(localdir, cf.DataFile)); err != nil {
+		flog.V(1).Infof("data file %q does not exist in %q, needs sync", cf.DataFile, localdir)
+		return true, nil
+	}
 	req, err := httpNewRequestContext(ctx, "HEAD", targetURL)
 	if err != nil {
 		return false, err
@@ -216,6 +220,7 @@ func (cf cpeFile) download(ctx context.Context, targetURL string) (string, strin
 	if err != nil {
 		return "", "", err
 	}
+	defer dataFile.Close()
 	_, err = io.Copy(dataFile, resp.Body)
 	if err != nil {
 		return "", "", err

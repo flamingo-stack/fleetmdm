@@ -40,12 +40,38 @@ module.exports = {
       outputType: 'string',
     },
 
+    invalidNumberOfHosts: {
+      description: 'The provided numberOfHosts is out of bounds.'
+    },
+
+    invalidOrganization: {
+      description: 'The provided organization value is invalid.'
+    },
+
+    invalidExpiresAt: {
+      description: 'The provided expiresAt is out of bounds.'
+    },
+
   },
 
 
   fn: async function ({numberOfHosts, organization, expiresAt, partnerName}) {
 
     let jwt = require('jsonwebtoken');
+
+    if (!Number.isInteger(numberOfHosts) || numberOfHosts <= 0 || numberOfHosts > 1000000) {
+      throw 'invalidNumberOfHosts';
+    }
+
+    if (typeof organization !== 'string' || organization.trim() === '' || organization.length > 200) {
+      throw 'invalidOrganization';
+    }
+
+    let nowInMs = Date.now();
+    let maxExpiresAtInMs = nowInMs + (10 * 365 * 24 * 60 * 60 * 1000); // ten years from now
+    if (!Number.isFinite(expiresAt) || expiresAt <= nowInMs || expiresAt > maxExpiresAtInMs) {
+      throw 'invalidExpiresAt';
+    }
 
     let expirationTimestampInSeconds = Math.floor(expiresAt / 1000);
     let token = jwt.sign(
@@ -72,4 +98,5 @@ module.exports = {
 
 
 };
+
 

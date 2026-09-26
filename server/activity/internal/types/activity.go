@@ -69,11 +69,15 @@ func (o *ListOptions) GetCursorValue() string { return o.After }
 // WantsPaginationInfo returns true if pagination metadata should be included.
 func (o *ListOptions) WantsPaginationInfo() bool { return o.IncludeMetadata }
 
-// GetSecondaryOrderKey returns the secondary order key (not used for activities).
-func (o *ListOptions) GetSecondaryOrderKey() string { return "" }
+// GetSecondaryOrderKey returns the secondary order key used to break ties when the
+// primary order key has duplicate values (e.g., "id"), ensuring stable, deterministic
+// pagination ordering for any shared generic pagination helper code.
+func (o *ListOptions) GetSecondaryOrderKey() string { return "id" }
 
-// IsSecondaryDescending returns true if the secondary order is descending (not used for activities).
-func (o *ListOptions) IsSecondaryDescending() bool { return false }
+// IsSecondaryDescending returns true if the secondary order is descending. This mirrors
+// the primary order direction so that tie-breaking by the secondary key is consistent
+// with the requested sort order.
+func (o *ListOptions) IsSecondaryDescending() bool { return o.OrderDirection == api.OrderDescending }
 
 // Datastore is the datastore interface for the activity bounded context.
 type Datastore interface {

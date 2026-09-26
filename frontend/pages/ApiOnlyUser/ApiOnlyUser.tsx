@@ -30,6 +30,7 @@ const ApiOnlyUser = ({ router }: IApiOnlyUserProps): JSX.Element => {
         }
       } catch (response) {
         console.error(response);
+        router.push(LOGIN);
       }
     };
 

@@ -82,10 +82,6 @@ func main() {
 		*enterpriseID = strings.TrimPrefix(*enterpriseID, "enterprises/")
 	}
 
-	if slices.Index(commands, *command) == -1 {
-		log.Fatalf("Command must be one of: %s", strings.Join(commands, ", "))
-	}
-
 	ctx := context.Background()
 	mgmt, err := androidmanagement.NewService(ctx, option.WithCredentialsJSON([]byte(androidServiceCredentials)))
 	if err != nil {
@@ -206,7 +202,7 @@ func devicesList(mgmt *androidmanagement.Service, enterpriseID string) {
 		log.Fatalf("Error listing devices: %v", err)
 	}
 	if len(result.Devices) == 0 {
-		log.Printf("No policies found")
+		log.Printf("No devices found")
 		return
 	}
 	b, err := json.Marshal(result.Devices, jsontext.WithIndent("  "))
@@ -223,7 +219,7 @@ func devicesDelete(mgmt *androidmanagement.Service, enterpriseID string, deviceI
 	}
 	_, err := mgmt.Enterprises.Devices.Delete("enterprises/" + enterpriseID + "/devices/" + deviceID).Do()
 	if err != nil {
-		log.Fatalf("Error listing devices: %v", err)
+		log.Fatalf("Error deleting device: %v", err)
 	}
 	log.Printf("Device %s deleted", deviceID)
 }

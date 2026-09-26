@@ -192,14 +192,14 @@ func (svc *Service) Login(ctx context.Context, email, password string, supportsE
 	var err error
 	defer func(start time.Time) {
 		if err != nil && !errors.Is(err, sendingMFAEmail) && !errors.Is(err, mfaNotSupportedForClient) {
-			if err := svc.NewActivity(
+			if activityErr := svc.NewActivity(
 				ctx, nil, fleet.ActivityTypeUserFailedLogin{
 					Email:    email,
 					PublicIP: publicip.FromContext(ctx),
-				}); err != nil {
-				logging.WithExtras(logging.WithNoUser(ctx),
-					"msg", "failed to generate failed login activity",
-				)
+				}); activityErr != nil {
+				logging.WithLevel(logging.WithExtras(logging.WithNoUser(ctx),
+					"msg", "failed to generate failed login activity", "err", activityErr,
+				), slog.LevelError)
 			}
 			time.Sleep(time.Until(start.Add(1 * time.Second)))
 		}
@@ -471,7 +471,7 @@ func (svc *Service) InitiateSSO(ctx context.Context, redirectURL string) (sessio
 	if err != nil {
 		return "", 0, "", ctxerr.Wrap(ctx, badRequest("invalid sso redirect url"))
 	}
-	if slices.Contains([]string{"javascript", "vbscript", "data"}, parsedUrl.Scheme) {
+	if !slices.Contains([]string{"", "https"}, strings.ToLower(parsedUrl.Scheme)) {
 		return "", 0, "", ctxerr.Wrap(ctx, badRequest("invalid sso redirect url scheme: "+parsedUrl.Scheme))
 	}
 

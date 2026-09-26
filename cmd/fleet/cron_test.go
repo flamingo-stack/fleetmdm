@@ -360,9 +360,11 @@ func TestHostVitalsLabelMembershipCronIDP(t *testing.T) {
 	hosts := make([]*fleet.Host, 3)
 	teamIDs := []*uint{&team1.ID, &team2.ID, nil}
 	for i := range 3 {
+		osqueryHostID := fmt.Sprintf("idp-cron-%d", i)
+		nodeKey := fmt.Sprintf("idp-cron-%d", i)
 		h, err := ds.NewHost(ctx, &fleet.Host{
-			OsqueryHostID:  new(fmt.Sprintf("idp-cron-%d", i)),
-			NodeKey:        new(fmt.Sprintf("idp-cron-%d", i)),
+			OsqueryHostID:  &osqueryHostID,
+			NodeKey:        &nodeKey,
 			UUID:           fmt.Sprintf("idp-cron-uuid%d", i),
 			Hostname:       fmt.Sprintf("idp-cron-host%d.local", i),
 			HardwareSerial: fmt.Sprintf("idp-cron-hwd%d", i),
@@ -376,9 +378,10 @@ func TestHostVitalsLabelMembershipCronIDP(t *testing.T) {
 	// All three SCIM users are in the same "Engineering" IdP group.
 	scimUserIDs := make([]uint, 3)
 	for i := range 3 {
+		active := true
 		id, err := ds.CreateScimUser(ctx, &fleet.ScimUser{
 			UserName: fmt.Sprintf("idp-cron-user%d", i),
-			Active:   new(true),
+			Active:   &active,
 		})
 		require.NoError(t, err)
 		scimUserIDs[i] = id
@@ -393,18 +396,21 @@ func TestHostVitalsLabelMembershipCronIDP(t *testing.T) {
 	_, err = ds.CreateScimGroup(ctx, &fleet.ScimGroup{DisplayName: "Engineering", ScimUsers: scimUserIDs})
 	require.NoError(t, err)
 
+	vital := "end_user_idp_group"
+	value := "Engineering"
 	criteria, err := json.Marshal(&fleet.HostVitalCriteria{
-		Vital: new("end_user_idp_group"),
-		Value: new("Engineering"),
+		Vital: &vital,
+		Value: &value,
 	})
 	require.NoError(t, err)
 
 	// Create a global and a team1-scoped IdP host vitals label.
+	criteriaRawMessage := json.RawMessage(criteria)
 	globalLabel, err := ds.NewLabel(ctx, &fleet.Label{
 		Name:                "idp-cron-global",
 		LabelType:           fleet.LabelTypeRegular,
 		LabelMembershipType: fleet.LabelMembershipTypeHostVitals,
-		HostVitalsCriteria:  new(json.RawMessage(criteria)),
+		HostVitalsCriteria:  &criteriaRawMessage,
 	})
 	require.NoError(t, err)
 	team1Label, err := ds.NewLabel(ctx, &fleet.Label{
@@ -412,7 +418,7 @@ func TestHostVitalsLabelMembershipCronIDP(t *testing.T) {
 		TeamID:              &team1.ID,
 		LabelType:           fleet.LabelTypeRegular,
 		LabelMembershipType: fleet.LabelMembershipTypeHostVitals,
-		HostVitalsCriteria:  new(json.RawMessage(criteria)),
+		HostVitalsCriteria:  &criteriaRawMessage,
 	})
 	require.NoError(t, err)
 
