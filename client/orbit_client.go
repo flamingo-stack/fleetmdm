@@ -192,6 +192,8 @@ func (oc *OrbitClient) requestWithExternal(verb string, pathOrURL string, params
 				if machineId != "" {
 					request.Header.Add("x-machine-id", machineId)
 				}
+			} else {
+				log.Debug().Msg("machineIdProvider is nil, not adding x-machine-id header")
 			}
 		}
 		// <<< OPENFRAME(agent-openframe-mode)
