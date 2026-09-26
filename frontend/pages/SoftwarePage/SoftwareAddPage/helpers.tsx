@@ -21,7 +21,10 @@ export const ensurePeriod = (str: string) => {
  * Returns a formatted React element if matched; otherwise, returns null. */
 export const formatAlreadyAvailableInstallMessage = (msg: string) => {
   // Remove prefix (with or without trailing space)
-  const cleaned = msg.replace(/^Couldn't add software\.?\s*/, "");
+  const cleaned = msg.replace(
+    new RegExp(`^${ADD_SOFTWARE_ERROR_PREFIX}\\s*`),
+    ""
+  );
 
   // New regex for "<package> already has an installer available for the <fleet> fleet."
   const installerExistsRegex = /^(.+?) already.+the (.+?) fleet\./;

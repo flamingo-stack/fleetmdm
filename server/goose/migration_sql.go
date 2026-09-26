@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"database/sql"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -132,13 +133,14 @@ func splitSQLStatements(r io.Reader, direction bool) (stmts []string) {
 func (c *Client) runSQLMigration(db *sql.DB, scriptFile string, v int64, direction bool) error {
 	tx, err := db.Begin()
 	if err != nil {
-		log.Fatal("db.Begin:", err)
+		return fmt.Errorf("db.Begin: %w", err)
 	}
 
 	f, err := os.Open(scriptFile)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("open migration script %s: %w", scriptFile, err)
 	}
+	defer f.Close()
 
 	// find each statement, checking annotations for up/down direction
 	// and execute each of them in the current transaction.
@@ -148,8 +150,7 @@ func (c *Client) runSQLMigration(db *sql.DB, scriptFile string, v int64, directi
 	for _, query := range splitSQLStatements(f, direction) {
 		if _, err = tx.Exec(query); err != nil {
 			tx.Rollback() //nolint:errcheck
-			log.Fatalf("FAIL %s (%v), quitting migration.", filepath.Base(scriptFile), err)
-			return err
+			return fmt.Errorf("FAIL %s: %w", filepath.Base(scriptFile), err)
 		}
 	}
 

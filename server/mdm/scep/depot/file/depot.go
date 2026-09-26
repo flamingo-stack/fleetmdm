@@ -245,10 +245,11 @@ func (d *fileDepot) HasCN(_ string, allowTime int, cert *x509.Certificate, revok
 		return false, err
 	}
 	if revokeOldCertificate {
-		file, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR, dbPerm)
+		file, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR|os.O_TRUNC, dbPerm)
 		if err != nil {
 			return false, err
 		}
+		defer file.Close()
 		if _, err := file.Write(addDB.Bytes()); err != nil {
 			return false, err
 		}
@@ -273,7 +274,7 @@ func (d *fileDepot) writeDB(cn string, serial *big.Int, filename string, cert *x
 
 	file, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR|os.O_APPEND, dbPerm)
 	if err != nil {
-		return fmt.Errorf("could not append to "+name+" : %q\n", err.Error())
+		return fmt.Errorf("could not append to %s: %w", name, err)
 	}
 	defer file.Close()
 
@@ -402,7 +403,7 @@ func loadKey(data []byte, password []byte) (*rsa.PrivateKey, error) {
 		// case *ecdsa.PublicKey:
 		// case ed25519.PublicKey:
 		default:
-			panic("unsupported type of public key. SCEP need RSA private key")
+			return nil, errors.New("unsupported type of public key. SCEP need RSA private key")
 		}
 	default:
 		return nil, errors.New("unmatched type or headers")

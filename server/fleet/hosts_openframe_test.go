@@ -11,11 +11,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHostJSONExposesOsqueryHostID(t *testing.T) {
-	h := Host{OsqueryHostID: new("host-uuid-1")}
+	h := Host{OsqueryHostID: ptr.String("host-uuid-1")}
 
 	b, err := json.Marshal(h)
 	require.NoError(t, err)
