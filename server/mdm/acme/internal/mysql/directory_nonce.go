@@ -11,8 +11,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func (ds *Datastore) GetACMEEnrollment(ctx context.Context, pathIdentifier string) (*types.Enrollment, error) {
-	ctx, span := tracer.Start(ctx, "acme.mysql.GetACMEEnrollment")
+func (ds *Datastore) GetACMEEnrollmentByPathIdentifier(ctx context.Context, pathIdentifier string) (*types.Enrollment, error) {
+	ctx, span := tracer.Start(ctx, "acme.mysql.GetACMEEnrollmentByPathIdentifier")
 	defer span.End()
 
 	const stmt = `

@@ -41,7 +41,7 @@ func Configure(dbPath string) (http.Handler, error) {
 	var err error
 	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("opening calendar test db: %w", err)
 	}
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
@@ -304,6 +304,11 @@ func deleteEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusGone)
 		return
 	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func initializeSchema() error {
