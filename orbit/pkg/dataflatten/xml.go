@@ -13,6 +13,7 @@ func XmlFile(file string, opts ...FlattenOpts) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rdr.Close()
 
 	mv, err := mxj.NewMapXmlReader(rdr)
 	if err != nil {

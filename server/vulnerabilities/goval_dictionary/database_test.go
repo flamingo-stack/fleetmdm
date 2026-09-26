@@ -29,7 +29,7 @@ func TestVerify(t *testing.T) {
 	}
 	db := NewDB(sqlite, oval.NewPlatform("amzn", "Amazon Linux 2.0.0"))
 	t.Run("Verify alerts of error", func(t *testing.T) {
-		require.Error(t, db.Verfiy())
+		require.Error(t, db.Verify())
 	})
 }
 
@@ -116,6 +116,6 @@ func TestDatabase(t *testing.T) {
 	})
 
 	t.Run("Verify returns no errors", func(t *testing.T) {
-		require.NoError(t, db.Verfiy())
+		require.NoError(t, db.Verify())
 	})
 }

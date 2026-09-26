@@ -279,7 +279,7 @@ func (mc *Mobileconfig) ScreenPayloads(allowCustomFileVault bool) error {
 			}
 		}
 		if len(unsupportedTypes) > 0 {
-			return fmt.Errorf("unsupported PayloadType(s): %s", strings.Join(screenedTypes, ", "))
+			return fmt.Errorf("unsupported PayloadType(s): %s", strings.Join(unsupportedTypes, ", "))
 		}
 	}
 

@@ -149,6 +149,9 @@ func (lowLevelAPI *GoogleCalendarLowLevelAPI) GetSetting(name string) (*calendar
 			return lowLevelAPI.service.Settings.Get(name).Do()
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 	return result.(*calendar.Setting), err
 }
 
@@ -161,6 +164,9 @@ func (lowLevelAPI *GoogleCalendarLowLevelAPI) CreateEvent(event *calendar.Event)
 			return lowLevelAPI.service.Events.Insert(calendarID, event).Do()
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 	return result.(*calendar.Event), err
 }
 
@@ -173,6 +179,9 @@ func (lowLevelAPI *GoogleCalendarLowLevelAPI) UpdateEvent(event *calendar.Event)
 			return lowLevelAPI.service.Events.Update(calendarID, event.Id, event).Do()
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 	return result.(*calendar.Event), err
 }
 
@@ -185,6 +194,9 @@ func (lowLevelAPI *GoogleCalendarLowLevelAPI) GetEvent(id, eTag string) (*calend
 			return lowLevelAPI.service.Events.Get(calendarID, id).IfNoneMatch(eTag).Do()
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 	return result.(*calendar.Event), err
 }
 
@@ -205,6 +217,9 @@ func (lowLevelAPI *GoogleCalendarLowLevelAPI) ListEvents(timeMin, timeMax string
 				Do()
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 	return result.(*calendar.Events), err
 }
 
