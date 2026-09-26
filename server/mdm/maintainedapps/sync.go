@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,30 +74,30 @@ func doFetch(ctx context.Context, baseURL, path string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s%s", baseURL, path), nil)
 	if err != nil {
-		return nil, fmt.Errorf("create http request: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "create http request")
 	}
 
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute http request: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "execute http request")
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read http response body: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "read http response body")
 	}
 
 	switch res.StatusCode {
 	case http.StatusOK:
 		return body, nil
 	case http.StatusNotFound:
-		return nil, errors.New("not found (HTTP 404)")
+		return nil, ctxerr.Errorf(ctx, "not found (HTTP 404): %s", req.URL.String())
 	default:
 		if len(body) > 512 {
 			body = body[:512]
 		}
-		return nil, fmt.Errorf("HTTP status %d: %s", res.StatusCode, string(body))
+		return nil, ctxerr.Errorf(ctx, "HTTP status %d: %s", res.StatusCode, string(body))
 	}
 }
 

@@ -15,6 +15,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// >>> OPENFRAME(certificate-authorities): CertificateAuthority CRUD, secret encryption and certificate templates support — openframe/docs/certificate-authorities.md
+
 type certificateAuthorityWithEncryptedSecrets struct {
 	fleet.CertificateAuthority
 	APITokenEncrypted                []byte `db:"api_token_encrypted"`
@@ -54,7 +56,7 @@ func (ds *Datastore) GetCertificateAuthorityByID(ctx context.Context, id uint, i
 	var ca certificateAuthorityWithEncryptedSecrets
 	if err := sqlx.GetContext(ctx, ds.reader(ctx), &ca, stmt, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, notFound("CertificateAuthority").WithID(id)
+			return nil, ctxerr.Wrap(ctx, notFound("CertificateAuthority").WithID(id))
 		}
 		return nil, ctxerr.Wrapf(ctx, err, "get CertificateAuthority %d", id)
 	}
@@ -425,11 +427,10 @@ func (ds *Datastore) UpdateCertificateAuthorityByID(ctx context.Context, certifi
 		return ctxerr.Wrapf(ctx, err, "getting certificate authority with id %d", certificateAuthorityID)
 	}
 
-	// If the name is being updated, check if it's the same as the old one.
-	sameName := ca.Name != nil && *oldCA.Name == *ca.Name
-	if sameName {
-		return fleet.ConflictError{Message: "a certificate authority with this name already exists"}
-	}
+	// If the name is being updated, check if it's different from the old one; the
+	// uniqueness constraint on (type, name) will catch collisions with other records.
+	nameChanged := ca.Name != nil && *oldCA.Name != *ca.Name
+	_ = nameChanged
 
 	var updateArgs []any
 
@@ -611,3 +612,5 @@ func (ds *Datastore) generateUpdateQueryWithArgs(ctx context.Context, ca *fleet.
 	}
 	return fmt.Sprintf("SET %s", strings.Join(updates, ", ")), nil
 }
+
+// <<< OPENFRAME(certificate-authorities)

@@ -232,7 +232,7 @@ func (svc *Service) validateReadyForLinuxEscrow(ctx context.Context, host *fleet
 
 	ac, err := svc.ds.AppConfig(ctx)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "getting app config for linux escrow validation")
 	}
 
 	if host.TeamID == nil {
@@ -242,7 +242,7 @@ func (svc *Service) validateReadyForLinuxEscrow(ctx context.Context, host *fleet
 	} else {
 		tc, err := svc.ds.TeamMDMConfig(ctx, *host.TeamID)
 		if err != nil {
-			return err
+			return ctxerr.Wrap(ctx, err, "getting team mdm config")
 		}
 		if !tc.EnableDiskEncryption {
 			return &fleet.BadRequestError{Message: "Disk encryption is not enabled for this host's fleet."}
@@ -256,7 +256,7 @@ func (svc *Service) validateReadyForLinuxEscrow(ctx context.Context, host *fleet
 	// We have to pull Orbit info because the auth context doesn't fill in host.OrbitVersion
 	orbitInfo, err := svc.ds.GetHostOrbitInfo(ctx, host.ID)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "getting host orbit info for linux escrow validation")
 	}
 
 	if orbitInfo == nil || !fleet.IsAtLeastVersion(orbitInfo.Version, fleet.MinOrbitLUKSVersion) {

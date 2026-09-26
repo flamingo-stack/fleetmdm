@@ -1,5 +1,6 @@
 package service
 
+// >>> OPENFRAME(certificate-templates): Fork-specific certificate template feature set — openframe/docs/certificate-templates.md
 import (
 	"context"
 	"errors"
@@ -329,8 +330,7 @@ func getCertificateTemplateEndpoint(ctx context.Context, request interface{}, sv
 func (svc *Service) GetCertificateTemplate(ctx context.Context, id uint) (*fleet.CertificateTemplateResponse, error) {
 	certificate, err := svc.ds.GetCertificateTemplateById(ctx, id)
 	if err != nil {
-		svc.authz.SkipAuthorization(ctx)
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "getting certificate template")
 	}
 
 	if err := svc.authz.Authorize(ctx, &fleet.CertificateTemplate{TeamID: certificate.TeamID}, fleet.ActionRead); err != nil {
@@ -866,3 +866,5 @@ func (svc *Service) ResendHostCertificateTemplate(ctx context.Context, hostID ui
 
 	return nil
 }
+
+// <<< OPENFRAME(certificate-templates)
