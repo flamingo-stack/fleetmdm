@@ -144,7 +144,7 @@ export const getErrorMessage = (err: unknown, formData: INDESFormData) => {
   } else if (reason.includes("the password cache is full")) {
     return CACHE_ERROR;
   } else if (reason.includes("does not have sufficient permissions")) {
-    INSUFFICIENT_PERMISSIONS_ERROR;
+    return INSUFFICIENT_PERMISSIONS_ERROR;
   } else if (
     reason.includes(formData.scepURL) &&
     reason.includes("context deadline exceeded")

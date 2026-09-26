@@ -315,8 +315,10 @@ func (r *redisLiveQuery) storeQueryNames(names ...string) error {
 	var args redigo.Args
 	args = args.Add(activeQueriesKey)
 	args = args.AddFlat(names)
-	_, err := conn.Do("SADD", args...)
-	return err
+	if _, err := conn.Do("SADD", args...); err != nil {
+		return fmt.Errorf("sadd query names: %w", err)
+	}
+	return nil
 }
 
 func (r *redisLiveQuery) removeQueryInfo(name string) error {
@@ -337,8 +339,10 @@ func (r *redisLiveQuery) removeQueryNames(names ...string) error {
 	var args redigo.Args
 	args = args.Add(activeQueriesKey)
 	args = args.AddFlat(names)
-	_, err := conn.Do("SREM", args...)
-	return err
+	if _, err := conn.Do("SREM", args...); err != nil {
+		return fmt.Errorf("srem query names: %w", err)
+	}
+	return nil
 }
 
 func (r *redisLiveQuery) LoadActiveQueryNames() ([]string, error) {
@@ -423,8 +427,7 @@ func (r *redisLiveQuery) loadCache() error {
 			}
 
 			go func() {
-				err = r.removeQueryNames(names...)
-				if err != nil {
+				if err := r.removeQueryNames(names...); err != nil {
 					r.logger.WarnContext(context.TODO(), "removing expired live queries", "err", err)
 				}
 			}()

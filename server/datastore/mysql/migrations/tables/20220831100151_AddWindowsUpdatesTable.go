@@ -2,8 +2,7 @@ package tables
 
 import (
 	"database/sql"
-
-	"github.com/pkg/errors"
+	"fmt"
 )
 
 func init() {
@@ -22,7 +21,7 @@ CREATE TABLE IF NOT EXISTS windows_updates (
 	KEY idx_update_date (host_id, date_epoch)
 )`)
 	if err != nil {
-		return errors.Wrapf(err, "create operating_systems table")
+		return fmt.Errorf("create windows_updates table: %w", err)
 	}
 	return nil
 }

@@ -73,15 +73,15 @@ func TestOpenframeLabelTeamFence(t *testing.T) {
 
 	t.Run("by-name: same name in another tenant is not visible", func(t *testing.T) {
 		// Both tenants define a label with the same name; each sees only its own.
-		shА, err := ds.NewLabel(ctxA, &fleet.Label{Name: "shared-name", Query: "SELECT 1"})
+		shA, err := ds.NewLabel(ctxA, &fleet.Label{Name: "shared-name", Query: "SELECT 1"})
 		require.NoError(t, err)
 		shB, err := ds.NewLabel(ctxB, &fleet.Label{Name: "shared-name", Query: "SELECT 1"})
 		require.NoError(t, err)
-		require.NotEqual(t, shА.ID, shB.ID)
+		require.NotEqual(t, shA.ID, shB.ID)
 
 		gotA, err := ds.LabelByName(ctxA, "shared-name", admin)
 		require.NoError(t, err)
-		require.Equal(t, shА.ID, gotA.ID, "must resolve to the caller tenant's label")
+		require.Equal(t, shA.ID, gotA.ID, "must resolve to the caller tenant's label")
 	})
 
 	t.Run("delete: cannot delete another tenant's label", func(t *testing.T) {
