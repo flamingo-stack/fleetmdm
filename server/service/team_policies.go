@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -61,7 +60,7 @@ func (svc Service) NewTeamPolicy(ctx context.Context, teamID uint, tp fleet.NewT
 
 	vc, ok := viewer.FromContext(ctx)
 	if !ok {
-		return nil, errors.New("user must be authenticated to create team policies")
+		return nil, ctxerr.New(ctx, "user must be authenticated to create team policies")
 	}
 
 	p, err := svc.newTeamPolicyPayloadToPolicyPayload(ctx, teamID, tp)
@@ -261,7 +260,8 @@ func (svc *Service) populateSoftwareIconURLs(ctx context.Context, policies []*fl
 			// to (see getPolicySoftwareTitleIconURL), so it's safe to point at it
 			// without risking a 404.
 			if hasCustomIcon || p.VPPAppsTeamsID != nil {
-				t.IconURL = new(getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID))
+				iconURL := getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID)
+				t.IconURL = &iconURL
 			}
 		}
 
@@ -269,7 +269,8 @@ func (svc *Service) populateSoftwareIconURLs(ctx context.Context, policies []*fl
 			// Patch software is always a package installer (never a VPP app), so
 			// it only gets an icon URL when a custom icon was uploaded.
 			if _, ok := icons[t.SoftwareTitleID]; ok {
-				t.IconURL = new(getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID))
+				iconURL := getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID)
+				t.IconURL = &iconURL
 			}
 		}
 	}
@@ -413,11 +414,11 @@ func (svc *Service) CountTeamPolicies(ctx context.Context, teamID uint, matchQue
 	if mergeInherited {
 		count, err := svc.ds.CountMergedTeamPolicies(ctx, teamID, matchQuery, automationType)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, ctxerr.Wrap(ctx, err, "count merged team policies")
 		}
 		inheritedCount, err := svc.ds.CountPolicies(ctx, nil, matchQuery, automationType)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, ctxerr.Wrap(ctx, err, "count inherited policies")
 		}
 		return count, inheritedCount, nil
 	}
