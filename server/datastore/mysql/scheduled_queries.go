@@ -366,7 +366,7 @@ func (ds *Datastore) AsyncBatchSaveHostsScheduledQueryStats(ctx context.Context,
 				var teamID int
 				statTeamID, err := stat.TeamID()
 				if err != nil {
-					return 0, err
+					return 0, ctxerr.Wrap(ctx, err, "parse team id from scheduled query stat pack name")
 				}
 				if statTeamID != nil {
 					teamID = *statTeamID

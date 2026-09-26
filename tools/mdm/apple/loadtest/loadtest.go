@@ -160,7 +160,7 @@ func main() {
 	for _, team := range teams {
 		teamProfiles, err := apiClient.ListProfiles(ptr.Uint(team.ID))
 		if err != nil {
-			log.Fatalf("load team %s profiles: ", team.Name)
+			log.Fatalf("load team %s profiles: %s", team.Name, err)
 		}
 		if len(teamProfiles) != len(profiles) {
 			log.Fatalf("invalid number of profiles in team %s: %d", team.Name, len(teamProfiles))
@@ -168,11 +168,11 @@ func main() {
 		// Remove the last profile.
 		lastProfile := teamProfiles[len(teamProfiles)-1]
 		if err := apiClient.DeleteProfile(lastProfile.ProfileID); err != nil {
-			log.Fatalf("delete profile %s for team %s", lastProfile.Identifier, team.Name)
+			log.Fatalf("delete profile %s for team %s: %s", lastProfile.Identifier, team.Name, err)
 		}
 		// Add a new profile.
 		if _, err := apiClient.AddProfile(team.ID, newProfile); err != nil {
-			log.Fatalf("upload new profile for team %s", team.Name)
+			log.Fatalf("upload new profile for team %s: %s", team.Name, err)
 		}
 	}
 	printf("4a. Duration: %s\n", time.Since(start))

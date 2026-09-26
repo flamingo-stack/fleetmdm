@@ -182,6 +182,9 @@ func (r *Runner) Execute() error {
 
 // Runner interrupts the running osquery process.
 func (r *Runner) Interrupt(err error) {
+	if err != nil {
+		log.Info().Err(fmt.Errorf("interrupt osqueryd runner: %w", err)).Msg("osqueryd runner interrupted")
+	}
 	if _, cancel := r.getContextAndCancel(); cancel != nil {
 		cancel()
 	}
