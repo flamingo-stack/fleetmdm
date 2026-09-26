@@ -111,6 +111,7 @@ const OSUpdates = ({ router, teamIdForApi, queryParams }: IOSUpdates) => {
         fleet_id: teamIdForApi,
       })
     );
+    return null;
   }
 
   // FIXME: Handle error states for app config and team config (need specifications for this).

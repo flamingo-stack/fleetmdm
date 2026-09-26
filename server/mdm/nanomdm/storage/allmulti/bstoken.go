@@ -16,5 +16,10 @@ func (ms *MultiAllStorage) RetrieveBootstrapToken(r *mdm.Request, msg *mdm.GetBo
 	val, err := ms.execStores(r.Context, func(s storage.AllStorage) (interface{}, error) {
 		return s.RetrieveBootstrapToken(r, msg)
 	})
-	return val.(*mdm.BootstrapToken), err
+	if err != nil {
+		return nil, err
+	}
+	token, _ := val.(*mdm.BootstrapToken)
+	return token, nil
 }
+

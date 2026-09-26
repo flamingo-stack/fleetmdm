@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/osquery/osquery-go/plugin/table"
@@ -164,6 +165,10 @@ func buildTableRows(uid string, parsedRows [][]string) ([]map[string]string, err
 }
 
 func satisfiesConstraints(uid string, constraints []table.Constraint) (bool, error) {
+	uidNum, err := strconv.ParseInt(uid, 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse uid %q as integer: %w", uid, err)
+	}
 	for _, constraint := range constraints {
 		// for each constraint on the column
 		switch constraint.Operator {
@@ -172,19 +177,35 @@ func satisfiesConstraints(uid string, constraints []table.Constraint) (bool, err
 				return false, nil
 			}
 		case table.OperatorGreaterThan:
-			if constraint.Expression >= uid {
+			exprNum, err := strconv.ParseInt(constraint.Expression, 10, 64)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse uid constraint expression %q as integer: %w", constraint.Expression, err)
+			}
+			if exprNum >= uidNum {
 				return false, nil
 			}
 		case table.OperatorLessThan:
-			if constraint.Expression <= uid {
+			exprNum, err := strconv.ParseInt(constraint.Expression, 10, 64)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse uid constraint expression %q as integer: %w", constraint.Expression, err)
+			}
+			if exprNum <= uidNum {
 				return false, nil
 			}
 		case table.OperatorGreaterThanOrEquals:
-			if constraint.Expression > uid {
+			exprNum, err := strconv.ParseInt(constraint.Expression, 10, 64)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse uid constraint expression %q as integer: %w", constraint.Expression, err)
+			}
+			if exprNum > uidNum {
 				return false, nil
 			}
 		case table.OperatorLessThanOrEquals:
-			if constraint.Expression < uid {
+			exprNum, err := strconv.ParseInt(constraint.Expression, 10, 64)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse uid constraint expression %q as integer: %w", constraint.Expression, err)
+			}
+			if exprNum < uidNum {
 				return false, nil
 			}
 		default:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strconv"
+	"time"
 
 	"github.com/osquery/osquery-go/plugin/table"
 	"howett.net/plist"
@@ -71,7 +72,10 @@ func VolumesColumns() []table.ColumnDefinition {
 // Generate is called to return the results for the table at query time.
 // Constraints for generating can be retrieved from the queryContext.
 func VolumesGenerate(ctx context.Context, queryContext table.QueryContext) ([]map[string]string, error) {
-	cmd := exec.Command("/usr/sbin/diskutil", "apfs", "list", "-plist")
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "/usr/sbin/diskutil", "apfs", "list", "-plist")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("generate failed: %w", err)
@@ -141,7 +145,10 @@ func PhysicalStoresColumns() []table.ColumnDefinition {
 // Generate is called to return the results for the table at query time.
 // Constraints for generating can be retrieved from the queryContext.
 func PhysicalStoresGenerate(ctx context.Context, queryContext table.QueryContext) ([]map[string]string, error) {
-	cmd := exec.Command("/usr/sbin/diskutil", "apfs", "list", "-plist")
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "/usr/sbin/diskutil", "apfs", "list", "-plist")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("generate failed: %w", err)

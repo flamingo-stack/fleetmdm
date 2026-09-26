@@ -21,7 +21,7 @@ func TestJobs(t *testing.T) {
 		fn   func(t *testing.T, ds *Datastore)
 	}{
 		{"QueueAndProcessJobs", testQueueAndProcessJobs},
-		{"QueueAndProcessJobs", testQueueAndProcessFilteredJobs},
+		{"QueueAndProcessFilteredJobs", testQueueAndProcessFilteredJobs},
 		{"CleanupWorkerJobs", testCleanupWorkerJobs},
 	}
 	for _, c := range cases {
