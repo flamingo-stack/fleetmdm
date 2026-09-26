@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/fleetdm/fleet/v4/ee/pkg/hostidentity/types"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	common_mysql "github.com/fleetdm/fleet/v4/server/platform/mysql"
 	"github.com/jmoiron/sqlx"
 )
@@ -93,11 +94,11 @@ func (ds *Datastore) GetMDMSCEPCertBySerial(ctx context.Context, serialNumber ui
 	// The hash is calculated from cert.Raw (DER-encoded bytes), not the PEM string
 	block, _ := pem.Decode([]byte(certPEM))
 	if block == nil {
-		return "", errors.New("failed to decode PEM certificate")
+		return "", ctxerr.New(ctx, "failed to decode PEM certificate")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse certificate: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "parse certificate")
 	}
 	hashed := sha256.Sum256(cert.Raw)
 	hash := hex.EncodeToString(hashed[:])

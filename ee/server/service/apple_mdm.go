@@ -58,7 +58,7 @@ func (svc *Service) GetMDMAppleAccountEnrollmentProfile(ctx context.Context, enr
 		fleet.MDMAssetSCEPChallenge,
 	}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("loading SCEP challenge from the database: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "loading SCEP challenge from the database")
 	}
 	enrollURL := appConfig.MDMUrl()
 
