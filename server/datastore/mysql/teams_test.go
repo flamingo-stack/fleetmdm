@@ -157,7 +157,7 @@ func testTeamsGetSetDelete(t *testing.T, ds *Datastore) {
 					      mdm_apple_configuration_profiles (profile_uuid, team_id, identifier, name, mobileconfig, checksum)
 				     VALUES (?, ?, ?, ?, ?, ?)`,
 					fmt.Sprintf("uuid_%s", tt.name),
-					0,
+					team.ID,
 					fmt.Sprintf("TestPayloadIdentifier_%s", tt.name),
 					fmt.Sprintf("TestPayloadName_%s", tt.name),
 					`<?xml version="1.0"`,
@@ -169,14 +169,14 @@ func testTeamsGetSetDelete(t *testing.T, ds *Datastore) {
 				_, err = q.ExecContext(context.Background(), `
 								  INSERT INTO
 								      mdm_windows_configuration_profiles (team_id, name, syncml, profile_uuid)
-								  VALUES (?, ?, ?, ?)`, 0, fmt.Sprintf("TestPayloadName_%s", tt.name), `<?xml version="1.0"`, fmt.Sprintf("uuid_%s", tt.name))
+								  VALUES (?, ?, ?, ?)`, team.ID, fmt.Sprintf("TestPayloadName_%s", tt.name), `<?xml version="1.0"`, fmt.Sprintf("uuid_%s", tt.name))
 				if err != nil {
 					return err
 				}
 				_, err = q.ExecContext(context.Background(), `
 								  INSERT INTO
 								      mdm_android_configuration_profiles (profile_uuid, team_id, name, raw_json)
-								  VALUES (?, ?, ?, ?)`, fmt.Sprintf("uuid_%s", tt.name), 0, fmt.Sprintf("TestPayloadName_%s", tt.name), `{"foo": "bar"}`)
+								  VALUES (?, ?, ?, ?)`, fmt.Sprintf("uuid_%s", tt.name), team.ID, fmt.Sprintf("TestPayloadName_%s", tt.name), `{"foo": "bar"}`)
 				if err != nil {
 					return err
 				}
@@ -970,7 +970,7 @@ func testTeamConflictsWithName(t *testing.T, ds *Datastore) {
 	// e + combining acute accent).
 	reneeCombined, err := ds.NewTeam(ctx, &fleet.Team{Name: "Renée"})
 	require.NoError(t, err)
-	reneeDecomposed := "Renée" // e + U+0301 COMBINING ACUTE ACCENT
+	reneeDecomposed := "Renée" // e + U+0301 COMBINING ACUTE ACCENT
 	conflict, err = ds.TeamConflictsWithName(ctx, reneeDecomposed, 0)
 	require.NoError(t, err)
 	require.Equal(t, reneeCombined.ID, conflict.ID)

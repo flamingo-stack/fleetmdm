@@ -10,9 +10,7 @@ const DROPDOWN_OPTIONS = [
   { disabled: true, label: "Delete", value: "delete-query" },
 ];
 const PLACEHOLDER = "Actions";
-const ON_CHANGE = (value: string) => {
-  console.log(value);
-};
+const ON_CHANGE = () => {};
 
 describe("Actions dropdown", () => {
   it("renders dropdown placeholder and options", async () => {
