@@ -40,11 +40,13 @@ const CancelActivityModal = ({
       await activitiesAPI.cancelHostActivity(hostId, activity.uuid);
       renderFlash("success", "Activity successfully canceled.");
       onSuccessCancel(activity);
+      onCancelActivity(activity);
+      onExit();
     } catch (err) {
       renderFlash("error", getErrorMessage(err));
+    } finally {
+      setIsCanceling(false);
     }
-    onCancelActivity(activity);
-    onExit();
   };
 
   return (

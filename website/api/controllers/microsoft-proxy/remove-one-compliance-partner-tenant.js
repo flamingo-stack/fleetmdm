@@ -60,7 +60,8 @@ module.exports = {
           PartnerRemediationUrl: `https://fleetdm.com/microsoft-compliance-partner/remediate`,
         }
       }).intercept((err)=>{
-        return new Error({error: `an error occurred when deprovisioning a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`});
+        sails.log.warn(`an error occurred when deprovisioning a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`);
+        return new Error(`an error occurred when deprovisioning a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`);
       });
       // Log responses from Micrsoft APIs for Fleet's integration
       if(informationAboutThisTenant.fleetInstanceUrl === 'https://dogfood.fleetdm.com') {
@@ -78,3 +79,4 @@ module.exports = {
 
 
 };
+

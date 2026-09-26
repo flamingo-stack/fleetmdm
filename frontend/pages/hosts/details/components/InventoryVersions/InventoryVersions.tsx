@@ -114,7 +114,7 @@ const InventoryVersion = ({
           );
 
           return (
-            <div className={`${baseClass}__sig-info`}>
+            <div key={path} className={`${baseClass}__sig-info`}>
               <DataSet orientation="horizontal" title="Path" value={path} />
               {sigInfo?.hash_sha256 && (
                 <DataSet
