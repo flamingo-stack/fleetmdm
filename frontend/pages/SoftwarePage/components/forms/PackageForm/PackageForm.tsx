@@ -109,9 +109,9 @@ const renderFileTypeMessage = () => {
 };
 
 /** Returns the version value to use as the dropdown's default:
-/ 1) If a previously selected version is still present in the options, reuse it.
-/ 2) Otherwise, fall back to the first option, which is assumed to be the latest.
-/ 3) Safe fallback if no options exist which should never happen */
+ * 1) If a previously selected version is still present in the options, reuse it.
+ * 2) Otherwise, fall back to the first option, which is assumed to be the latest.
+ * 3) Safe fallback if no options exist which should never happen */
 const getDefaultVersion = (
   versionOptions: CustomOptionType[],
   selectedVersion?: string

@@ -102,8 +102,9 @@ func (r *JSONKeyRewriteReader) UsedDeprecatedKeys() []string {
 	return keys
 }
 
-// Close closes the reader end of the pipe to unblock the transform goroutine
-// if the consumer stops reading early.
+// Close is a no-op. Rewriting happens synchronously into an in-memory buffer
+// during NewJSONKeyRewriteReader, so there is no pipe or background goroutine
+// to clean up. This method exists solely to satisfy io.ReadCloser.
 func (r *JSONKeyRewriteReader) Close() error {
 	return nil
 }
