@@ -30,6 +30,9 @@ type checkAssignedEnrollmentProfileFunc func(url string) error
 // It ensures only one renewal command is executed at any given time, and that
 // it doesn't re-execute the command until a certain amount of time has passed.
 type renewEnrollmentProfileConfigReceiver struct {
+	// fetcher is the wrapped OrbitConfigFetcher.
+	fetcher OrbitConfigFetcher
+
 	// Frequency is the minimum amount of time that must pass between two executions of the profile renewal command.
 	Frequency time.Duration
 
@@ -52,7 +55,7 @@ type renewEnrollmentProfileConfigReceiver struct {
 }
 
 func ApplyRenewEnrollmentProfileConfigFetcherMiddleware(fetcher OrbitConfigFetcher, frequency time.Duration, fleetURL string) fleet.OrbitConfigReceiver {
-	return &renewEnrollmentProfileConfigReceiver{Frequency: frequency, fleetURL: fleetURL}
+	return &renewEnrollmentProfileConfigReceiver{fetcher: fetcher, Frequency: frequency, fleetURL: fleetURL}
 }
 
 func (h *renewEnrollmentProfileConfigReceiver) Run(config *fleet.OrbitConfig) error {
