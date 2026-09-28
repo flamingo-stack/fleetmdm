@@ -13,6 +13,8 @@ const formatServerErrors = (errors: IFleetApiError[]) => {
 
     if (result[name]) {
       result[name] = join([result[name], reason], ", ");
+    } else if (result.base) {
+      result.base = join([result.base, reason], ", ");
     } else {
       result.base = reason; // Ensure a base error is always returned
     }
