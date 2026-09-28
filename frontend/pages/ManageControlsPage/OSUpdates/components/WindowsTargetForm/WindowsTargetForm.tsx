@@ -156,10 +156,17 @@ const WindowsTargetForm = ({
   ) => {
     const newFormData = { ...formData, [field]: val };
     setFormData(newFormData);
-    // On change, only update/clear existing errors (optimistic UX)
+    // On change, update/clear existing errors and surface any newly
+    // introduced errors (optimistic UX, but don't hide new problems)
     const newErrors = validateForm(newFormData);
     const updatedErrors: IWindowsTargetFormErrors = {};
     Object.keys(formErrors).forEach((key) => {
+      const k = key as keyof IWindowsTargetFormErrors;
+      if (newErrors[k]) {
+        updatedErrors[k] = newErrors[k];
+      }
+    });
+    Object.keys(newErrors).forEach((key) => {
       const k = key as keyof IWindowsTargetFormErrors;
       if (newErrors[k]) {
         updatedErrors[k] = newErrors[k];
