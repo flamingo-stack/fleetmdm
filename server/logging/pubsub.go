@@ -53,10 +53,10 @@ func estimateAttributeSize(attributes map[string]string) int {
 }
 
 func (w *pubSubLogWriter) Write(ctx context.Context, logs []json.RawMessage) error {
-	results := make([]*pubsub.PublishResult, len(logs))
+	results := make([]*pubsub.PublishResult, 0, len(logs))
 
 	// Add all of the messages to the global pubsub queue
-	for i, log := range logs {
+	for _, log := range logs {
 		data, err := log.MarshalJSON()
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "marshal message into JSON")
@@ -90,7 +90,7 @@ func (w *pubSubLogWriter) Write(ctx context.Context, logs []json.RawMessage) err
 			Attributes: attributes,
 		}
 
-		results[i] = w.topic.Publish(ctx, message)
+		results = append(results, w.topic.Publish(ctx, message))
 	}
 
 	// Wait for each message to be pushed to the server
