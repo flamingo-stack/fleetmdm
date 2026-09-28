@@ -22,8 +22,14 @@ CREATE TABLE IF NOT EXISTS batch_script_executions (
   PRIMARY KEY (id),
   UNIQUE KEY idx_batch_script_executions_execution_id (execution_id),
   CONSTRAINT batch_script_executions_script_id FOREIGN KEY (script_id) REFERENCES scripts (id) ON DELETE CASCADE
-);
+)
+`
 
+	if _, err := tx.Exec(stmt); err != nil {
+		return fmt.Errorf("creating batch_script_executions table: %w", err)
+	}
+
+	stmt = `
 CREATE TABLE IF NOT EXISTS batch_script_execution_host_results (
   id int unsigned NOT NULL AUTO_INCREMENT,
   batch_execution_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -39,7 +45,7 @@ CREATE TABLE IF NOT EXISTS batch_script_execution_host_results (
 `
 
 	if _, err := tx.Exec(stmt); err != nil {
-		return fmt.Errorf("creating batch script tables: %w", err)
+		return fmt.Errorf("creating batch_script_execution_host_results table: %w", err)
 	}
 
 	return nil
