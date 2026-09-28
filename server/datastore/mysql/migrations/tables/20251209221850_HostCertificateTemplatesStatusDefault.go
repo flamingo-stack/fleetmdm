@@ -9,6 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20251209221850, Down_20251209221850)
 }
 
+// >>> OPENFRAME(host-certificate-templates-status-default): modifies shared host_certificate_templates table columns (fleet_challenge, status) — openframe/docs/host-certificate-templates.md
 func Up_20251209221850(tx *sql.Tx) error {
 	// Idempotent migration.
 	// Make fleet_challenge nullable (it will be NULL for pending records,
@@ -34,6 +35,8 @@ func Up_20251209221850(tx *sql.Tx) error {
 
 	return nil
 }
+
+// <<< OPENFRAME(host-certificate-templates-status-default)
 
 func Down_20251209221850(tx *sql.Tx) error {
 	return nil
