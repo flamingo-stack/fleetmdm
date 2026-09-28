@@ -101,37 +101,46 @@ func (c *Client) pollForResult(id string) (*fleet.HostScriptResult, error) {
 	verb, path := "GET", fmt.Sprintf("/api/latest/fleet/scripts/results/%s", id)
 	var result *fleet.HostScriptResult
 	for {
-		res, err := c.AuthenticatedDo(verb, path, "", nil)
-		if err != nil {
-			return nil, fmt.Errorf("polling for result: %w", err)
-		}
-		defer res.Body.Close()
-
-		if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNotFound {
-
-			msg, err := extractServerErrMsg(verb, path, res)
+		result, done, err := func() (*fleet.HostScriptResult, bool, error) {
+			res, err := c.AuthenticatedDo(verb, path, "", nil)
 			if err != nil {
-				return nil, fmt.Errorf("extracting error message: %w", err)
+				return nil, false, fmt.Errorf("polling for result: %w", err)
 			}
-			if msg == "" {
-				msg = fmt.Sprintf("decoding %d response is missing expected message.", res.StatusCode)
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNotFound {
+
+				msg, err := extractServerErrMsg(verb, path, res)
+				if err != nil {
+					return nil, false, fmt.Errorf("extracting error message: %w", err)
+				}
+				if msg == "" {
+					msg = fmt.Sprintf("decoding %d response is missing expected message.", res.StatusCode)
+				}
+				return nil, false, errors.New(msg)
 			}
-			return nil, errors.New(msg)
-		}
 
-		if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-			return nil, fmt.Errorf("decoding response: %w", err)
-		}
+			var result *fleet.HostScriptResult
+			if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+				return nil, false, fmt.Errorf("decoding response: %w", err)
+			}
 
-		if result.ExitCode != nil {
-			break
+			if result.ExitCode != nil {
+				return result, true, nil
+			}
+
+			return result, false, nil
+		}()
+		if err != nil {
+			return nil, err
+		}
+		if done {
+			return result, nil
 		}
 
 		time.Sleep(pollWaitTime)
 
 	}
-
-	return result, nil
 }
 
 // ApplyNoTeamScripts sends the list of scripts to be applied for the hosts in
