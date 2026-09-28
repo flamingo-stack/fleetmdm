@@ -453,6 +453,12 @@ func (oc *OrbitClient) GetConfig() (*fleet.OrbitConfig, error) {
 	return oc.configCache.config, oc.configCache.err
 }
 
+// orbitAuthenticatedPostPut is a shared helper for authenticated requests that submit a request payload
+// and expect only a status/error result (no meaningful response body to return to the caller).
+func (oc *OrbitClient) orbitAuthenticatedPostPut(verb, path string, params, resp any) error {
+	return oc.authenticatedRequest(verb, path, params, resp)
+}
+
 // SetOrUpdateDeviceToken sends a request to the server to set or update the device token.
 func (oc *OrbitClient) SetOrUpdateDeviceToken(deviceAuthToken string) error {
 	verb, path := "POST", "/api/fleet/orbit/device_token"
@@ -460,10 +466,7 @@ func (oc *OrbitClient) SetOrUpdateDeviceToken(deviceAuthToken string) error {
 		DeviceAuthToken: deviceAuthToken,
 	}
 	var resp fleet.SetOrUpdateDeviceTokenResponse
-	if err := oc.authenticatedRequest(verb, path, &params, &resp); err != nil {
-		return err
-	}
-	return nil
+	return oc.orbitAuthenticatedPostPut(verb, path, &params, &resp)
 }
 
 // SetOrUpdateDeviceMappingEmail sends a request to the server to set or update the device mapping email.
@@ -473,10 +476,7 @@ func (oc *OrbitClient) SetOrUpdateDeviceMappingEmail(email string) error {
 		Email: email,
 	}
 	var resp fleet.OrbitPutDeviceMappingResponse
-	if err := oc.authenticatedRequest(verb, path, &params, &resp); err != nil {
-		return err
-	}
-	return nil
+	return oc.orbitAuthenticatedPostPut(verb, path, &params, &resp)
 }
 
 // GetHostScript returns the script fetched from Fleet server to run on this host.
@@ -955,3 +955,4 @@ func (oc *OrbitClient) InitiateSetupExperience() (fleet.SetupExperienceInitResul
 	}
 	return resp.Result, nil
 }
+
