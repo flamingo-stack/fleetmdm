@@ -1,3 +1,4 @@
+// >>> OPENFRAME(json-key-duplicator): fork-specific `renameto` JSON key duplication/aliasing feature not present in upstream fleetdm/fleet — openframe/docs/json-key-duplicator.md
 package endpointer
 
 import (
@@ -102,7 +103,13 @@ func duplicateJSONKeys(data []byte, rules []AliasRule, compact bool) []byte {
 			if err == io.EOF {
 				break
 			}
-			// On any error, return the original data unchanged.
+			// On any decode error, abandon duplication and return the
+			// original data unchanged. This is a best-effort compatibility
+			// shim: we prefer serving the original, valid response over
+			// failing the request, but we surface the failure via panic
+			// recovery-free logging is not available at this layer, so the
+			// caller-visible contract remains "duplication may be skipped".
+			// See OPENFRAME sentinel above for scope of this fork feature.
 			return data
 		}
 
@@ -236,3 +243,5 @@ func startsWithContainer(v []byte) bool {
 	}
 	return false
 }
+
+// <<< OPENFRAME(json-key-duplicator)
