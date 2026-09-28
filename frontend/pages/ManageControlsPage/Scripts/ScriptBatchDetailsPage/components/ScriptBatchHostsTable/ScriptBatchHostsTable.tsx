@@ -2,6 +2,7 @@ import React, { useCallback, useEffect } from "react";
 import { useQuery } from "react-query";
 import { InjectedRouter } from "react-router";
 import { AxiosError } from "axios";
+import { Row } from "react-table";
 
 import PATHS from "router/paths";
 
@@ -13,6 +14,7 @@ import scriptsAPI, {
 import { OrderDirection } from "services/entities/common";
 
 import {
+  IScriptBatchHostResult,
   SCRIPT_BATCH_HOST_EXECUTED_STATUSES,
   ScriptBatchHostStatus,
 } from "interfaces/script";
@@ -78,7 +80,7 @@ const ScriptBatchHostsTable = ({
   );
 
   const handleRowClick = useCallback(
-    (row: any) => {
+    (row: Row<IScriptBatchHostResult>) => {
       if (SCRIPT_BATCH_HOST_EXECUTED_STATUSES.includes(selectedHostStatus)) {
         setHostScriptExecutionIdForModal(row.original.script_execution_id);
       } else {
