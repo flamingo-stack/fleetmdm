@@ -47,7 +47,8 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { name: root, path: "." }
+          - { name: backend, path: ".", paths: "**/{go.mod,go.sum,Dockerfile*}", skip_files: "**/package.json,**/package-lock.json,**/yarn.lock" }
+          - { name: frontend, path: ".", paths: "**/{package.json,package-lock.json,yarn.lock}", skip_files: "**/go.mod,**/go.sum,**/Dockerfile*" }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,6 +61,8 @@ jobs:
         with:
           scan: code
           path: ${{ matrix.target.path }}
+          paths: ${{ matrix.target.paths || '' }}
+          skip-files: ${{ matrix.target.skip_files || '' }}
           image-name: ${{ matrix.target.name }}
 
   test_client:
