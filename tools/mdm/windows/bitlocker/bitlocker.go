@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -109,11 +110,21 @@ type Volume struct {
 
 // Close frees all resources associated with a volume.
 func (v *Volume) Close() {
-	v.handle.Release()
-	v.wmiIntf.Release()
-	v.wmiSvc.Release()
+	if v.handle != nil {
+		v.handle.Release()
+	}
+	if v.wmiIntf != nil {
+		v.wmiIntf.Release()
+	}
+	if v.wmiSvc != nil {
+		v.wmiSvc.Release()
+	}
 	comshim.Done()
 }
+
+// driveLetterPattern validates that a drive letter matches the expected
+// "X:" format before it is used to build a WQL query.
+var driveLetterPattern = regexp.MustCompile(`^[a-zA-Z]:$`)
 
 // Connect connects to an encryptable volume in order to manage it.
 // You must call Close() to release the volume when finished.
@@ -122,6 +133,11 @@ func (v *Volume) Close() {
 func Connect(driveLetter string) (Volume, error) {
 	comshim.Add(1)
 	v := Volume{letter: driveLetter}
+
+	if !driveLetterPattern.MatchString(driveLetter) {
+		comshim.Done()
+		return v, fmt.Errorf("invalid drive letter: %q", driveLetter)
+	}
 
 	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
 	if err != nil {
