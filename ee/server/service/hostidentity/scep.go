@@ -82,7 +82,9 @@ func RegisterSCEP(
 	))
 
 	signer = challengeMiddleware(ds, signer)
+	// >>> OPENFRAME(host-identity-renewal): certificate renewal with proof-of-possession — openframe/docs/host-identity-scep-renewal.md
 	signer = renewalMiddleware(ds, logger, signer)
+	// <<< OPENFRAME(host-identity-renewal)
 	scepService := NewSCEPService(
 		ds,
 		signer,
@@ -107,12 +109,14 @@ func RegisterSCEP(
 // challengeMiddleware checks that ChallengePassword matches an enrollment secret
 func challengeMiddleware(ds fleet.Datastore, next scepserver.CSRSignerContext) scepserver.CSRSignerContextFunc {
 	return func(ctx context.Context, m *scep.CSRReqMessage) (*x509.Certificate, error) {
+		// >>> OPENFRAME(host-identity-renewal): allow renewal requests to bypass challenge secret verification — openframe/docs/host-identity-scep-renewal.md
 		// Check if this is a renewal request by looking for the custom Fleet extension
 		if hasRenewalExtension(m.CSR) {
 			// Skip challenge verification for renewal requests
 			// The renewal middleware will handle authentication
 			return next.SignCSRContext(ctx, m)
 		}
+		// <<< OPENFRAME(host-identity-renewal)
 
 		if m.ChallengePassword == "" {
 			return nil, errors.New("missing challenge")
@@ -127,6 +131,8 @@ func challengeMiddleware(ds fleet.Datastore, next scepserver.CSRSignerContext) s
 		return next.SignCSRContext(ctx, m)
 	}
 }
+
+// >>> OPENFRAME(host-identity-renewal): certificate renewal helpers and proof-of-possession logic — openframe/docs/host-identity-scep-renewal.md
 
 // hasRenewalExtension checks if the CSR contains the renewal extension
 func hasRenewalExtension(csr *x509.CertificateRequest) bool {
@@ -214,6 +220,8 @@ func renewalMiddleware(ds fleet.Datastore, logger *slog.Logger, next scepserver.
 		return newCert, nil
 	}
 }
+
+// <<< OPENFRAME(host-identity-renewal)
 
 var _ scepserver.Service = (*service)(nil)
 
