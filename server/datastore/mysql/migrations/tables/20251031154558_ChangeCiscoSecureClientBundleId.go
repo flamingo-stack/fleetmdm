@@ -22,7 +22,7 @@ func Up_20251031154558(tx *sql.Tx) error {
 		WHERE bundle_identifier IN ('com.cisco.pkg.anyconnect.vpn', 'com.cisco.secureclient.gui')
 	`)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to query software_titles for cisco bundle ids: %w", err)
 	}
 	defer titleRows.Close()
 
@@ -30,12 +30,12 @@ func Up_20251031154558(tx *sql.Tx) error {
 	for titleRows.Next() {
 		var id, bundleIdentifier string
 		if err := titleRows.Scan(&id, &bundleIdentifier); err != nil {
-			return err
+			return fmt.Errorf("failed to scan software_titles row for cisco bundle ids: %w", err)
 		}
 		bundleIdToTitleId[bundleIdentifier] = id
 	}
 	if err := titleRows.Err(); err != nil {
-		return err
+		return fmt.Errorf("failed to iterate software_titles rows for cisco bundle ids: %w", err)
 	}
 
 	if len(bundleIdToTitleId) == 0 {
@@ -51,12 +51,12 @@ func Up_20251031154558(tx *sql.Tx) error {
 			('Cisco Secure Client', 'apps', 'com.cisco.secureclient.gui')
 		`)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to insert software_titles row for com.cisco.secureclient.gui: %w", err)
 		}
 
 		lastInsertId, err := res.LastInsertId()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get last insert id for com.cisco.secureclient.gui software_titles row: %w", err)
 		}
 		bundleIdToTitleId["com.cisco.secureclient.gui"] = fmt.Sprintf("%d", lastInsertId)
 	}
@@ -69,7 +69,7 @@ func Up_20251031154558(tx *sql.Tx) error {
 		AND extension = 'pkg'
 	`, bundleIdToTitleId["com.cisco.pkg.anyconnect.vpn"])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to query software_installers for incorrect cisco title id: %w", err)
 	}
 	defer installerRows.Close()
 
@@ -77,12 +77,12 @@ func Up_20251031154558(tx *sql.Tx) error {
 	for installerRows.Next() {
 		var id string
 		if err := installerRows.Scan(&id); err != nil {
-			return err
+			return fmt.Errorf("failed to scan software_installers row for incorrect cisco title id: %w", err)
 		}
 		softwareInstallerIds = append(softwareInstallerIds, id)
 	}
 	if err := installerRows.Err(); err != nil {
-		return err
+		return fmt.Errorf("failed to iterate software_installers rows for incorrect cisco title id: %w", err)
 	}
 
 	// Update software installers to point to correct title
@@ -92,7 +92,7 @@ func Up_20251031154558(tx *sql.Tx) error {
 			SET title_id = ?
 			WHERE id = ?
 		`, bundleIdToTitleId["com.cisco.secureclient.gui"], softwareInstallerId); err != nil {
-			return err
+			return fmt.Errorf("failed to update software_installers title_id for installer %s: %w", softwareInstallerId, err)
 		}
 	}
 
@@ -102,7 +102,7 @@ func Up_20251031154558(tx *sql.Tx) error {
 			DELETE FROM software_titles
 			WHERE id = ?
 		`, incorrectTitleId); err != nil {
-			return err
+			return fmt.Errorf("failed to delete incorrect software_titles row %s: %w", incorrectTitleId, err)
 		}
 	}
 	return nil
