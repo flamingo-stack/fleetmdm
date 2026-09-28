@@ -24,7 +24,7 @@ func getLatestBulletin(vulnPath string) (*BulletinFile, error) {
 
 	files, err := fs.WinOfficeBulletin()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing winoffice bulletin files: %w", err)
 	}
 
 	if len(files) == 0 {
@@ -36,12 +36,12 @@ func getLatestBulletin(vulnPath string) (*BulletinFile, error) {
 
 	payload, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading winoffice bulletin file %q: %w", filePath, err)
 	}
 
 	var bulletin BulletinFile
 	if err := json.Unmarshal(payload, &bulletin); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshaling winoffice bulletin file %q: %w", filePath, err)
 	}
 
 	return &bulletin, nil
@@ -168,7 +168,7 @@ func getStoredVulnerabilities(
 ) ([]fleet.SoftwareVulnerability, error) {
 	storedSoftware, err := ds.SoftwareByID(ctx, softwareID, nil, false, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting software by id %d: %w", softwareID, err)
 	}
 
 	var result []fleet.SoftwareVulnerability
@@ -196,7 +196,7 @@ func updateVulnsInDB(
 	}
 
 	if err := ds.DeleteSoftwareVulnerabilities(ctx, toDelete); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("deleting winoffice software vulnerabilities: %w", err)
 	}
 
 	allVulns := make([]fleet.SoftwareVulnerability, 0, len(toInsertSet))
@@ -204,7 +204,11 @@ func updateVulnsInDB(
 		allVulns = append(allVulns, v)
 	}
 
-	return ds.InsertSoftwareVulnerabilities(ctx, allVulns, fleet.WinOfficeSource)
+	inserted, err := ds.InsertSoftwareVulnerabilities(ctx, allVulns, fleet.WinOfficeSource)
+	if err != nil {
+		return nil, fmt.Errorf("inserting winoffice software vulnerabilities: %w", err)
+	}
+	return inserted, nil
 }
 
 // Analyze uses the most recent Windows Office bulletin in 'vulnPath' for detecting
@@ -217,7 +221,7 @@ func Analyze(
 ) ([]fleet.SoftwareVulnerability, error) {
 	bulletin, err := getLatestBulletin(vulnPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting latest winoffice bulletin: %w", err)
 	}
 
 	if bulletin == nil {
@@ -247,7 +251,7 @@ func Analyze(
 	}
 	iter, err := ds.AllSoftwareIterator(ctx, queryParams)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting all software iterator: %w", err)
 	}
 	defer iter.Close()
 
@@ -261,12 +265,12 @@ func Analyze(
 		detected := collectVulnerabilities(software, bulletin)
 		existing, err := getStoredVulnerabilities(ctx, ds, software.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("getting stored vulnerabilities for software id %d: %w", software.ID, err)
 		}
 
 		inserted, err := updateVulnsInDB(ctx, ds, detected, existing)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("updating vulnerabilities in db for software id %d: %w", software.ID, err)
 		}
 
 		if collectVulns {
