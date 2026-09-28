@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
 )
 
@@ -40,7 +41,10 @@ VALUES
 		crt.NotAfter,
 		certPEM,
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "insert wstep certificate")
+	}
+	return nil
 }
 
 // WSTEPNewSerial allocates and returns a new (increasing) serial number.
@@ -67,3 +71,4 @@ UPDATE sha256 = new.sha256;`,
 	)
 	return err
 }
+
