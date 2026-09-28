@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	"github.com/fleetdm/fleet/v4/server/aws_common"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/go-sql-driver/mysql"
 	// Blank import registers the "rdsmysql" TLS config with pre-loaded AWS RDS CA certificates
 	_ "github.com/shogo82148/rdsmysql/v2"
@@ -28,10 +29,12 @@ type iamAuthTokenGenerator struct {
 
 // newIAMAuthTokenGenerator creates a new IAM authentication token generator
 func newIAMAuthTokenGenerator(dbEndpoint, dbUsername, dbPort, region, assumeRoleArn, stsExternalID string) (*iamAuthTokenGenerator, error) {
+	ctx := context.Background()
+
 	// Load AWS configuration
-	cfg, err := aws_common.LoadAWSConfig(context.Background(), region, assumeRoleArn, stsExternalID)
+	cfg, err := aws_common.LoadAWSConfig(ctx, region, assumeRoleArn, stsExternalID)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "load AWS config for IAM auth token generator")
 	}
 
 	// Format endpoint with port if not already included
@@ -63,7 +66,7 @@ func (g *iamAuthTokenGenerator) getAuthToken(ctx context.Context) (string, error
 func (g *iamAuthTokenGenerator) newToken(ctx context.Context) (string, error) {
 	authToken, err := auth.BuildAuthToken(ctx, g.dbEndpoint, g.region, g.dbUsername, g.credentials)
 	if err != nil {
-		return "", fmt.Errorf("failed to build auth token: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "build auth token")
 	}
 
 	return authToken, nil
@@ -80,19 +83,19 @@ type Connector struct {
 func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	token, err := c.tokenGen.getAuthToken(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate IAM auth token: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "generate IAM auth token")
 	}
 
 	cfg, err := mysql.ParseDSN(c.baseDSN)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse DSN: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "parse DSN")
 	}
 
 	cfg.Passwd = token
 
 	connector, err := mysql.NewConnector(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create connector: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "create connector")
 	}
 
 	return connector.Connect(ctx)
@@ -116,7 +119,7 @@ func NewConnectorFactory(conf *config.MysqlConfig, host, port string) (func(dsn 
 		conf.StsExternalID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create IAM token generator: %w", err)
+		return nil, ctxerr.Wrap(context.Background(), err, "create IAM token generator")
 	}
 
 	return func(dsn string, logger *slog.Logger) (driver.Connector, error) {
