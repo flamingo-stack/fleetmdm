@@ -141,7 +141,7 @@ func runWithOutput(path string, opts eopts) (output []byte, exitCode int, err er
 func getCurrentUserSessionId() (windows.Handle, error) {
 	sessionList, err := wtsEnumerateSessions()
 	if err != nil {
-		return 0xFFFFFFFF, fmt.Errorf("get current user session token: %s", err)
+		return 0xFFFFFFFF, fmt.Errorf("get current user session token: %w", err)
 	}
 
 	for i := range sessionList {
@@ -153,7 +153,7 @@ func getCurrentUserSessionId() (windows.Handle, error) {
 	// TODO(lucas): Check which sessions is assigned to current log in user.
 	sessionId, _, err := procWTSGetActiveConsoleSessionId.Call()
 	if sessionId == 0xFFFFFFFF {
-		return 0xFFFFFFFF, fmt.Errorf("get current user session token: call native WTSGetActiveConsoleSessionId: %s", err)
+		return 0xFFFFFFFF, fmt.Errorf("get current user session token: call native WTSGetActiveConsoleSessionId: %w", err)
 	}
 	return windows.Handle(sessionId), nil
 }
@@ -169,7 +169,7 @@ func wtsEnumerateSessions() ([]*WTS_SESSION_INFO, error) {
 	)
 
 	if returnCode, _, err := procWTSEnumerateSessionsW.Call(WTS_CURRENT_SERVER_HANDLE, 0, 1, uintptr(unsafe.Pointer(&sessionInformation)), uintptr(unsafe.Pointer(&sessionCount))); returnCode == 0 {
-		return nil, fmt.Errorf("call native WTSEnumerateSessionsW: %s", err)
+		return nil, fmt.Errorf("call native WTSEnumerateSessionsW: %w", err)
 	}
 
 	structSize := unsafe.Sizeof(WTS_SESSION_INFO{})
@@ -192,15 +192,15 @@ func duplicateUserTokenFromSessionID(sessionId windows.Handle) (windows.Token, e
 	)
 
 	if returnCode, _, err := procWTSQueryUserToken.Call(uintptr(sessionId), uintptr(unsafe.Pointer(&impersonationToken))); returnCode == 0 {
-		return 0xFFFFFFFF, fmt.Errorf("call native WTSQueryUserToken: %s", err)
+		return 0xFFFFFFFF, fmt.Errorf("call native WTSQueryUserToken: %w", err)
 	}
 
 	if returnCode, _, err := procDuplicateTokenEx.Call(uintptr(impersonationToken), 0, 0, uintptr(SecurityImpersonation), uintptr(TokenPrimary), uintptr(unsafe.Pointer(&userToken))); returnCode == 0 {
-		return 0xFFFFFFFF, fmt.Errorf("call native DuplicateTokenEx: %s", err)
+		return 0xFFFFFFFF, fmt.Errorf("call native DuplicateTokenEx: %w", err)
 	}
 
 	if err := windows.CloseHandle(impersonationToken); err != nil {
-		return 0xFFFFFFFF, fmt.Errorf("close windows handle used for token duplication: %s", err)
+		return 0xFFFFFFFF, fmt.Errorf("close windows handle used for token duplication: %w", err)
 	}
 
 	return userToken, nil
@@ -226,11 +226,11 @@ func startProcessAsCurrentUser(appPath, cmdLine, workDir string) error {
 	}
 
 	if userToken, err = duplicateUserTokenFromSessionID(sessionId); err != nil {
-		return fmt.Errorf("get duplicate user token for current user session: %s", err)
+		return fmt.Errorf("get duplicate user token for current user session: %w", err)
 	}
 
 	if returnCode, _, err := procCreateEnvironmentBlock.Call(uintptr(unsafe.Pointer(&envInfo)), uintptr(userToken), 1); returnCode == 0 {
-		return fmt.Errorf("create environment details for process: %s", err)
+		return fmt.Errorf("create environment details for process: %w", err)
 	}
 
 	// TODO(lucas): Test out creation flags and startup info values.
@@ -249,7 +249,7 @@ func startProcessAsCurrentUser(appPath, cmdLine, workDir string) error {
 		uintptr(userToken), uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(appPath))), commandLine, 0, 0, 0,
 		uintptr(creationFlags), uintptr(envInfo), workingDir, uintptr(unsafe.Pointer(&startupInfo)), uintptr(unsafe.Pointer(&processInfo)),
 	); returnCode == 0 {
-		return fmt.Errorf("create process as user: %s", err)
+		return fmt.Errorf("create process as user: %w", err)
 	}
 
 	return nil
