@@ -182,6 +182,7 @@ const QueryDetailsPage = ({
   ) {
     router.push(
       getPathWithQueryParams(location.pathname, {
+        ...location.query,
         fleet_id: storedQuery?.team_id?.toString(),
       })
     );
