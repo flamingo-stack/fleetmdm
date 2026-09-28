@@ -1,3 +1,7 @@
+// OPENFRAME: fork-only tooling. This file does not exist upstream in
+// fleetdm/fleet at this path and should be excluded from/skipped during
+// upstream syncs of tools/mdm/apple/*.
+//
 // This tool allows you to simulate Apple DEP enrollment on a virtual machine
 // for the purposes of testing the macOS setup experience feature in Fleet.
 // It connects to a MySQL database, inserts necessary records to simulate
@@ -6,6 +10,7 @@
 // Usage:
 //
 //	go run main.go --server-private-key <private_key> --host-uuid <host_uuid>
+// END OPENFRAME
 package main
 
 import (
