@@ -1,5 +1,6 @@
 package com.fleetdm.agent
 
+import android.os.Build
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -15,6 +16,7 @@ object KeystoreManager {
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val GCM_TAG_LENGTH = 128
     private const val IV_SEPARATOR = "]"
+    private val AAD = KEY_ALIAS.toByteArray(Charsets.UTF_8)
 
     // Test mode uses in-memory key instead of Android Keystore
     private var testMode = false
@@ -23,8 +25,14 @@ object KeystoreManager {
     /**
      * Enables test mode which uses an in-memory key instead of Android Keystore.
      * This allows unit tests to run without Android's hardware-backed keystore.
+     *
+     * Only permitted in debug builds; calling this in a release build is a no-op
+     * so production encryption cannot be silently downgraded.
      */
     fun enableTestMode() {
+        if (!BuildConfig.DEBUG) {
+            return
+        }
         testMode = true
         testKey = KeyGenerator.getInstance("AES").apply {
             init(256)
@@ -32,12 +40,15 @@ object KeystoreManager {
     }
 
     fun disableTestMode() {
+        if (!BuildConfig.DEBUG) {
+            return
+        }
         testMode = false
         testKey = null
     }
 
     private fun getOrCreateKey(): SecretKey {
-        if (testMode) {
+        if (BuildConfig.DEBUG && testMode) {
             return testKey ?: error("Test mode enabled but no test key available")
         }
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
@@ -50,7 +61,7 @@ object KeystoreManager {
                 ANDROID_KEYSTORE,
             )
 
-            val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+            val keyGenParameterSpecBuilder = KeyGenParameterSpec.Builder(
                 KEY_ALIAS,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
             )
@@ -58,9 +69,12 @@ object KeystoreManager {
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setUserAuthenticationRequired(false)
                 .setRandomizedEncryptionRequired(true)
-                .build()
 
-            keyGenerator.init(keyGenParameterSpec)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                keyGenParameterSpecBuilder.setInvalidatedByBiometricEnrollment(true)
+            }
+
+            keyGenerator.init(keyGenParameterSpecBuilder.build())
             return keyGenerator.generateKey()
         }
 
@@ -71,6 +85,7 @@ object KeystoreManager {
     fun encrypt(plaintext: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        cipher.updateAAD(AAD)
 
         val iv = cipher.iv
         val encryptedBytes = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
@@ -91,6 +106,7 @@ object KeystoreManager {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), spec)
+        cipher.updateAAD(AAD)
 
         val decryptedBytes = cipher.doFinal(encryptedBytes)
         return String(decryptedBytes, Charsets.UTF_8)
