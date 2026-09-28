@@ -1,4 +1,4 @@
-// OPENFRAME(osquery-schema-search): searchable canonical osquery schema for OpenFrame's AI query generation.
+// >>> OPENFRAME(osquery-schema-search): searchable canonical osquery schema for OpenFrame's AI query generation. — openframe/docs/osquery-schema-search.md
 package service
 
 import (
@@ -53,3 +53,5 @@ func searchOsquerySchemaEndpoint(ctx context.Context, request interface{}, svc f
 		Tables:   tables,
 	}, nil
 }
+
+// <<< OPENFRAME(osquery-schema-search)
