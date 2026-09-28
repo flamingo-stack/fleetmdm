@@ -17,7 +17,7 @@ func Up_20251209221730(tx *sql.Tx) error {
 	// Idempotent migration.
 	// Update global config
 	if err := updateAppConfigJSON(tx, func(config *fleet.AppConfig) error {
-		if config != nil {
+		if config != nil && !config.MDM.MacOSUpdates.UpdateNewHosts.Valid {
 			config.MDM.MacOSUpdates.UpdateNewHosts = optjson.SetBool(config.MDM.MacOSUpdates.Configured())
 		}
 		return nil
@@ -56,7 +56,9 @@ func Up_20251209221730(tx *sql.Tx) error {
 		if err := json.Unmarshal(t.raw, &config); err != nil {
 			return fmt.Errorf("unmarshalling team config: %w", err)
 		}
-		config.MDM.MacOSUpdates.UpdateNewHosts = optjson.SetBool(config.MDM.MacOSUpdates.Configured())
+		if !config.MDM.MacOSUpdates.UpdateNewHosts.Valid {
+			config.MDM.MacOSUpdates.UpdateNewHosts = optjson.SetBool(config.MDM.MacOSUpdates.Configured())
+		}
 
 		b, err := json.Marshal(config)
 		if err != nil {
