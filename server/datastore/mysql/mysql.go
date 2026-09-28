@@ -24,7 +24,9 @@ import (
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxdb"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/datastore/mysql/migrations/data"
-	openframemigrations "github.com/fleetdm/fleet/v4/server/datastore/mysql/migrations/openframe" // OPENFRAME(host-assignments): separate migration pipeline — openframe/docs/migrations.md
+	// >>> OPENFRAME(host-assignments): separate migration pipeline — openframe/docs/migrations.md
+	openframemigrations "github.com/fleetdm/fleet/v4/server/datastore/mysql/migrations/openframe"
+	// <<< OPENFRAME(host-assignments)
 	"github.com/fleetdm/fleet/v4/server/datastore/mysql/migrations/tables"
 	"github.com/fleetdm/fleet/v4/server/datastore/mysql/rdsauth"
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -1372,3 +1374,4 @@ func batchProcessDB[T any](
 	}
 	return nil
 }
+
