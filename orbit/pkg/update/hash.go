@@ -30,7 +30,7 @@ func checkFileHash(meta *data.TargetFileMeta, localPath string) error {
 func fileHashes(meta *data.TargetFileMeta, localPath string) (metaHash []byte, localHash []byte, err error) {
 	hashFn, metaHash, err := selectHashFunction(meta)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("select hash function: %w", err)
 	}
 
 	// For .tar.gz components, try cached hash file first.
