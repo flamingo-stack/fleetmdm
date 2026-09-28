@@ -30,9 +30,9 @@ func attachFleetAPIRoutes(r *mux.Router, svc api.Service, authMiddleware endpoin
 func getChartDataEndpoint(ctx context.Context, request any, svc api.Service) (platform_http.Errorer, error) {
 	req := request.(*api_http.GetChartDataRequest)
 
-	days := req.Days
-	if days == 0 {
-		days = 7
+	days := 7
+	if req.Days != nil {
+		days = *req.Days
 	}
 
 	opts := api.RequestOpts{
