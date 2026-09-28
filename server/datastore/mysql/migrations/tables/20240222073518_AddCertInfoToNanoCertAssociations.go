@@ -94,6 +94,10 @@ func updateCertAssociationTimestamps(txx *sqlx.Tx, limit, offset int) error {
 	expiries := make(map[string]time.Time, len(scepCerts))
 	for i, rawCert := range scepCerts {
 		block, _ := pem.Decode(rawCert.CertificatePEM)
+		if block == nil {
+			log.Printf("failed to decode PEM for certificate with serial %s", rawCert.Serial)
+			continue
+		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
 			log.Printf("failed to parse certificate with serial %s", rawCert.Serial)
