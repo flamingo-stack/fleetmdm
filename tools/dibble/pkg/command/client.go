@@ -94,7 +94,7 @@ func (c *Client) do(method, path string, body io.Reader, contentType string, out
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s %s: %w", method, req.URL.Path, err)
 	}
 	defer resp.Body.Close()
 	rb, readErr := io.ReadAll(resp.Body)
@@ -119,20 +119,21 @@ func (c *Client) Get(path string, out any) error {
 	return c.do(http.MethodGet, path, nil, "", out)
 }
 
-func (c *Client) Post(path string, body any, out any) error {
+// sendJSON marshals body as JSON and issues the given HTTP method against path.
+func (c *Client) sendJSON(method, path string, body any, out any) error {
 	r, err := jsonBody(body)
 	if err != nil {
 		return err
 	}
-	return c.do(http.MethodPost, path, r, "application/json", out)
+	return c.do(method, path, r, "application/json", out)
+}
+
+func (c *Client) Post(path string, body any, out any) error {
+	return c.sendJSON(http.MethodPost, path, body, out)
 }
 
 func (c *Client) Patch(path string, body any, out any) error {
-	r, err := jsonBody(body)
-	if err != nil {
-		return err
-	}
-	return c.do(http.MethodPatch, path, r, "application/json", out)
+	return c.sendJSON(http.MethodPatch, path, body, out)
 }
 
 func (c *Client) Delete(path string) error {
