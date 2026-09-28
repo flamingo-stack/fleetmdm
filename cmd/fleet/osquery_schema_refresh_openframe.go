@@ -1,4 +1,4 @@
-// OPENFRAME(osquery-schema-search): runs configurable per-replica osquery schema refreshes.
+// >>> OPENFRAME(osquery-schema-search): runs configurable per-replica osquery schema refreshes — openframe/docs/osquery-schema-search.md
 package main
 
 import (
@@ -53,3 +53,5 @@ func runOsquerySchemaRefresh(
 		}
 	}
 }
+
+// <<< OPENFRAME(osquery-schema-search)
