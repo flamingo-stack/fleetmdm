@@ -124,7 +124,7 @@ func (n *NudgeConfigReceiver) setTargetsAndHashes() error {
 func (n *NudgeConfigReceiver) configure(nudgeCfg fleet.NudgeConfig) error {
 	jsonCfg, err := json.Marshal(nudgeCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshaling nudge config: %w", err)
 	}
 
 	cfgFile := filepath.Join(n.opt.RootDir, nudgeConfigFile)
@@ -137,7 +137,7 @@ func (n *NudgeConfigReceiver) configure(nudgeCfg fleet.NudgeConfig) error {
 		if errors.Is(err, os.ErrNotExist) {
 			return writeConfig()
 		}
-		return err
+		return fmt.Errorf("stat nudge config file %q: %w", cfgFile, err)
 	}
 
 	// ensure the config file has the right permissions, a call to
@@ -161,7 +161,7 @@ func (n *NudgeConfigReceiver) configure(nudgeCfg fleet.NudgeConfig) error {
 
 	fileBytes, err := os.ReadFile(cfgFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading nudge config file %q: %w", cfgFile, err)
 	}
 
 	if !bytes.Equal(fileBytes, jsonCfg) {
@@ -181,7 +181,7 @@ func (n *NudgeConfigReceiver) launch() error {
 		if time.Since(n.lastRun) > n.opt.Interval {
 			nudge, err := n.opt.UpdateRunner.updater.localTarget("nudge")
 			if err != nil {
-				return err
+				return fmt.Errorf("getting local target for nudge: %w", err)
 			}
 
 			// before moving forward, check that the file at the
@@ -189,7 +189,7 @@ func (n *NudgeConfigReceiver) launch() error {
 			// tampered with.
 			meta, err := n.opt.UpdateRunner.updater.Lookup("nudge")
 			if err != nil {
-				return err
+				return fmt.Errorf("looking up nudge metadata: %w", err)
 			}
 			// if we can't find the file, or the hash doesn't match
 			// make sure nudge is added as a target and the hashes
