@@ -1,5 +1,10 @@
 package service
 
+// >>> OPENFRAME(mysql-multitenancy): entire file is a fork-specific addition — HTTP-header-based osquery pre-authentication.
+// This mechanism does not exist upstream; it is layered on top of the shared
+// server/service request pipeline. The whole file is wrapped so upstream
+// syncs can locate and preserve this fork feature in one place.
+
 import (
 	"log/slog"
 	"net/http"
@@ -187,3 +192,5 @@ func osqueryCarveBlockHeaderPreAuth(svc fleet.Service, logger *slog.Logger) func
 		})
 	}
 }
+
+// <<< OPENFRAME(mysql-multitenancy)
