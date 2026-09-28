@@ -1,3 +1,6 @@
+// OPENFRAME: fork-only bounded context. This package is not part of the
+// upstream fleetdm/fleet tree and must be preserved as-is (or relocated
+// under server/service/openframe/) during upstream sync merges.
 package service
 
 import (
