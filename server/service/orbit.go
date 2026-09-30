@@ -56,6 +56,9 @@ func enrollOrbitEndpoint(ctx context.Context, request interface{}, svc fleet.Ser
 		OsqueryIdentifier: req.OsqueryIdentifier,
 		ComputerName:      req.ComputerName,
 		HardwareModel:     req.HardwareModel,
+		// >>> OPENFRAME(agent-openframe-mode): carry osquery's instance id — openframe/docs/agent-openframe-mode.md
+		InstanceID: req.InstanceID,
+		// <<< OPENFRAME(agent-openframe-mode)
 	}, req.EnrollSecret, req.EUAToken)
 	if err != nil {
 		return enrollOrbitResponse{fleet.EnrollOrbitResponse{Err: err}}, nil
@@ -175,6 +178,12 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		),
 		slog.LevelInfo,
 	)
+
+	// >>> OPENFRAME(agent-openframe-mode): log instance id to tell apart hosts sharing a hardware UUID — openframe/docs/agent-openframe-mode.md
+	if fleet.IsOpenframeMode() {
+		logging.WithExtras(ctx, "instance_id", hostInfo.InstanceID)
+	}
+	// <<< OPENFRAME(agent-openframe-mode)
 
 	secret, err := svc.ds.VerifyEnrollSecret(ctx, enrollSecret)
 	if err != nil {
