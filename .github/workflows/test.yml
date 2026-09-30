@@ -46,9 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - { name: backend, path: ".", paths: "**/{go.mod,go.sum,Dockerfile*}", skip_files: "**/package.json,**/package-lock.json,**/yarn.lock" }
-          - { name: frontend, path: ".", paths: "**/{package.json,package-lock.json,yarn.lock}", skip_files: "**/go.mod,**/go.sum,**/Dockerfile*" }
+        target: ${{ fromJson(needs.changes.outputs.scan_matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
