@@ -199,3 +199,25 @@ func TestOpenframeCVEDetailTeamFence(t *testing.T) {
 	require.Len(t, software, 1)
 	require.Equal(t, "shared", software[0].Name)
 }
+
+// TestOpenframeVulnerabilityHostCountsUpdatedAt verifies the OPENFRAME(mysql-multitenancy)
+// instance-wide recalculation time: zero before host counts were ever computed, the run time after,
+// and the same value for a pinned tenant since it is instance metadata. Runs only under MYSQL_TEST=1.
+func TestOpenframeVulnerabilityHostCountsUpdatedAt(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	never, err := ds.VulnerabilityHostCountsUpdatedAt(ctx)
+	require.NoError(t, err)
+	require.True(t, never.IsZero())
+
+	tenants := seedOpenframeInventoryTenants(t, ds)
+
+	updatedAt, err := ds.VulnerabilityHostCountsUpdatedAt(ctx)
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now(), updatedAt, 10*time.Minute)
+
+	pinned, err := ds.VulnerabilityHostCountsUpdatedAt(fleet.NewOpenframeTeamContext(ctx, tenants.teamA.ID))
+	require.NoError(t, err)
+	require.Equal(t, updatedAt, pinned)
+}

@@ -99,6 +99,13 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   `vulnerability_host_counts` only. Applied in the datastore, not via the `team_id` param, because
   the service gates `team_id` on titles behind a Premium license. The OpenFrame api reads these
   server-side for Software Management, so the gateway allowlist does not protect them.
+  `GET /vulnerabilities`: a pinned empty page reports `counts_updated_at` as the instance's last
+  host-count recalculation (`VulnerabilityHostCountsUpdatedAt`, zero if never) instead of `now()`.
+  `SoftwareByID` stays unfenced on purpose — the Office vulnerability analyzers call it.
+- **host list software filters** (`server/service/hosts.go`) — with `software_version_id` /
+  `software_id` / `software_title_id`, a pinned request resolves the `software` / `software_title`
+  block within its team and skips the unscoped name lookups (`SoftwareLiteByID`,
+  `SoftwareTitleNameForHostFilter`), so another tenant's software is never described.
 
 ## Per-request pinning
 
