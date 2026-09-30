@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,12 +49,12 @@ func TestComputeWindowsReconcileDeltasInstallRules(t *testing.T) {
 		},
 		{
 			name:        "matching install row does not reinstall",
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified)},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified)},
 			wantInstall: false,
 		},
 		{
 			name:        "checksum mismatch installs",
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: []byte("stale"), OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified)},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: []byte("stale"), OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified)},
 			wantInstall: true,
 		},
 		{
@@ -61,7 +62,7 @@ func TestComputeWindowsReconcileDeltasInstallRules(t *testing.T) {
 			profileMod: func(p *fleet.WindowsProfileForReconcile) {
 				p.SecretsUpdatedAt = &newer
 			},
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified), SecretsUpdatedAt: &older},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified), SecretsUpdatedAt: &older},
 			wantInstall: true,
 		},
 		{
@@ -69,7 +70,7 @@ func TestComputeWindowsReconcileDeltasInstallRules(t *testing.T) {
 			profileMod: func(p *fleet.WindowsProfileForReconcile) {
 				p.SecretsUpdatedAt = &newer
 			},
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified), SecretsUpdatedAt: nil},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified), SecretsUpdatedAt: nil},
 			wantInstall: false,
 		},
 		{
@@ -79,7 +80,7 @@ func TestComputeWindowsReconcileDeltasInstallRules(t *testing.T) {
 		},
 		{
 			name:        "install op pending does not reinstall",
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryPending)},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryPending)},
 			wantInstall: false,
 		},
 		{
@@ -89,17 +90,17 @@ func TestComputeWindowsReconcileDeltasInstallRules(t *testing.T) {
 		},
 		{
 			name:        "remove op pending flips back to install",
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeRemove, Status: new(fleet.MDMDeliveryPending)},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeRemove, Status: ptr.To(fleet.MDMDeliveryPending)},
 			wantInstall: true,
 		},
 		{
 			name:        "remove op verifying does not flip back",
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeRemove, Status: new(fleet.MDMDeliveryVerifying)},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeRemove, Status: ptr.To(fleet.MDMDeliveryVerifying)},
 			wantInstall: false,
 		},
 		{
 			name:        "remove op verified does not flip back",
-			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeRemove, Status: new(fleet.MDMDeliveryVerified)},
+			current:     &fleet.MDMWindowsProfilePayload{ProfileUUID: "p1", HostUUID: "h1", Checksum: desiredChecksum, OperationType: fleet.MDMOperationTypeRemove, Status: ptr.To(fleet.MDMDeliveryVerified)},
 			wantInstall: false,
 		},
 	}
@@ -147,7 +148,7 @@ func TestComputeWindowsReconcileDeltasRemoveRules(t *testing.T) {
 	}{
 		{
 			name:       "current install not desired is removed",
-			current:    &fleet.MDMWindowsProfilePayload{ProfileUUID: "gone", HostUUID: "h1", ProfileName: "Gone", OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified), Detail: "prior detail", CommandUUID: "cmd-1"},
+			current:    &fleet.MDMWindowsProfilePayload{ProfileUUID: "gone", HostUUID: "h1", ProfileName: "Gone", OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified), Detail: "prior detail", CommandUUID: "cmd-1"},
 			wantRemove: true,
 		},
 		{
@@ -157,12 +158,12 @@ func TestComputeWindowsReconcileDeltasRemoveRules(t *testing.T) {
 		},
 		{
 			name:       "remove op already in-flight is skipped",
-			current:    &fleet.MDMWindowsProfilePayload{ProfileUUID: "gone", HostUUID: "h1", OperationType: fleet.MDMOperationTypeRemove, Status: new(fleet.MDMDeliveryPending)},
+			current:    &fleet.MDMWindowsProfilePayload{ProfileUUID: "gone", HostUUID: "h1", OperationType: fleet.MDMOperationTypeRemove, Status: ptr.To(fleet.MDMDeliveryPending)},
 			wantRemove: false,
 		},
 		{
 			name:       "broken-label profile is kept (not removed)",
-			current:    &fleet.MDMWindowsProfilePayload{ProfileUUID: "gone", HostUUID: "h1", OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified)},
+			current:    &fleet.MDMWindowsProfilePayload{ProfileUUID: "gone", HostUUID: "h1", OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified)},
 			broken:     true,
 			wantRemove: false,
 		},
@@ -207,7 +208,7 @@ func TestComputeWindowsReconcileDeltasTeamGating(t *testing.T) {
 	teamProfile := &fleet.WindowsProfileForReconcile{ProfileUUID: "pt", ProfileName: "team", TeamID: 5, Checksum: []byte("c")}
 
 	noTeamHost := &fleet.WindowsHostReconcileInfo{HostID: 1, UUID: "h-global", TeamID: nil}
-	teamedHost := &fleet.WindowsHostReconcileInfo{HostID: 2, UUID: "h-team", TeamID: new(uint(5))}
+	teamedHost := &fleet.WindowsHostReconcileInfo{HostID: 2, UUID: "h-team", TeamID: ptr.Uint(5)}
 
 	profilesByTeam := map[uint][]*fleet.WindowsProfileForReconcile{
 		0: {globalProfile},
@@ -250,7 +251,7 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-all member of all installs",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAll,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}, {LabelID: new(uint(11))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}, {LabelID: ptr.Uint(11)}},
 			},
 			wantInstall: true,
 		},
@@ -258,7 +259,7 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-all missing one does not install",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAll,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}, {LabelID: new(uint(99))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}, {LabelID: ptr.Uint(99)}},
 			},
 			wantInstall: false,
 		},
@@ -266,7 +267,7 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-all with broken label does not install",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAll,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}, {LabelID: nil}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}, {LabelID: nil}},
 			},
 			wantInstall: false,
 		},
@@ -274,7 +275,7 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-any member of one installs",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAny,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}, {LabelID: new(uint(99))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}, {LabelID: ptr.Uint(99)}},
 			},
 			wantInstall: true,
 		},
@@ -282,21 +283,21 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-any member of none does not install",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAny,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(98))}, {LabelID: new(uint(99))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(98)}, {LabelID: ptr.Uint(99)}},
 			},
 			wantInstall: false,
 		},
 		{
 			name: "exclude-any non-member installs",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(99))}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(99)}},
 			},
 			wantInstall: true,
 		},
 		{
 			name: "exclude-any member does not install",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}},
 			},
 			wantInstall: false,
 		},
@@ -311,8 +312,8 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-all + exclude-any: in include, not in exclude installs",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAll,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}},
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(99))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(99)}},
 			},
 			wantInstall: true,
 		},
@@ -320,8 +321,8 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-all + exclude-any: in include AND in exclude does not install",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAll,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}},
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(11))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(11)}},
 			},
 			wantInstall: false,
 		},
@@ -330,14 +331,14 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				// host is NOT a member of label 50, but the dynamic label was created after the host's last label scan, so results are not yet
 				// reported and the host is treated as excluded.
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(50)), CreatedAt: time.Now().Add(time.Hour), LabelMembershipType: int(fleet.LabelMembershipTypeDynamic)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(50), CreatedAt: time.Now().Add(time.Hour), LabelMembershipType: int(fleet.LabelMembershipTypeDynamic)}},
 			},
 			wantInstall: false,
 		},
 		{
 			name: "exclude-any dynamic label created before host scan passes",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(50)), CreatedAt: oldLabel, LabelMembershipType: int(fleet.LabelMembershipTypeDynamic)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(50), CreatedAt: oldLabel, LabelMembershipType: int(fleet.LabelMembershipTypeDynamic)}},
 			},
 			wantInstall: true,
 		},
@@ -345,8 +346,8 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-any + exclude-any: in an include, not in exclude installs",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAny,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}, {LabelID: new(uint(99))}},
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(98))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}, {LabelID: ptr.Uint(99)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(98)}},
 			},
 			wantInstall: true,
 		},
@@ -354,8 +355,8 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			name: "include-any + exclude-any: in an include AND in exclude does not install",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
 				IncludeMode:   fleet.MDMProfileIncludeAny,
-				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}},
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(11))}},
+				IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(11)}},
 			},
 			wantInstall: false,
 		},
@@ -365,7 +366,7 @@ func TestComputeWindowsReconcileDeltasLabelMatrix(t *testing.T) {
 			// dynamic label in the same situation above.
 			name: "exclude-any host_vitals label created after host scan still installs",
 			profile: &fleet.WindowsProfileForReconcile{ProfileUUID: "p", TeamID: 0, Checksum: []byte("c"),
-				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(50)), CreatedAt: time.Now().Add(time.Hour), LabelMembershipType: int(fleet.LabelMembershipTypeHostVitals)}},
+				ExcludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(50), CreatedAt: time.Now().Add(time.Hour), LabelMembershipType: int(fleet.LabelMembershipTypeHostVitals)}},
 			},
 			wantInstall: true,
 		},
@@ -407,9 +408,9 @@ func TestComputeWindowsReconcileDeltasMultipleProfilesPerHost(t *testing.T) {
 	currentByHost := map[string][]*fleet.MDMWindowsProfilePayload{
 		"h1": {
 			// already installed and matching -> neither install nor remove.
-			{ProfileUUID: "p-noop", HostUUID: "h1", Checksum: checksum, OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified)},
+			{ProfileUUID: "p-noop", HostUUID: "h1", Checksum: checksum, OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified)},
 			// installed but no longer desired (not in profilesByTeam) -> remove.
-			{ProfileUUID: "p-remove", HostUUID: "h1", ProfileName: "Remove", Checksum: checksum, OperationType: fleet.MDMOperationTypeInstall, Status: new(fleet.MDMDeliveryVerified)},
+			{ProfileUUID: "p-remove", HostUUID: "h1", ProfileName: "Remove", Checksum: checksum, OperationType: fleet.MDMOperationTypeInstall, Status: ptr.To(fleet.MDMDeliveryVerified)},
 		},
 	}
 
@@ -445,7 +446,7 @@ func TestDesiredWindowsProfileUUIDsByHost(t *testing.T) {
 	pGlobal := &fleet.WindowsProfileForReconcile{ProfileUUID: "p-global", ProfileName: "global", TeamID: 0, Checksum: []byte("c")}
 	pLabeled := &fleet.WindowsProfileForReconcile{ProfileUUID: "p-labeled", ProfileName: "labeled", TeamID: 0, Checksum: []byte("c"),
 		IncludeMode:   fleet.MDMProfileIncludeAny,
-		IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: new(uint(10))}},
+		IncludeLabels: []fleet.MDMProfileLabelRef{{LabelID: ptr.Uint(10)}},
 	}
 	pTeam := &fleet.WindowsProfileForReconcile{ProfileUUID: "p-team", ProfileName: "team", TeamID: 5, Checksum: []byte("c")}
 
@@ -456,8 +457,8 @@ func TestDesiredWindowsProfileUUIDsByHost(t *testing.T) {
 
 	labeledHost := &fleet.WindowsHostReconcileInfo{HostID: 1, UUID: "h-labeled", TeamID: nil, LabelUpdatedAt: time.Now()}
 	plainHost := &fleet.WindowsHostReconcileInfo{HostID: 2, UUID: "h-plain", TeamID: nil, LabelUpdatedAt: time.Now()}
-	teamHost := &fleet.WindowsHostReconcileInfo{HostID: 3, UUID: "h-team", TeamID: new(uint(5)), LabelUpdatedAt: time.Now()}
-	emptyHost := &fleet.WindowsHostReconcileInfo{HostID: 4, UUID: "h-empty", TeamID: new(uint(9)), LabelUpdatedAt: time.Now()}
+	teamHost := &fleet.WindowsHostReconcileInfo{HostID: 3, UUID: "h-team", TeamID: ptr.Uint(5), LabelUpdatedAt: time.Now()}
+	emptyHost := &fleet.WindowsHostReconcileInfo{HostID: 4, UUID: "h-empty", TeamID: ptr.Uint(9), LabelUpdatedAt: time.Now()}
 
 	out := DesiredWindowsProfileUUIDsByHost(
 		[]*fleet.WindowsHostReconcileInfo{labeledHost, plainHost, teamHost, emptyHost},

@@ -82,7 +82,7 @@ module.exports = {
       // Send a request to provision the new compliance tenant.
       let complianceTenantProvisionResponse = await sails.helpers.http.sendHttpRequest.with({
         method: 'PUT',
-        url: `${tenantDataSyncUrl}/PartnerTenants(guid'${informationAboutThisTenant.entraTenantId}')}?api-version=1.6`,
+        url: `${tenantDataSyncUrl}/PartnerTenants(guid'${informationAboutThisTenant.entraTenantId}')?api-version=1.6`,
         headers: {
           'Authorization': `Bearer ${manageApiAccessToken}`
         },
@@ -259,3 +259,4 @@ module.exports = {
 
 
 };
+

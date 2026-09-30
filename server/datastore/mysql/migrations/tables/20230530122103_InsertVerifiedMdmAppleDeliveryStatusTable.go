@@ -2,8 +2,7 @@ package tables
 
 import (
 	"database/sql"
-
-	"github.com/pkg/errors"
+	"fmt"
 )
 
 func init() {
@@ -14,7 +13,7 @@ func Up_20230530122103(tx *sql.Tx) error {
 	// Idempotent migration.
 	_, err := tx.Exec(`INSERT IGNORE INTO mdm_apple_delivery_status (status) VALUES(?)`, "verified")
 	if err != nil {
-		return errors.Wrap(err, "insert verified mdm_apple_delivery_status")
+		return fmt.Errorf("insert verified mdm_apple_delivery_status: %w", err)
 	}
 
 	return nil

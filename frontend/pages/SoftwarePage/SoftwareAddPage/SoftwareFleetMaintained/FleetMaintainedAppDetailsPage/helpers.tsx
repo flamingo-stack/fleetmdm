@@ -12,6 +12,12 @@ import {
 } from "../../helpers";
 import fleetAppData from "../../../../../../server/mdm/maintainedapps/apps.json";
 
+// NOTE: this map must be kept in sync with server/mdm/maintainedapps/apps.json.
+// Each key is the app's display `name` and each value is its `identifier` as
+// defined in apps.json. TODO: replace with a mechanism that derives this
+// mapping directly from apps.json (e.g. by matching on name) instead of a
+// hand-maintained lookup, so new/renamed apps don't silently break policy
+// query resolution.
 const NameToIdentifierMap: Record<string, string> = {
   "1Password": "1password",
   "Adobe Acrobat Reader": "adobe-acrobat-reader",
@@ -37,7 +43,9 @@ const NameToIdentifierMap: Record<string, string> = {
 };
 
 const getFleetAppData = (name: string) => {
-  const appId = NameToIdentifierMap[name]; // TODO: need a better matching mechanism here
+  const appId =
+    NameToIdentifierMap[name] ||
+    fleetAppData.find((app) => app.name === name)?.identifier;
   return fleetAppData.find((app) => app.identifier === appId);
 };
 
