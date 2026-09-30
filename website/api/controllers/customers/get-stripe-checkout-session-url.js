@@ -49,7 +49,9 @@ module.exports = {
       .timeout(5000)
       .retry()
       .intercept((error)=>{
-        return new Error(`An error occurred when trying to create a Stripe Customer for a user (email address: ${this.req.me.emailAddress}) tried to create a Stripe checkout session to purchase a self-service license. Full error: ${error.raw}`);
+        // Log the raw Stripe error server-side only, since it may contain sensitive request/response data.
+        sails.log.error(`An error occurred when trying to create a Stripe Customer for a user (email address: ${this.req.me.emailAddress}) tried to create a Stripe checkout session to purchase a self-service license. Full error: ${util.inspect(error.raw)}`);
+        return new Error(`An error occurred when trying to create a Stripe Customer for a user (email address: ${this.req.me.emailAddress}) tried to create a Stripe checkout session to purchase a self-service license.`);
       });
 
       await User.updateOne({id: this.req.me.id}).set({stripeCustomerId: stripeCustomerId});

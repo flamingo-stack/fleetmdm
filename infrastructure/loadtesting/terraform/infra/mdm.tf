@@ -1,6 +1,6 @@
 resource "random_password" "challenge" {
-  length  = 12
-  special = false
+  length  = 24
+  special = true
 }
 
 resource "aws_secretsmanager_secret_version" "scep" {

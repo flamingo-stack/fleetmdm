@@ -72,6 +72,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/service/mock"
 	"github.com/fleetdm/fleet/v4/server/service/redis_key_value"
 	"github.com/fleetdm/fleet/v4/server/service/redis_lock"
+	"github.com/fleetdm/fleet/v4/server/service/svctest"
 	"github.com/fleetdm/fleet/v4/server/sso"
 	"github.com/fleetdm/fleet/v4/server/test"
 	"github.com/go-kit/kit/endpoint"
@@ -100,7 +101,7 @@ func newTestServiceWithConfig(t *testing.T, ds fleet.Datastore, fleetConfig conf
 		failingPolicySet                fleet.FailingPolicySet        = NewMemFailingPolicySet()
 		enrollHostLimiter               fleet.EnrollHostLimiter       = nopEnrollHostLimiter{}
 		depStorage                      nanodep_storage.AllDEPStorage = &nanodep_mock.Storage{}
-		mailer                          fleet.MailService             = &mockMailService{SendEmailFn: func(e fleet.Email) error { return nil }}
+		mailer                          fleet.MailService             = &svctest.MockMailService{SendEmailFn: func(e fleet.Email) error { return nil }}
 		c                               clock.Clock                   = clock.C
 		scepConfigService                                             = scep.NewSCEPConfigService(logger, nil)
 		digiCertService                                               = digicert.NewService(digicert.WithLogger(logger))
@@ -383,20 +384,6 @@ func createEnrollSecrets(t *testing.T, count int) []*fleet.EnrollSecret {
 		secrets[i] = &fleet.EnrollSecret{Secret: fmt.Sprintf("testSecret%d", i)}
 	}
 	return secrets
-}
-
-type mockMailService struct {
-	SendEmailFn func(e fleet.Email) error
-	Invoked     bool
-}
-
-func (svc *mockMailService) SendEmail(ctx context.Context, e fleet.Email) error {
-	svc.Invoked = true
-	return svc.SendEmailFn(e)
-}
-
-func (svc *mockMailService) CanSendEmail(smtpSettings fleet.SMTPSettings) bool {
-	return smtpSettings.SMTPConfigured
 }
 
 func RunServerForTestsWithDS(t *testing.T, ds fleet.Datastore, opts ...*TestServerOpts) (map[string]fleet.User, *httptest.Server) {

@@ -336,9 +336,20 @@ func (decodeCarveBlockRequest) DecodeRequest(ctx context.Context, req *http.Requ
 	}
 
 	// 10. Must continue with a string with the base64 encoded data.
-	encodedData, err := io.ReadAll(req.Body)
+	// Bound the amount of "data" we will read to the carve's own configured
+	// BlockSize (already capped at creation time by maxBlockSize), plus a
+	// small allowance for base64 padding/overhead and the trailing `"}`, so
+	// that an authenticated-but-malicious host cannot force us to buffer an
+	// unbounded amount of memory for a single block.
+	const base64Overhead = 4                                           // padding/newline slack
+	maxEncodedDataSize := base64.StdEncoding.EncodedLen(int(carve.BlockSize)) + base64Overhead + 2 // +2 for trailing `"}`
+	limitedBody := io.LimitReader(req.Body, int64(maxEncodedDataSize)+1)
+	encodedData, err := io.ReadAll(limitedBody)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, `read "data" field`)
+	}
+	if len(encodedData) > maxEncodedDataSize {
+		return nil, ctxerr.New(ctx, `"data" field exceeds carve block size`)
 	}
 	if len(encodedData) < 2 {
 		return nil, ctxerr.New(ctx, `invalid "data" ending length`)

@@ -1,7 +1,7 @@
 /** TODO: This component is similar to other UI elements that can
  * be abstracted to use a shared base component (e.g. DetailsWidget) */
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import classnames from "classnames";
 
 import { stringToClipboard } from "utilities/copy_text";
@@ -94,6 +94,17 @@ const InstallerDetailsWidget = ({
   const classNames = classnames(baseClass, className);
 
   const [copyMessage, setCopyMessage] = useState("");
+  const copyMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  useEffect(() => {
+    return () => {
+      if (copyMessageTimeoutRef.current) {
+        clearTimeout(copyMessageTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const onCopySha256 = (evt: React.MouseEvent) => {
     evt.preventDefault();
@@ -102,8 +113,16 @@ const InstallerDetailsWidget = ({
       .then(() => setCopyMessage("Copied!"))
       .catch(() => setCopyMessage("Copy failed"));
 
+    // Clear any previously scheduled clear so overlapping clicks don't race
+    if (copyMessageTimeoutRef.current) {
+      clearTimeout(copyMessageTimeoutRef.current);
+    }
+
     // Clear message after 1 second
-    setTimeout(() => setCopyMessage(""), 1000);
+    copyMessageTimeoutRef.current = setTimeout(
+      () => setCopyMessage(""),
+      1000
+    );
 
     return false;
   };

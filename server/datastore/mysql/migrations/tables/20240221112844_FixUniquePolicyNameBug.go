@@ -82,6 +82,7 @@ func Up_20240221112844(tx *sql.Tx) error {
 		for _, id := range ids {
 			_, err = tx.Exec(updateStmt+" WHERE id = ?", id)
 			if isDuplicate(err) {
+				updated := false
 				for i := 2; i < 10000; i++ {
 					_, err = tx.Exec(fmt.Sprintf(updateNameStmt, i), id)
 					if isDuplicate(err) {
@@ -89,9 +90,14 @@ func Up_20240221112844(tx *sql.Tx) error {
 					} else if err != nil {
 						// We do not update this row -- it can be updated next time the policy is modified. This should be very rare.
 						// Lack of update can happen if duplicate name is 255 characters, or all of the nearly 10000 names we tried are already taken.
-						logger.Warn.Printf("failed to update policy id %d", id)
+						return fmt.Errorf("failed to update policy id %d after exhausting duplicate name attempts: %w", id, err)
+					} else {
+						updated = true
 					}
 					break
+				}
+				if !updated {
+					return fmt.Errorf("failed to update policy id %d: could not generate a unique name/checksum after 10000 attempts", id)
 				}
 			} else if err != nil {
 				return fmt.Errorf("failed to update policies table to fill the checksum column on id %d: %w", id, err)

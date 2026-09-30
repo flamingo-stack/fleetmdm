@@ -208,7 +208,7 @@ export default {
     return sendRequest(
       "POST",
       UPDATE_USER_ADMIN(user.id),
-      admin
+      { admin }
     ).then((response) => helpers.addGravatarUrlToResource(response.user));
   },
 };

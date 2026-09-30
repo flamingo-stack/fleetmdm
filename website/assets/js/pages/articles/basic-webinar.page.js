@@ -19,6 +19,7 @@ parasails.registerPage('basic-webinar', {
     cloudError: '',
     cloudSuccess: '',
     scrollDistance: undefined,
+    lastScrollTop: 0,
   },
 
   //  ╦  ╦╔═╗╔═╗╔═╗╦ ╦╔═╗╦  ╔═╗
