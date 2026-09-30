@@ -161,15 +161,23 @@ func main() {
 	var fleetDesktopCheckTrigger atomic.Bool
 
 	// we have seen some cases where systray.Run() does not call onReady seemingly due to early
-	// initialization states with the GUI such as Windows Autopilot first time setup. This ensures
-	// we don't just hang forever waiting for the GUI to be ready.
+	// initialization states with the GUI such as Windows Autopilot first time setup. Rather than
+	// killing the process after a single short timeout (which could terminate the app precisely
+	// during the slow-init scenario this is trying to accommodate), we log a non-fatal warning
+	// periodically so we have visibility without risking spurious termination.
 	trayAppDisplayed := make(chan struct{})
 	go func() {
-		select {
-		case <-trayAppDisplayed:
-			// The tray app is ready and displayed so there is nothing to do
-		case <-time.After(1 * time.Minute):
-			log.Fatal().Msg("onReady was never called - the GUI may not yet be ready")
+		const onReadyWarnInterval = 1 * time.Minute
+		ticker := time.NewTicker(onReadyWarnInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-trayAppDisplayed:
+				// The tray app is ready and displayed so there is nothing to do
+				return
+			case <-ticker.C:
+				log.Warn().Msg("onReady was not yet called - the GUI may not yet be ready")
+			}
 		}
 	}()
 

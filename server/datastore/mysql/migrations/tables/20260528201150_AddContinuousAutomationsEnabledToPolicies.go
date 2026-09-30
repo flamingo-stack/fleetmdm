@@ -24,5 +24,15 @@ func Up_20260528201150(tx *sql.Tx) error {
 }
 
 func Down_20260528201150(tx *sql.Tx) error {
+	if !columnExists(tx, "policies", "continuous_automations_enabled") {
+		return nil
+	}
+	if _, err := tx.Exec(`
+		ALTER TABLE policies
+		DROP COLUMN continuous_automations_enabled
+	`); err != nil {
+		return fmt.Errorf("drop continuous_automations_enabled from policies: %w", err)
+	}
 	return nil
 }
+

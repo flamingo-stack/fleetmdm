@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
@@ -22,7 +24,7 @@ func main() {
 		channelVersionCommand(),
 	}
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stdout, "Error: %+v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %+v\n", err)
 		os.Exit(1)
 	}
 }
@@ -195,7 +197,15 @@ func validVersion(version string) bool {
 }
 
 func getComponents(tufURL string, components []string, channel string) (foundComponents map[string]map[string]string, sha512Map map[string][]string, err error) {
-	res, err := http.Get(tufURL + "/targets.json") //nolint
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tufURL+"/targets.json", nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create request for /targets.json: %w", err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get /targets.json: %w", err)
 	}

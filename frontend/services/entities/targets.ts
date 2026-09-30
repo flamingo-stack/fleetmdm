@@ -60,7 +60,9 @@ export default {
   },
   search: (params: ITargetsSearchParams): Promise<ITargetsSearchResponse> => {
     if (!params?.excluded_host_ids || !params?.query) {
-      return Promise.reject("Invalid usage: missing required parameter(s)");
+      return Promise.reject(
+        new Error("Invalid usage: missing required parameter(s)")
+      );
     }
     const { HOSTS } = endpoints;
     const path = `${HOSTS}/search`;
@@ -69,7 +71,7 @@ export default {
   },
   count: (params: ITargetsCountParams): Promise<ITargetsCountResponse> => {
     if (!params?.selected) {
-      return Promise.reject("Invalid usage: no selected targets");
+      return Promise.reject(new Error("Invalid usage: no selected targets"));
     }
     const { TARGETS } = endpoints;
     const path = `${TARGETS}/count`;

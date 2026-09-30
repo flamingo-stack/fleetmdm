@@ -1,9 +1,12 @@
 package mysqlredis
 
 import (
+	"log"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 // OpenTelemetry instruments for the host lookup cache (covers both
@@ -30,6 +33,8 @@ var (
 )
 
 func init() {
+	noopMeter := noop.NewMeterProvider().Meter("fleet")
+
 	var err error
 	hostCacheLookups, err = meter.Int64Counter(
 		"fleet.host_cache.lookups",
@@ -37,7 +42,8 @@ func init() {
 		metric.WithUnit("{event}"),
 	)
 	if err != nil {
-		panic(err)
+		log.Printf("mysqlredis: failed to initialize fleet.host_cache.lookups counter, falling back to no-op: %v", err)
+		hostCacheLookups, _ = noopMeter.Int64Counter("fleet.host_cache.lookups")
 	}
 
 	hostCacheErrors, err = meter.Int64Counter(
@@ -46,7 +52,8 @@ func init() {
 		metric.WithUnit("{event}"),
 	)
 	if err != nil {
-		panic(err)
+		log.Printf("mysqlredis: failed to initialize fleet.host_cache.errors counter, falling back to no-op: %v", err)
+		hostCacheErrors, _ = noopMeter.Int64Counter("fleet.host_cache.errors")
 	}
 
 	hostCacheInvalidations, err = meter.Int64Counter(
@@ -55,7 +62,8 @@ func init() {
 		metric.WithUnit("{event}"),
 	)
 	if err != nil {
-		panic(err)
+		log.Printf("mysqlredis: failed to initialize fleet.host_cache.invalidations counter, falling back to no-op: %v", err)
+		hostCacheInvalidations, _ = noopMeter.Int64Counter("fleet.host_cache.invalidations")
 	}
 }
 

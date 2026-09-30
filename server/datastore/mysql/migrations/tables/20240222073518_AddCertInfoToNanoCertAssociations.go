@@ -123,6 +123,10 @@ func updateCertAssociationTimestamps(txx *sqlx.Tx, limit, offset int) error {
 		return fmt.Errorf("failed to retrieve cert associations: %w", err)
 	}
 
+	if len(assocs) == 0 {
+		return nil
+	}
+
 	var sb strings.Builder
 	updateAssocArgs := make([]any, len(assocs)*3)
 	for i, assoc := range assocs {

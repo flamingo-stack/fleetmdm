@@ -130,6 +130,26 @@ export const getThrottleCopy = (responseUpdatedAt?: string | null) => {
   return `in ${hours} hour${hours === 1 ? "" : "s"}`;
 };
 
+/** Known, navigable/queryable DEP assign profile error values. Any other raw
+ * value (including empty string) is not a recognized error and should not be
+ * used for navigation or query params. This is the single source of truth
+ * shared by handleClickProfileRow and renderProfileRow. */
+const KNOWN_PROFILE_ASSIGN_ERRORS: DepAssignProfileResponseErrors[] = [
+  "FAILED",
+  "THROTTLED",
+  "NOT_ACCESSIBLE",
+];
+
+const getKnownProfileAssignError = (
+  raw?: string | null
+): DepAssignProfileResponseErrors | undefined => {
+  return KNOWN_PROFILE_ASSIGN_ERRORS.includes(
+    raw as DepAssignProfileResponseErrors
+  )
+    ? (raw as DepAssignProfileResponseErrors)
+    : undefined;
+};
+
 interface IStatusRowItem {
   id: string;
   name: string;
@@ -186,24 +206,13 @@ const MDMStatusModal = ({
       return;
     }
 
-    const raw = (depAssignmentData?.host_dep_assignment
-      .assign_profile_response || "") as DepAssignProfileResponseErrors;
+    const responseParam = getKnownProfileAssignError(
+      depAssignmentData?.host_dep_assignment.assign_profile_response
+    );
 
-    let responseParam: string | undefined;
-
-    switch (raw) {
-      case "FAILED":
-        responseParam = "FAILED";
-        break;
-      case "THROTTLED":
-        responseParam = "THROTTLED";
-        break;
-      case "NOT_ACCESSIBLE":
-        responseParam = "NOT_ACCESSIBLE";
-        break;
-      default:
-        // No navigation for other responses
-        return;
+    if (!responseParam) {
+      // No navigation for other responses
+      return;
     }
 
     const path = getPathWithQueryParams(paths.MANAGE_HOSTS, {
@@ -243,6 +252,10 @@ const MDMStatusModal = ({
   const renderProfileRow = (item: IProfileRowItem) => {
     const isErrorRow = item.id === "profile-error";
 
+    const knownError = getKnownProfileAssignError(
+      depAssignmentData?.host_dep_assignment.assign_profile_response
+    );
+
     return (
       <>
         <div className={`${baseClass}__status`}>
@@ -266,13 +279,10 @@ const MDMStatusModal = ({
             )}
           </div>
         </div>
-        {isErrorRow && (
+        {isErrorRow && knownError && (
           <ViewAllHostsLink
             queryParams={{
-              dep_assign_profile_response: (
-                depAssignmentData?.host_dep_assignment
-                  .assign_profile_response || ""
-              ).toLowerCase(),
+              dep_assign_profile_response: knownError.toLowerCase(),
             }}
             rowHover
             noLink
@@ -417,8 +427,9 @@ const MDMStatusModal = ({
 
     if (depProfileError && depAssignmentData) {
       const assignmentError = getProfileAssignmentError(
-        depAssignmentData.host_dep_assignment
-          .assign_profile_response as DepAssignProfileResponseErrors
+        getKnownProfileAssignError(
+          depAssignmentData.host_dep_assignment.assign_profile_response
+        )
       );
 
       if (assignmentError) {
