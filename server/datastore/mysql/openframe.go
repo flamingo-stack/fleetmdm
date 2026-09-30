@@ -80,6 +80,16 @@ func openframeForeignTeam(ctx context.Context, teamID uint) bool {
 	return ok && pinned != teamID
 }
 
+// openframeTeamScope replaces the caller's team scope of an inventory read (software titles,
+// vulnerabilities) with this process's pinned team, so counts, versions and CVEs come only from
+// the tenant's own hosts. Unpinned it returns teamID unchanged.
+func openframeTeamScope(ctx context.Context, teamID *uint) *uint {
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		return &pinned
+	}
+	return teamID
+}
+
 // openframeScopePolicyHosts fences a host-assignment operation to this process's pinned team: it
 // verifies the parent policy belongs to the team (NotFound otherwise) and returns the subset of
 // hostIDs in the team. When unpinned it returns hostIDs unchanged. Pass nil hostIDs to use it as a

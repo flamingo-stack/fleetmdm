@@ -91,6 +91,14 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   seeds `id = 1`; a zero-value config would disable software inventory and historical data instance-wide).
   Non-multitenant keeps the upstream statement and fallback byte-identical. Migration
   `20260831000001` seeds/repairs the row and reserves team id 1.
+- **software titles + vulnerabilities** (`software_titles.go`, `vulnerabilities.go`) —
+  `ListSoftwareTitles`, `SoftwareTitleByID`, `ListVulnerabilities`, `CountVulnerabilities`,
+  `Vulnerability`, `SoftwareByCVE`, `OSVersionsByCVE` replace the caller's team scope with the
+  pinned team (`openframeTeamScope`), so titles, versions, host counts and CVEs come from the
+  per-team rows of `software_titles_host_counts` / `software_host_counts` /
+  `vulnerability_host_counts` only. Applied in the datastore, not via the `team_id` param, because
+  the service gates `team_id` on titles behind a Premium license. The OpenFrame api reads these
+  server-side for Software Management, so the gateway allowlist does not protect them.
 
 ## Per-request pinning
 
@@ -168,15 +176,17 @@ flag-on-pinned (team auto-created + secret seeded, `team_id=1`), and flag-on-sha
 MySQL-backed (`MYSQL_TEST=1`), all in `*_openframe_test.go`: enrollment isolation, host-identity
 per-team, host by-id/list/identifier fences, policy/query CRUD + by-id + GitOps, enroll-secret
 fence, host-assignment fence, live-query target fence, teams read fence, app-config isolation,
-`EnsureOpenframeTeamID` (incl. secret seeding), delete-global-policies pin, migration pipeline.
+`EnsureOpenframeTeamID` (incl. secret seeding), delete-global-policies pin, migration pipeline,
+software-title / vulnerability / CVE-detail fences.
 Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. Middleware tests in
 `server/service/openframe_middleware_test.go`. Harness: `make openframe-verify` (add `MYSQL_TEST=1`
 + Docker for the deep tier).
 
 ## Known deferred (latent, non-applicable to OpenFrame today)
 
-- **Users/sessions + software/vulns/os_versions/activities read-views** — unfenced; only matters if
-  the Fleet UI is exposed beyond the gateway allowlist. Not today.
+- **Users/sessions, software versions (`/software/versions`), os_versions and activities
+  read-views** — unfenced; only matters if the Fleet UI is exposed beyond the gateway allowlist and
+  the OpenFrame api does not read them. Not today.
 - **Custom-label creation while unpinned** → `team_id NULL` → distributed globally. OpenFrame seeds
   only built-ins and targets via host-assignments; pinned label writes are team-scoped.
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are

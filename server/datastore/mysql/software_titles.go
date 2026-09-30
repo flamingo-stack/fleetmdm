@@ -40,6 +40,10 @@ func (ds *Datastore) SoftwareTitleByID(ctx context.Context, id uint, teamID *uin
 		autoUpdatesGroupBy                    string
 	)
 
+	// >>> OPENFRAME(mysql-multitenancy): scope the title, its versions and counts to the pinned team.
+	teamID = openframeTeamScope(ctx, teamID)
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	if teamID != nil {
 		autoUpdatesSelect = `sus.enabled as auto_update_enabled, sus.start_time as auto_update_window_start, sus.end_time as auto_update_window_end, `
 		autoUpdatesJoin = fmt.Sprintf("LEFT JOIN software_update_schedules sus ON sus.title_id = st.id AND sus.team_id = %d", *teamID)
@@ -229,6 +233,10 @@ func (ds *Datastore) ListSoftwareTitles(
 	opt fleet.SoftwareTitleListOptions,
 	tmFilter fleet.TeamFilter,
 ) ([]fleet.SoftwareTitleListResult, int, *fleet.PaginationMetadata, error) {
+	// >>> OPENFRAME(mysql-multitenancy): list only titles, versions and counts of the pinned team.
+	opt.TeamID = openframeTeamScope(ctx, opt.TeamID)
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	if opt.ListOptions.After != "" {
 		return nil, 0, nil, fleet.NewInvalidArgumentError("after", "not supported for software titles")
 	}
