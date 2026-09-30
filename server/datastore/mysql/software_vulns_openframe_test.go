@@ -153,6 +153,48 @@ func TestOpenframeSoftwareTitlesTeamFence(t *testing.T) {
 		fleet.SoftwareTitleListOptions{ListOptions: fleet.ListOptions{MatchQuery: "CVE-2026-0001"}}, tenants.globalAdminScope)
 	require.NoError(t, err)
 	require.Equal(t, []string{"alpha"}, titleNames(byOwnCVE))
+
+	byOwnName, _, _, err := ds.ListSoftwareTitles(ctxA,
+		fleet.SoftwareTitleListOptions{ListOptions: fleet.ListOptions{MatchQuery: "shared"}}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Equal(t, []string{"shared"}, titleNames(byOwnName))
+	require.EqualValues(t, 1, byOwnName[0].VersionsCount)
+
+	byForeignName, _, _, err := ds.ListSoftwareTitles(ctxA,
+		fleet.SoftwareTitleListOptions{ListOptions: fleet.ListOptions{MatchQuery: "beta"}}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Empty(t, byForeignName)
+
+	vulnerableByName, _, _, err := ds.ListSoftwareTitles(ctxA,
+		fleet.SoftwareTitleListOptions{VulnerableOnly: true, ListOptions: fleet.ListOptions{MatchQuery: "shared"}}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Empty(t, vulnerableByName)
+
+	ctxB := fleet.NewOpenframeTeamContext(ctx, tenants.teamB.ID)
+	vulnerableForB, _, _, err := ds.ListSoftwareTitles(ctxB, fleet.SoftwareTitleListOptions{VulnerableOnly: true}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Equal(t, []string{"beta", "shared"}, titleNames(vulnerableForB))
+}
+
+// TestOpenframeSelectSoftwareTitlesSQLPinnedVersions verifies, without MySQL, that only a pinned
+// request restricts the vulnerable/CVE-search software join to the team's own versions, so the
+// unpinned statement stays upstream's.
+func TestOpenframeSelectSoftwareTitlesSQLPinnedVersions(t *testing.T) {
+	const teamVersions = "AND EXISTS (SELECT 1 FROM software_host_counts shc WHERE shc.software_id = s.id AND shc.team_id = 7 AND shc.global_stats = 0)"
+
+	for _, opt := range []fleet.SoftwareTitleListOptions{
+		{TeamID: ptr.Uint(7), VulnerableOnly: true, OpenframePinned: true},
+		{TeamID: ptr.Uint(7), ListOptions: fleet.ListOptions{MatchQuery: "CVE-2026"}, OpenframePinned: true},
+	} {
+		pinned, _, err := selectSoftwareTitlesSQL(opt)
+		require.NoError(t, err)
+		require.Contains(t, pinned, teamVersions)
+
+		opt.OpenframePinned = false
+		unpinned, _, err := selectSoftwareTitlesSQL(opt)
+		require.NoError(t, err)
+		require.NotContains(t, unpinned, "software_host_counts shc")
+	}
 }
 
 // TestOpenframeVulnerabilitiesTeamFence verifies the OPENFRAME(mysql-multitenancy) fence on
