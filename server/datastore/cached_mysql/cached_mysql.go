@@ -239,7 +239,7 @@ func openframeAppConfigKey(ctx context.Context) string {
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
 		return openframeAppConfigKeyPrefix + strconv.FormatUint(uint64(teamID), 10)
 	}
-	return appConfigKey
+	return fmt.Sprintf(appConfigKey, "global")
 }
 
 // <<< OPENFRAME(mysql-multitenancy)

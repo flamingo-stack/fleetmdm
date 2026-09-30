@@ -35,7 +35,7 @@ func TestUp_20230520153236(t *testing.T) {
 	require.NotZero(t, a.AddedAt)
 	require.Nil(t, a.DeletedAt)
 
-	_, err = db.Exec(`UPDATE host_dep_assignments SET deleted_at = NOW()`)
+	_, err = db.Exec(`UPDATE host_dep_assignments SET deleted_at = NOW() WHERE host_id = ?`, hostID)
 	require.NoError(t, err)
 
 	a = assignment{}

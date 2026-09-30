@@ -8,10 +8,11 @@ interface ITeamNameFieldProps {
 
 const TeamNameField = ({ name }: ITeamNameFieldProps) => {
   return (
-    <FormField label="Fleet" name="fleet_name">
+    <FormField label="Team" name="team_name">
       <p>{name}</p>
     </FormField>
   );
 };
 
 export default TeamNameField;
+

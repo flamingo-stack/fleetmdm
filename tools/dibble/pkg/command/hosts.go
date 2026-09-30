@@ -306,15 +306,26 @@ func runOsqueryPerf(args []string) error {
 		return fmt.Errorf("start osquery-perf: %w", err)
 	}
 
+	// done signals the forwarding goroutine to exit once we're finished
+	// waiting on the child, since signal.Stop alone does not close sigCh
+	// and the goroutine would otherwise block on the range forever.
+	done := make(chan struct{})
+	defer close(done)
+
 	// Forward the first signal we receive; further signals from the user
 	// keep getting forwarded so a hung child can be killed harder by
 	// repeated Ctrl-C.
 	go func() {
-		for sig := range sigCh {
-			if cmd.Process == nil {
+		for {
+			select {
+			case sig := <-sigCh:
+				if cmd.Process == nil {
+					return
+				}
+				_ = cmd.Process.Signal(sig)
+			case <-done:
 				return
 			}
-			_ = cmd.Process.Signal(sig)
 		}
 	}()
 

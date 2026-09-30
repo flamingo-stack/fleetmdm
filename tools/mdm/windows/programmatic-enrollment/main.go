@@ -55,15 +55,15 @@ func getEnrollmentInfo() (uint32, string, error) {
 	var isDeviceRegisteredWithMDM uint32
 
 	// heap-allocated buffer to hold the URI data
-	buffUriData := make([]uint16, 0, maxBufSize)
+	buffUriData := make([]uint16, maxBufSize)
 
 	// IsDeviceRegisteredWithManagement is going to return the MDM enrollment status
 	// https://learn.microsoft.com/en-us/windows/win32/api/mdmregistration/nf-mdmregistration-isdeviceregisteredwithmanagement
-	if returnCode, _, err := procIsDeviceRegisteredWithManagement.Call(uintptr(unsafe.Pointer(&isDeviceRegisteredWithMDM)), maxBufSize, uintptr(unsafe.Pointer(&buffUriData))); returnCode != uintptr(windows.ERROR_SUCCESS) {
+	if returnCode, _, err := procIsDeviceRegisteredWithManagement.Call(uintptr(unsafe.Pointer(&isDeviceRegisteredWithMDM)), maxBufSize, uintptr(unsafe.Pointer(&buffUriData[0]))); returnCode != uintptr(windows.ERROR_SUCCESS) {
 		return 0, "", fmt.Errorf("there was an error calling IsDeviceRegisteredWithManagement(): %s (0x%X)", err, returnCode)
 	}
 
-	uriData, err := localUTF16toString(unsafe.Pointer(&buffUriData))
+	uriData, err := localUTF16toString(unsafe.Pointer(&buffUriData[0]))
 	if err != nil {
 		return 0, "", err
 	}

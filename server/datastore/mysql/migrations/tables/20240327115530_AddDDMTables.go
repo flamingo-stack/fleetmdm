@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS host_mdm_apple_declarations (
 )
     `)
 	if err != nil {
-		return fmt.Errorf("creatign host_mdm_apple_declarations table %w", err)
+		return fmt.Errorf("creating host_mdm_apple_declarations table: %w", err)
 	}
 
 	return nil

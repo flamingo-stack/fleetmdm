@@ -190,6 +190,9 @@ const HostSoftwareLibrary = ({
   const pendingSoftwareSetRef = useRef<Set<string>>(new Set()); // Track for polling
   const pollingTimeoutIdRef = useRef<NodeJS.Timeout | null>(null);
   const isAwaitingHostDetailsPolling = useRef(isHostDetailsPolling);
+  // Tracks whether polling was interrupted (e.g. host went offline then online)
+  // so we can force a resume even if the pending id set hasn't changed.
+  const pollingWasInterruptedRef = useRef(false);
 
   const queryKey = useMemo<IHostSoftwareQueryKey[]>(() => {
     return [
@@ -315,6 +318,9 @@ const HostSoftwareLibrary = ({
         pollingTimeoutIdRef.current = null;
       }
       pendingSoftwareSetRef.current = new Set();
+      // Mark polling as interrupted so it can be forcibly resumed later even
+      // if the next pending id set is identical to a previously seen set.
+      pollingWasInterruptedRef.current = true;
     }
   }, [isHostOnline]);
 
@@ -327,8 +333,9 @@ const HostSoftwareLibrary = ({
           [...newSet].every((pendingId) =>
             pendingSoftwareSetRef.current.has(pendingId)
           );
-        if (!setsAreEqual) {
+        if (!setsAreEqual || pollingWasInterruptedRef.current) {
           pendingSoftwareSetRef.current = newSet;
+          pollingWasInterruptedRef.current = false;
 
           // Clear any existing timeout to avoid overlap
           if (pollingTimeoutIdRef.current) {

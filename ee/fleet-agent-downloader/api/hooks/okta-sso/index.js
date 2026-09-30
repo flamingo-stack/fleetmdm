@@ -83,8 +83,20 @@ module.exports = function (sails){
         // as a 500 on every static-asset GET for non-logged-in users.
         // Skip the Okta middleware in that case and let the request flow
         // through to the Sails router normally.
+        // This bypass is scoped explicitly to requests that look like static
+        // asset requests (matching Sails' own `isSessionDisabled` heuristic).
+        // Any other request missing `req.session` (e.g. session store outage,
+        // cookie parsing failure) is logged and still passed to the Okta
+        // router so it is not silently left unauthenticated.
+        let STATIC_ASSET_RE = /^\/.*\..+$/;
         return function oktaSSOMiddleware(req, res, next) {
-          if (!req.session) { return next(); }
+          if (!req.session) {
+            if (STATIC_ASSET_RE.test(req.path)) {
+              return next();
+            }
+            sails.log.warn('Okta SSO middleware: req.session is missing for non-static-asset request "'+req.method+' '+req.path+'". Bypassing Okta middleware and passing request to the router unauthenticated. This may indicate a session store outage or cookie parsing failure.');
+            return next();
+          }
           return oidc.router(req, res, next);
         };
       })();

@@ -58,9 +58,15 @@ is_network_mount() {
         mnt=$(printf '%b' "$mnt_esc")
         case "$mnt" in
             /)
-                case "$_target" in
-                    /*) echo "$mnt"; break ;;
-                esac
+                # Root mount only matches if it is exactly the target, or if the
+                # target is not itself covered by a more specific (deeper) mount
+                # entry found elsewhere in this loop. Since every absolute path
+                # starts with "/", we must not treat this as an automatic match;
+                # only match when the target truly resolves to "/".
+                if [ "$_target" = "/" ]; then
+                    echo "$mnt"
+                    break
+                fi
                 ;;
             *)
                 # Normalize mountpoint by removing any trailing slash (except for root,
@@ -230,3 +236,4 @@ else
     echo "Wiping, system will be unreachable"
     (/usr/bin/nohup sh $0 wipe >/dev/null 2>/dev/null </dev/null) &
 fi
+
