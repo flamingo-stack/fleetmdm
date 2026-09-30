@@ -138,6 +138,21 @@ func TestOpenframeSoftwareTitlesTeamFence(t *testing.T) {
 	require.Len(t, shared.Versions, 1)
 	require.Equal(t, "1.0", shared.Versions[0].Version)
 	require.EqualValues(t, 1, shared.HostsCount)
+
+	// shared 2.0 carries CVE-2026-0003 but runs only on B's host: A's shared 1.0 must not qualify
+	vulnerable, _, _, err := ds.ListSoftwareTitles(ctxA, fleet.SoftwareTitleListOptions{VulnerableOnly: true}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Equal(t, []string{"alpha"}, titleNames(vulnerable))
+
+	byForeignCVE, _, _, err := ds.ListSoftwareTitles(ctxA,
+		fleet.SoftwareTitleListOptions{ListOptions: fleet.ListOptions{MatchQuery: "CVE-2026-0003"}}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Empty(t, byForeignCVE)
+
+	byOwnCVE, _, _, err := ds.ListSoftwareTitles(ctxA,
+		fleet.SoftwareTitleListOptions{ListOptions: fleet.ListOptions{MatchQuery: "CVE-2026-0001"}}, tenants.globalAdminScope)
+	require.NoError(t, err)
+	require.Equal(t, []string{"alpha"}, titleNames(byOwnCVE))
 }
 
 // TestOpenframeVulnerabilitiesTeamFence verifies the OPENFRAME(mysql-multitenancy) fence on
