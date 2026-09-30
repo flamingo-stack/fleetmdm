@@ -1,3 +1,5 @@
+// >>> OPENFRAME(multi-tenancy): fork-only OpenFrame multi-tenancy, tenant pinning, and agent
+// option trimming logic for the shared-database multitenancy feature — openframe/docs/multi-tenancy.md
 package fleet
 
 import (
@@ -275,3 +277,5 @@ func openframeTrimStoredAgentOptions(raw *json.RawMessage) *json.RawMessage {
 	trimmed := json.RawMessage(out)
 	return &trimmed
 }
+
+// <<< OPENFRAME(multi-tenancy)

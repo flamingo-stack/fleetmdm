@@ -11,6 +11,8 @@ func init() {
 	MigrationClient.AddMigration(Up_20260423161823, Down_20260423161823)
 }
 
+// >>> OPENFRAME(host-scd-data): new host_scd_data table plus AppConfig/team
+// historical_data default backfill diverges from upstream default handling — openframe/docs/host-scd-data.md
 func Up_20260423161823(tx *sql.Tx) error {
 	// host_scd_data is the unified storage for all chart datasets. Rows are
 	// interval-based (valid_from, valid_to) bitmaps, written by one of two sample
@@ -77,6 +79,8 @@ func Up_20260423161823(tx *sql.Tx) error {
 
 	return nil
 }
+
+// <<< OPENFRAME(host-scd-data)
 
 func Down_20260423161823(tx *sql.Tx) error {
 	return nil

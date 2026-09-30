@@ -59,6 +59,9 @@ export const softwareSubNav: ISoftwareSubNavItem[] = [
   },
 ];
 
+// >>> OPENFRAME(software-library-tab): Adds a premium-only "Library" tab to the
+// Software section (self-service toggle, categories navigation, library version
+// column). See openframe/docs/software-library.md
 export const premiumSoftwareSubNav: ISoftwareSubNavItem[] = [
   ...softwareSubNav,
   {
@@ -66,6 +69,7 @@ export const premiumSoftwareSubNav: ISoftwareSubNavItem[] = [
     pathname: PATHS.SOFTWARE_LIBRARY,
   },
 ];
+// <<< OPENFRAME(software-library-tab)
 
 export const getTabIndex = (
   path: string,
@@ -171,8 +175,11 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
   const showExploitedVulnerabilitiesOnly =
     queryParams !== undefined && queryParams.exploit === "true";
 
-  // Library uses a self-service toggle (boolean), not the old dropdown filter
+  // >>> OPENFRAME(software-library-tab): self-service toggle used by the Library
+  // tab in place of the legacy availability dropdown filter.
+  // See openframe/docs/software-library.md
   const selfServiceOnly = queryParams?.self_service === "true";
+  // <<< OPENFRAME(software-library-tab)
 
   const softwareVulnFilters = getSoftwareVulnFiltersFromQueryParams(
     queryParams
@@ -199,11 +206,14 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
     router,
     includeAllTeams: true,
     includeNoTeam: true,
-    // When switching to "All fleets", remove self_service param (Library-only)
+    // >>> OPENFRAME(software-library-tab): When switching to "All fleets", remove
+    // self_service param since it is only meaningful within the Library tab.
+    // See openframe/docs/software-library.md
     overrideParamsOnTeamChange: {
       self_service: (newTeamId: number | undefined) =>
         newTeamId === APP_CONTEXT_ALL_TEAMS_ID,
     },
+    // <<< OPENFRAME(software-library-tab)
   });
 
   // softwareConfig is either the global config or the team config of the
@@ -317,9 +327,9 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
     [handleTeamChange]
   );
 
-  // Redirect away from Library tab if not allowed:
-  // - Free tier doesn't have Library
-  // - "All fleets" can't view Library
+  // >>> OPENFRAME(software-library-tab): Redirect away from the Library tab if
+  // not allowed — Library is premium-only and unavailable when "All fleets" is
+  // selected. See openframe/docs/software-library.md
   const isOnLibraryTab = location.pathname.startsWith(PATHS.SOFTWARE_LIBRARY);
   useEffect(() => {
     // Wait for config to load before deciding — isPremiumTier is undefined
@@ -340,6 +350,7 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
     currentTeamId,
     router,
   ]);
+  // <<< OPENFRAME(software-library-tab)
 
   const onApplyVulnFilters = (vulnFilters: ISoftwareVulnFiltersParams) => {
     const newQueryParams: ISoftwareApiParams = {
@@ -361,7 +372,10 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
     toggleSoftwareFiltersModal();
   };
 
+  // >>> OPENFRAME(software-library-tab): select the premium sub-nav (which
+  // includes the Library tab) for premium tier. See openframe/docs/software-library.md
   const navItems = isPremiumTier ? premiumSoftwareSubNav : softwareSubNav;
+  // <<< OPENFRAME(software-library-tab)
 
   const navigateToNav = useCallback(
     (i: number): void => {
@@ -441,7 +455,10 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
   };
 
   const renderBody = () => {
+    // >>> OPENFRAME(software-library-tab): Library tab is disabled when "All
+    // fleets" is selected. See openframe/docs/software-library.md
     const isLibraryDisabled = isAllTeamsSelected;
+    // <<< OPENFRAME(software-library-tab)
 
     return (
       <div>
@@ -452,6 +469,9 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
           >
             <TabList>
               {navItems.map((navItem) => {
+                // >>> OPENFRAME(software-library-tab): render the Library tab as
+                // disabled with a tooltip when no specific fleet is selected.
+                // See openframe/docs/software-library.md
                 const isDisabledTab =
                   navItem.name === "Library" && isLibraryDisabled;
 
@@ -470,6 +490,7 @@ const SoftwarePage = ({ children, router, location }: ISoftwarePageProps) => {
                     </Tab>
                   );
                 }
+                // <<< OPENFRAME(software-library-tab)
 
                 return (
                   <Tab key={navItem.name} data-text={navItem.name}>

@@ -1,5 +1,7 @@
 package service
 
+// >>> OPENFRAME(org-logo-modes): dual light/dark org logo mode support — openframe/docs/org-logo-modes.md
+
 import (
 	"bytes"
 	"context"
@@ -396,3 +398,5 @@ func (svc *Service) updateOrgLogoURLs(ctx context.Context, modes []fleet.OrgLogo
 	}
 	return nil
 }
+
+// <<< OPENFRAME(org-logo-modes)

@@ -1,3 +1,4 @@
+# >>> OPENFRAME(FLEETMDM-001): fork-added mysql_dev_access module
 terraform {
   required_providers {
     random = { source = "hashicorp/random", version = "~> 3.6" }
@@ -132,9 +133,19 @@ SQL
 #####################################
 # Outputs
 #####################################
+# NOTE: `sensitive = true` only redacts this value from CLI/plan/apply output.
+# The plaintext developer passwords (and the random_password resource
+# attributes they derive from) are still persisted unencrypted in the
+# Terraform state file for whatever backend is configured. Ensure the state
+# backend is encrypted at rest and access is tightly restricted. For a
+# stronger guarantee, replace this output with writing secrets directly to a
+# secrets manager (e.g. AWS Secrets Manager/SSM Parameter Store) instead of
+# exposing them via Terraform state/output.
 output "developer_passwords" {
   description = "Map of developer -> generated password"
   value       = { for u in var.developers : u => random_password.dev_pw[u].result }
   sensitive   = true
 }
+
+# <<< OPENFRAME(FLEETMDM-001): fork-added mysql_dev_access module
 

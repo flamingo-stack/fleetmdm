@@ -75,6 +75,25 @@ type defaultTeamResponse struct {
 
 func (r defaultTeamResponse) Error() error { return r.Err }
 
+// >>> OPENFRAME(default-team-view): shared constructor for the limited DefaultTeam shape returned for team ID 0 — openframe/docs/default-team.md
+func newDefaultTeamResponse(team *fleet.Team) *fleet.DefaultTeam {
+	return &fleet.DefaultTeam{
+		ID:   team.ID,
+		Name: team.Name,
+		DefaultTeamConfig: fleet.DefaultTeamConfig{
+			WebhookSettings: fleet.DefaultTeamWebhookSettings{
+				FailingPoliciesWebhook: team.Config.WebhookSettings.FailingPoliciesWebhook,
+			},
+			Integrations: fleet.DefaultTeamIntegrations{
+				Jira:    team.Config.Integrations.Jira,
+				Zendesk: team.Config.Integrations.Zendesk,
+			},
+		},
+	}
+}
+
+// <<< OPENFRAME(default-team-view)
+
 func getTeamEndpoint(ctx context.Context, request interface{}, svc fleet.Service) (fleet.Errorer, error) {
 	req := request.(*getTeamRequest)
 
@@ -83,23 +102,12 @@ func getTeamEndpoint(ctx context.Context, request interface{}, svc fleet.Service
 		return getTeamResponse{Err: err}, nil
 	}
 
+	// >>> OPENFRAME(default-team-view): return a limited DefaultTeam shape for team ID 0 — openframe/docs/default-team.md
 	// Special handling for team ID 0 - return DefaultTeam structure
 	if team.ID == 0 {
-		defaultTeam := &fleet.DefaultTeam{
-			ID:   team.ID,
-			Name: team.Name,
-			DefaultTeamConfig: fleet.DefaultTeamConfig{
-				WebhookSettings: fleet.DefaultTeamWebhookSettings{
-					FailingPoliciesWebhook: team.Config.WebhookSettings.FailingPoliciesWebhook,
-				},
-				Integrations: fleet.DefaultTeamIntegrations{
-					Jira:    team.Config.Integrations.Jira,
-					Zendesk: team.Config.Integrations.Zendesk,
-				},
-			},
-		}
-		return defaultTeamResponse{Team: defaultTeam}, nil
+		return defaultTeamResponse{Team: newDefaultTeamResponse(team)}, nil
 	}
+	// <<< OPENFRAME(default-team-view)
 
 	return getTeamResponse{Team: team}, nil
 }
@@ -172,24 +180,13 @@ func modifyTeamEndpoint(ctx context.Context, request interface{}, svc fleet.Serv
 		return teamResponse{Err: err}, nil
 	}
 
+	// >>> OPENFRAME(default-team-view): return a limited DefaultTeam shape for team ID 0 — openframe/docs/default-team.md
 	// Special handling for team ID 0 - return limited fields
 	if req.ID == 0 {
 		// Convert to DefaultTeam with limited fields
-		defaultTeam := &fleet.DefaultTeam{
-			ID:   team.ID,
-			Name: team.Name,
-			DefaultTeamConfig: fleet.DefaultTeamConfig{
-				WebhookSettings: fleet.DefaultTeamWebhookSettings{
-					FailingPoliciesWebhook: team.Config.WebhookSettings.FailingPoliciesWebhook,
-				},
-				Integrations: fleet.DefaultTeamIntegrations{
-					Jira:    team.Config.Integrations.Jira,
-					Zendesk: team.Config.Integrations.Zendesk,
-				},
-			},
-		}
-		return defaultTeamResponse{Team: defaultTeam}, nil
+		return defaultTeamResponse{Team: newDefaultTeamResponse(team)}, nil
 	}
+	// <<< OPENFRAME(default-team-view)
 
 	return teamResponse{Team: team}, err
 }
@@ -314,7 +311,7 @@ func applyTeamSpecsEndpoint(ctx context.Context, request interface{}, svc fleet.
 	return applyTeamSpecsResponse{TeamIDsByName: idsByName}, nil
 }
 
-func (svc Service) ApplyTeamSpecs(ctx context.Context, _ []*fleet.TeamSpec, _ fleet.ApplyTeamSpecOptions) (map[string]uint, error) {
+func (svc *Service) ApplyTeamSpecs(ctx context.Context, _ []*fleet.TeamSpec, _ fleet.ApplyTeamSpecOptions) (map[string]uint, error) {
 	// skipauth: No authorization check needed due to implementation returning
 	// only license error.
 	svc.authz.SkipAuthorization(ctx)

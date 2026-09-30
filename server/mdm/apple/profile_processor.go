@@ -14,8 +14,10 @@ import (
 	"sync"
 	"time"
 
+	// >>> OPENFRAME(profile-processor): DigiCert, Smallstep SCEP, and custom SCEP CA support — openframe/docs/mdm-profile-processor.md
 	"github.com/fleetdm/fleet/v4/ee/server/service/digicert"
 	"github.com/fleetdm/fleet/v4/ee/server/service/scep"
+	// <<< OPENFRAME(profile-processor)
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/contexts/license"
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -26,8 +28,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// >>> OPENFRAME(profile-processor): host end-user IdP email variable substitution — openframe/docs/mdm-profile-processor.md
 // LEGACY VARIABLE
 var fleetVarHostEndUserEmailIDPRegexp = regexp.MustCompile(fmt.Sprintf(`(\$FLEET_VAR_%s)|(\${FLEET_VAR_%[1]s})`, fleet.FleetVarHostEndUserEmailIDP))
+
+// <<< OPENFRAME(profile-processor)
 
 // EnqueueResult holds the results of profile enqueue operations.
 type EnqueueResult struct {
@@ -61,16 +66,20 @@ func ProcessAndEnqueueProfiles(ctx context.Context,
 		}
 	}
 
+	// >>> OPENFRAME(profile-processor): grouped certificate authorities (DigiCert, Smallstep, custom SCEP CAs) — openframe/docs/mdm-profile-processor.md
 	groupedCAs, err := ds.GetGroupedCertificateAuthorities(ctx, true)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "getting grouped certificate authorities")
 	}
+	// <<< OPENFRAME(profile-processor)
 
 	// Insert variables into profile contents of install targets. Variables may be host-specific.
+	// >>> OPENFRAME(profile-processor): pass SCEP config service, DigiCert service, and grouped CAs into preprocessing — openframe/docs/mdm-profile-processor.md
 	err = preprocessProfileContents(ctx, appConfig, ds,
 		scep.NewSCEPConfigService(logger, nil),
 		digicert.NewService(digicert.WithLogger(logger)),
 		logger, installTargets, profileContents, hostProfilesToInstallMap, userEnrollmentsToHostUUIDsMap, groupedCAs)
+	// <<< OPENFRAME(profile-processor)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +159,7 @@ func ProcessAndEnqueueProfiles(ctx context.Context,
 	return result, nil
 }
 
+// >>> OPENFRAME(profile-processor): DigiCert, Smallstep SCEP, custom SCEP CA, and host end-user IdP variable substitution logic — openframe/docs/mdm-profile-processor.md
 func preprocessProfileContents(
 	ctx context.Context,
 	appConfig *fleet.AppConfig,
@@ -235,6 +245,7 @@ func preprocessProfileContents(
 				fleetVar == string(fleet.FleetVarHostEndUserIDPFullname) || fleetVar == string(fleet.FleetVarHostUUID):
 				// No extra validation needed for these variables
 
+			// >>> OPENFRAME(profile-processor): DigiCert CA validation — openframe/docs/mdm-profile-processor.md
 			case strings.HasPrefix(fleetVar, string(fleet.FleetVarDigiCertPasswordPrefix)) || strings.HasPrefix(fleetVar, string(fleet.FleetVarDigiCertDataPrefix)):
 				caName, found := strings.CutPrefix(fleetVar, string(fleet.FleetVarDigiCertPasswordPrefix))
 				if !found {
@@ -252,7 +263,9 @@ func preprocessProfileContents(
 					valid = false
 					break initialFleetVarLoop
 				}
+			// <<< OPENFRAME(profile-processor)
 
+			// >>> OPENFRAME(profile-processor): custom SCEP CA validation — openframe/docs/mdm-profile-processor.md
 			case strings.HasPrefix(fleetVar, string(fleet.FleetVarCustomSCEPChallengePrefix)) || strings.HasPrefix(fleetVar, string(fleet.FleetVarCustomSCEPProxyURLPrefix)):
 				caName, found := strings.CutPrefix(fleetVar, string(fleet.FleetVarCustomSCEPChallengePrefix))
 				if !found {
@@ -275,7 +288,9 @@ func preprocessProfileContents(
 					valid = false
 					break initialFleetVarLoop
 				}
+			// <<< OPENFRAME(profile-processor)
 
+			// >>> OPENFRAME(profile-processor): Smallstep SCEP CA validation — openframe/docs/mdm-profile-processor.md
 			case strings.HasPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPChallengePrefix)) || strings.HasPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPProxyURLPrefix)):
 				if smallstepCAs == nil {
 					smallstepCAs = make(map[string]*fleet.SmallstepSCEPProxyCA)
@@ -294,6 +309,7 @@ func preprocessProfileContents(
 					valid = false
 					break initialFleetVarLoop
 				}
+			// <<< OPENFRAME(profile-processor)
 
 			default:
 				// Otherwise, error out since this variable is unknown
@@ -406,6 +422,7 @@ func preprocessProfileContents(
 					fleetRenewalID := "fleet-" + profUUID
 					hostContents = profiles.ReplaceFleetVariableInXML(fleet.FleetVarRenewalIDRegexp, hostContents, fleetRenewalID)
 
+				// >>> OPENFRAME(profile-processor): custom SCEP CA challenge/proxy URL substitution — openframe/docs/mdm-profile-processor.md
 				case strings.HasPrefix(fleetVar, string(fleet.FleetVarCustomSCEPChallengePrefix)):
 					replacedContents, replacedVariable, err := profiles.ReplaceCustomSCEPChallengeVariable(ctx, logger, fleetVar, customSCEPCAs, hostContents)
 					if err != nil {
@@ -426,7 +443,9 @@ func preprocessProfileContents(
 					}
 					hostContents = replacedContents
 					managedCertificatePayloads = append(managedCertificatePayloads, managedCertificate)
+				// <<< OPENFRAME(profile-processor)
 
+				// >>> OPENFRAME(profile-processor): Smallstep SCEP CA challenge/proxy URL substitution — openframe/docs/mdm-profile-processor.md
 				case strings.HasPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPChallengePrefix)):
 					caName := strings.TrimPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPChallengePrefix))
 					ca, ok := smallstepCAs[caName]
@@ -477,7 +496,9 @@ func preprocessProfileContents(
 					if err != nil {
 						return ctxerr.Wrap(ctx, err, "replacing Smallstep SCEP URL variable")
 					}
+				// <<< OPENFRAME(profile-processor)
 
+				// >>> OPENFRAME(profile-processor): host end-user IdP email variable substitution — openframe/docs/mdm-profile-processor.md
 				case fleetVar == string(fleet.FleetVarHostEndUserEmailIDP):
 					// FIXME: if this is used together with a CA, and fail inside getFirstIDPEmail, the profile will fail, but not get the correct variablesUpdatedAt var.
 					email, ok, err := getFirstIDPEmail(ctx, ds, target, hostUUID)
@@ -489,6 +510,7 @@ func preprocessProfileContents(
 						break fleetVarLoop
 					}
 					hostContents = profiles.ReplaceFleetVariableInXML(fleetVarHostEndUserEmailIDPRegexp, hostContents, email)
+				// <<< OPENFRAME(profile-processor)
 
 				case fleetVar == string(fleet.FleetVarHostHardwareSerial):
 					hostLite, ok, err = profiles.HydrateHost(ctx, ds, hostLite, onMismatchedHostCount)
@@ -539,6 +561,7 @@ func preprocessProfileContents(
 
 					hostContents = replacedContents
 
+				// >>> OPENFRAME(profile-processor): DigiCert CA data/password variable substitution — openframe/docs/mdm-profile-processor.md
 				case strings.HasPrefix(fleetVar, string(fleet.FleetVarDigiCertPasswordPrefix)):
 					// We will replace the password when we populate the certificate data
 
@@ -626,6 +649,7 @@ func preprocessProfileContents(
 						CAName:         caName,
 						Serial:         &cert.SerialNumber,
 					})
+				// <<< OPENFRAME(profile-processor)
 
 				default:
 					// This was handled in the above switch statement, so we should never reach this case
@@ -665,6 +689,9 @@ func preprocessProfileContents(
 	return nil
 }
 
+// <<< OPENFRAME(profile-processor)
+
+// >>> OPENFRAME(profile-processor): host end-user IdP email lookup helper — openframe/docs/mdm-profile-processor.md
 func getFirstIDPEmail(ctx context.Context, ds fleet.Datastore, target *fleet.CmdTarget, hostUUID string) (string, bool, error) {
 	// Insert the end user email IDP into the profile contents
 	emails, err := ds.GetHostEmails(ctx, hostUUID, fleet.DeviceMappingMDMIdpAccounts)
@@ -692,6 +719,9 @@ func getFirstIDPEmail(ctx context.Context, ds fleet.Datastore, target *fleet.Cmd
 	return emails[0], true, nil
 }
 
+// <<< OPENFRAME(profile-processor)
+
+// >>> OPENFRAME(profile-processor): DigiCert CA field variable substitution helper — openframe/docs/mdm-profile-processor.md
 func replaceFleetVarInItem(ctx context.Context, ds fleet.Datastore, target *fleet.CmdTarget, hostLite fleet.Host, caVarsCache map[string]string, item *string, onMismatchedHostCount func(int) error) (bool, error) {
 	caFleetVars := variables.Find(*item)
 	for _, caVar := range caFleetVars {
@@ -751,6 +781,9 @@ func replaceFleetVarInItem(ctx context.Context, ds fleet.Datastore, target *flee
 	return true, nil
 }
 
+// <<< OPENFRAME(profile-processor)
+
+// >>> OPENFRAME(profile-processor): DigiCert CA configuration check — openframe/docs/mdm-profile-processor.md
 func isDigiCertConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *fleet.GroupedCertificateAuthorities, ds fleet.Datastore,
 	hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload,
 	userEnrollmentsToHostUUIDsMap map[string]string,
@@ -782,6 +815,8 @@ func isDigiCertConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *
 	return true, nil
 }
 
+// <<< OPENFRAME(profile-processor)
+
 func isNDESSCEPConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *fleet.GroupedCertificateAuthorities, ds fleet.Datastore,
 	hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload, userEnrollmentsToHostUUIDsMap map[string]string, profUUID string, target *fleet.CmdTarget,
 ) (bool, error) {
@@ -795,6 +830,7 @@ func isNDESSCEPConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *
 	return true, nil
 }
 
+// >>> OPENFRAME(profile-processor): Smallstep SCEP CA configuration check — openframe/docs/mdm-profile-processor.md
 func isSmallstepSCEPConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *fleet.GroupedCertificateAuthorities, ds fleet.Datastore,
 	hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload,
 	userEnrollmentsToHostUUIDsMap map[string]string,
@@ -825,6 +861,8 @@ func isSmallstepSCEPConfigured(ctx context.Context, logger *slog.Logger, grouped
 	existingSmallstepSCEPCAs[caName] = scepCA
 	return true, nil
 }
+
+// <<< OPENFRAME(profile-processor)
 
 func getHostProfileToInstallByEnrollmentID(hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload,
 	userEnrollmentsToHostUUIDsMap map[string]string,

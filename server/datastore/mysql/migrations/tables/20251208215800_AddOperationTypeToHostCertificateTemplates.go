@@ -9,6 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20251208215800, Down_20251208215800)
 }
 
+// >>> OPENFRAME(host-cert-templates-operation-type): Add operation_type column and FK to mdm_operation_types for host_certificate_templates, tracking install/remove state consistent with other MDM profile tables — openframe/docs/mdm-certificate-templates.md
 func Up_20251208215800(tx *sql.Tx) error {
 	// Idempotent migration.
 	// Add operation_type column to host_certificate_templates table.
@@ -42,3 +43,5 @@ ALTER TABLE host_certificate_templates
 func Down_20251208215800(tx *sql.Tx) error {
 	return nil
 }
+
+// <<< OPENFRAME(host-cert-templates-operation-type)

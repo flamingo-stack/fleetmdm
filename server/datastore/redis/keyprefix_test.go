@@ -7,6 +7,8 @@
 // need no live Redis.
 package redis
 
+// >>> OPENFRAME(redis-key-prefix): openframe/docs/redis-key-prefix.md
+
 import (
 	"reflect"
 	"testing"
@@ -166,3 +168,5 @@ func TestUnwrapConn_Plain(t *testing.T) {
 		t.Errorf("unwrapConn(plain) = (%v, %q), want (fc, \"\")", got, prefix)
 	}
 }
+
+// <<< OPENFRAME(redis-key-prefix)

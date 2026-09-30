@@ -11,6 +11,9 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// >>> OPENFRAME(mysql-campaign-cleanup): campaign target cleanup constants and logic added in the
+// fork to bound the size of distributed_query_campaign_targets for completed campaigns. Not part
+// of upstream fleetdm/fleet.
 // Campaign cleanup constants (private to this package)
 const (
 	// campaignTargetsCleanupBatchSize is the batch size for deleting campaign targets
@@ -26,6 +29,8 @@ const (
 	// campaignTargetsCleanupBatchSleep is the sleep duration between deletion batches to avoid overloading the database
 	campaignTargetsCleanupBatchSleep = 100 * time.Millisecond
 )
+
+// <<< OPENFRAME(mysql-campaign-cleanup)
 
 func (ds *Datastore) NewDistributedQueryCampaign(ctx context.Context, camp *fleet.DistributedQueryCampaign) (*fleet.DistributedQueryCampaign, error) {
 	args := []any{camp.QueryID, camp.Status, camp.UserID}
@@ -235,6 +240,9 @@ func (ds *Datastore) CleanupDistributedQueryCampaigns(ctx context.Context, now t
 	return uint(exp), nil //nolint:gosec // dismiss G115
 }
 
+// >>> OPENFRAME(mysql-campaign-cleanup): CleanupCompletedCampaignTargets is fork-specific logic
+// added to bound distributed_query_campaign_targets growth for completed campaigns. Not part of
+// upstream fleetdm/fleet.
 // CleanupCompletedCampaignTargets removes campaign targets for campaigns that have been
 // completed for more than the specified duration. This helps improve campaign performance by
 // cleaning up historical data that is no longer needed.
@@ -336,3 +344,5 @@ func (ds *Datastore) CleanupCompletedCampaignTargets(ctx context.Context, olderT
 
 	return totalDeleted, nil
 }
+
+// <<< OPENFRAME(mysql-campaign-cleanup)
