@@ -29,7 +29,7 @@ func Up_20260522195225(tx *sql.Tx) error {
 		ALTER TABLE host_managed_local_account_passwords
 			ADD KEY idx_hmlap_auto_rotate_at (auto_rotate_at)
 	`); err != nil {
-			return fmt.Errorf("adding rotation columns to host_managed_local_account_passwords: %w", err)
+			return fmt.Errorf("adding idx_hmlap_auto_rotate_at index to host_managed_local_account_passwords: %w", err)
 		}
 	}
 	return nil

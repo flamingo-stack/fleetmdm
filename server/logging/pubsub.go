@@ -78,9 +78,13 @@ func (w *pubSubLogWriter) Write(ctx context.Context, logs []json.RawMessage) err
 		}
 
 		if len(data)+estimateAttributeSize(attributes) > pubsub.MaxPublishRequestBytes {
+			logPreview := log
+			if len(logPreview) > 100 {
+				logPreview = logPreview[:100]
+			}
 			w.logger.InfoContext(ctx, "dropping log over 10MB PubSub limit",
 				"size", len(data),
-				"log", string(log[:100])+"...",
+				"log", string(logPreview)+"...",
 			)
 			continue
 		}
@@ -95,6 +99,9 @@ func (w *pubSubLogWriter) Write(ctx context.Context, logs []json.RawMessage) err
 
 	// Wait for each message to be pushed to the server
 	for _, result := range results {
+		if result == nil {
+			continue
+		}
 		_, err := result.Get(ctx)
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "pubsub publish")

@@ -2,6 +2,7 @@ package tables
 
 import (
 	"database/sql"
+	"fmt"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func Up_20260409153714(tx *sql.Tx) error {
 			)
 		`)
 		if err != nil {
-			return err
+			return fmt.Errorf("create user_api_endpoints table: %w", err)
 		}
 	}
 

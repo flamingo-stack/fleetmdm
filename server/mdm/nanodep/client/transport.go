@@ -234,7 +234,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		session, err = DoAuth(t.client, sessionReq, tokens)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("transport: performing dep auth: %w", err)
 		}
 
 		// save our session token for use by following requests
@@ -277,3 +277,4 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	return resp, nil
 }
+

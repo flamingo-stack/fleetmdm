@@ -51,7 +51,7 @@ func (r *redisFailingPolicySet) ListSets() ([]uint, error) {
 
 	ids, err := redigo.Uint64s(conn.Do("SMEMBERS", r.policySetOfSetsKey()))
 	if err != nil && err != redigo.ErrNil {
-		return nil, err
+		return nil, fmt.Errorf("list failing policy sets: %w", err)
 	}
 	policyIDs := make([]uint, len(ids))
 	for i := range ids {
@@ -144,7 +144,10 @@ func (r *redisFailingPolicySet) RemoveHosts(policyID uint, hosts []fleet.PolicyS
 		args = args.Add(hostEntry(host))
 	}
 	_, err := conn.Do("SREM", args...)
-	return err
+	if err != nil {
+		return fmt.Errorf("remove hosts from policy set: %w", err)
+	}
+	return nil
 }
 
 // RemoveSet removes a policy set.
