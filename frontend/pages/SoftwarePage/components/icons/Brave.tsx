@@ -5,6 +5,7 @@ import type { SVGProps } from "react";
 const Brave = (props: SVGProps<SVGSVGElement>) => {
   const clipPathId = uniqueId("clip-path-");
   const fillPathId = uniqueId("fill-path-");
+  const fillPathId2 = uniqueId("fill-path-");
   return (
     <svg fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
       <rect width="32" height="32" fill="white" />
@@ -23,7 +24,7 @@ const Brave = (props: SVGProps<SVGSVGElement>) => {
         />
         <path
           d="M22.0823 5.82772L19.8724 3.31738H15.9915H12.1106L9.90071 5.82772C9.90071 5.82772 7.96028 5.28804 7.04396 6.2055C7.04396 6.2055 9.6312 5.97166 10.5206 7.41979C10.5206 7.41979 12.9192 7.87852 13.2426 7.87852C13.566 7.87852 14.2667 7.60868 14.9135 7.3928C15.5603 7.17693 15.9915 7.17537 15.9915 7.17537C15.9915 7.17537 16.4227 7.17693 17.0695 7.3928C17.7163 7.60868 18.4171 7.87852 18.7405 7.87852C19.0639 7.87852 21.4625 7.41979 21.4625 7.41979C22.3518 5.97166 24.9391 6.2055 24.9391 6.2055C24.0228 5.28804 22.0823 5.82772 22.0823 5.82772Z"
-          fill={`url(#${fillPathId})`}
+          fill={`url(#${fillPathId2})`}
         />
       </g>
       <defs>
@@ -41,7 +42,7 @@ const Brave = (props: SVGProps<SVGSVGElement>) => {
           <stop offset="1" stopColor="#FF2000" />
         </linearGradient>
         <linearGradient
-          id={fillPathId}
+          id={fillPathId2}
           x1="45.4905"
           y1="234.592"
           x2="1796.55"
