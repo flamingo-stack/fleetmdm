@@ -10,35 +10,39 @@ import (
 	"time"
 
 	"github.com/fleetdm/fleet/v4/pkg/fleethttp"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/vulnerabilities/io"
 	"github.com/fleetdm/fleet/v4/server/vulnerabilities/msrc"
 	"github.com/fleetdm/fleet/v4/server/vulnerabilities/msrc/parsed"
 	"github.com/google/go-github/v37/github"
 )
 
-func panicif(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 const cleanEnvVar = "MSRC_CLEAN"
 
 func main() {
+	ctx := context.Background()
+
 	wd, err := os.Getwd()
-	panicif(err)
+	if err != nil {
+		ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "get working directory"))
+		os.Exit(1)
+	}
 
 	inPath := filepath.Join(wd, "msrc_in")
 	err = os.MkdirAll(inPath, 0o755)
-	panicif(err)
+	if err != nil {
+		ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "create msrc_in directory"))
+		os.Exit(1)
+	}
 
 	outPath := filepath.Join(wd, "msrc_out")
 	err = os.MkdirAll(outPath, 0o755)
-	panicif(err)
+	if err != nil {
+		ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "create msrc_out directory"))
+		os.Exit(1)
+	}
 
 	now := time.Now()
-
-	ctx := context.Background()
 
 	githubHttp := fleethttp.NewGithubClient()
 	ghAPI := io.NewGitHubClient(githubHttp, github.NewClient(githubHttp).Repositories, wd)
@@ -48,22 +52,34 @@ func main() {
 
 	fmt.Println("Downloading existing MSRC bulletins...")
 	eBulletins, err := ghAPI.MSRCBulletins(ctx)
-	panicif(err)
+	if err != nil {
+		ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "download existing MSRC bulletins"))
+		os.Exit(1)
+	}
 	var bulletins []*parsed.SecurityBulletin
-	if len(eBulletins) == 0 || os.Getenv(cleanEnvVar) != "false" {
+	if len(eBulletins) == 0 || os.Getenv(cleanEnvVar) == "true" {
 		fmt.Println("None found, backfilling...")
 		bulletins, err = backfill(now.Month(), now.Year(), msrcAPI)
-		panicif(err)
+		if err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "backfill bulletins"))
+			os.Exit(1)
+		}
 	} else {
 		fmt.Println("Updating existing bulletins")
 		bulletins, err = update(now.Month(), now.Year(), eBulletins, msrcAPI, ghAPI)
-		panicif(err)
+		if err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "update bulletins"))
+			os.Exit(1)
+		}
 	}
 
 	fmt.Println("Saving bulletins...")
 	for _, b := range bulletins {
 		err := serialize(b, now, outPath)
-		panicif(err)
+		if err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "serialize bulletin"))
+			os.Exit(1)
+		}
 	}
 
 	fmt.Println("Done processing MSRC feed.")

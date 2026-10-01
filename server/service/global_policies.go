@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,7 +55,7 @@ func (svc Service) NewGlobalPolicy(ctx context.Context, p fleet.PolicyPayload) (
 	}
 	vc, ok := viewer.FromContext(ctx)
 	if !ok {
-		return nil, errors.New("user must be authenticated to create fleet policies")
+		return nil, ctxerr.New(ctx, "user must be authenticated to create fleet policies")
 	}
 
 	if err := p.Verify(); err != nil {
@@ -179,6 +178,8 @@ func (svc Service) DeleteGlobalPolicies(ctx context.Context, ids []uint) ([]uint
 				continue
 			}
 			// <<< OPENFRAME(mysql-multitenancy)
+			// The following return is upstream logic (not fork-only): reject deletion of any
+			// team-owned policy when no tenant pin applies.
 			return nil, authz.ForbiddenWithInternal(
 				"attempting to delete policy that belongs to team",
 				authz.UserFromContext(ctx),
@@ -457,7 +458,7 @@ func (svc *Service) ApplyPolicySpecs(ctx context.Context, policies []*fleet.Poli
 
 	vc, ok := viewer.FromContext(ctx)
 	if !ok {
-		return errors.New("user must be authenticated to apply policies")
+		return ctxerr.New(ctx, "user must be authenticated to apply policies")
 	}
 
 	// After the authorization check, check the policy fields.
@@ -857,3 +858,4 @@ func (svc *Service) ListPolicyHosts(ctx context.Context, policyID uint, opts fle
 }
 
 // <<< OPENFRAME(host-assignments)
+

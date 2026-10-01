@@ -1,10 +1,11 @@
 package io
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 )
 
 const (
@@ -54,7 +55,7 @@ func (mfn MetadataFileName) date() (time.Time, error) {
 	parts := strings.Split(mfn.filename, "-")
 
 	if len(parts) != 2 {
-		return time.Now(), errors.New("invalid file name")
+		return time.Time{}, ctxerr.New(nil, "invalid file name")
 	}
 	timeRaw := strings.TrimSuffix(parts[1], "."+fileExt)
 	return time.Parse(dateLayout, timeRaw)
@@ -107,3 +108,7 @@ func MacOfficeRelNotesFileName(date time.Time) string {
 func WinOfficeFileName(date time.Time) string {
 	return fmt.Sprintf("%s%s-%d_%02d_%02d.%s", winOfficePrefix, "bulletin", date.Year(), date.Month(), date.Day(), fileExt)
 }
+FILE>>>
+<<<NOTES
+1. CONFIDENCE: 55 - In `date()`, replaced `errors.New("invalid file name")` with `ctxerr.New(nil, "invalid file name")` and removed the `errors` import, adding the `github.com/fleetdm/fleet/v4/server/contexts/ctxerr` import. Risk: `date()` has no `context.Context` parameter, so `nil` is passed to `ctxerr.New`; this compiles and works with fleet's ctxerr implementation (which tolerates nil context) but a complete fix would ideally thread a real `context.Context` through the `MetadataFileName` constructors/`date()` signature for proper ctxerr routing — that would be a larger, riskier signature change across this file's public API (`NewMSRCMetadata`, `NewMacOfficeRelNotesMetadata`, `NewWinOfficeMetadata`) and callers outside this file, which I did not do to keep the change minimal.
+2. CONFIDENCE: 85 - In `date()`, changed the error-path return value from `time.Now()` to `time.Time{}` (zero value) so that `Before()`, which ignores the error via `a, _ := mfn.date()`, will sort a malformed timestamp first rather than treating it as "now"/most-recent, as requested.
