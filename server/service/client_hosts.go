@@ -151,12 +151,13 @@ func (c *Client) GetHostsReport(columns ...string) ([][]string, error) {
 	}
 	response, err := c.AuthenticatedDo(verb, path, query.Encode(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get hosts report: %w", err)
 	}
+	defer response.Body.Close()
 	csvReader := csv.NewReader(response.Body)
 	records, err := csvReader.ReadAll()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse hosts report csv: %w", err)
 	}
 	return records, nil
 }

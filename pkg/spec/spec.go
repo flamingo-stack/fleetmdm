@@ -201,7 +201,7 @@ func GroupFromBytes(b []byte, options ...GroupFromBytesOpts) (*Group, error) {
 			specs.AppConfig = appConfigSpec
 
 		case fleet.EnrollSecretKind:
-			if specs.AppConfig != nil {
+			if specs.EnrollSecret != nil {
 				return nil, errors.New("enroll_secret defined twice in the same file")
 			}
 
@@ -278,12 +278,12 @@ func SplitYaml(in string) []string {
 	return out
 }
 
-func generateRandomString(sizeBytes int) string {
+func generateRandomString(sizeBytes int) (string, error) {
 	b := make([]byte, sizeBytes)
 	if _, err := rand.Read(b); err != nil {
-		panic(err)
+		return "", err
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 // secretHandling defines how to handle FLEET_SECRET_ variables
@@ -312,7 +312,11 @@ func expandEnv(s string, secretMode secretHandling) (string, error) {
 	// Generate a random escaping prefix that doesn't exist in s.
 	var preventEscapingPrefix string
 	for {
-		preventEscapingPrefix = "PREVENT_ESCAPING_" + generateRandomString(8)
+		randStr, err := generateRandomString(8)
+		if err != nil {
+			return "", fmt.Errorf("generating random string: %w", err)
+		}
+		preventEscapingPrefix = "PREVENT_ESCAPING_" + randStr
 		if !strings.Contains(s, preventEscapingPrefix) {
 			break
 		}
