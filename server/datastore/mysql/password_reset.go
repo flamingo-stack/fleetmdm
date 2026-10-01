@@ -49,7 +49,7 @@ func (ds *Datastore) FindPasswordResetByToken(ctx context.Context, token string)
 	passwordResetRequest := &fleet.PasswordResetRequest{}
 	err := sqlx.GetContext(ctx, ds.reader(ctx), passwordResetRequest, sqlStatement, token)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ctxerr.Wrap(ctx, err, "invalid password reset token")
+		return nil, ctxerr.Wrap(ctx, notFound("PasswordResetRequest"), "invalid password reset token")
 	} else if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "selecting password reset token")
 	}

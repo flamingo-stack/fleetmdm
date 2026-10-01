@@ -16,6 +16,7 @@ import (
 
 	"github.com/fleetdm/fleet/v4/server"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
@@ -100,11 +101,11 @@ func getFrom(e fleet.Email) (string, error) {
 
 func (m mailService) SendEmail(ctx context.Context, e fleet.Email) error {
 	if !e.SMTPSettings.SMTPConfigured {
-		return errors.New("requires that SMTP or SES (email) is configured.")
+		return ctxerr.New(ctx, "requires that SMTP or SES (email) is configured.")
 	}
 	msg, err := getMessageBody(e, getFrom)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "get message body")
 	}
 	return m.sendMail(ctx, e, msg)
 }
@@ -129,11 +130,11 @@ func isLocalhost(name string) bool {
 
 func (l *loginauth) Start(server *smtp.ServerInfo) (proto string, toServer []byte, err error) {
 	if !server.TLS && !isLocalhost(server.Name) {
-		return "", nil, errors.New("unencrypted connection")
+		return "", nil, ctxerr.New(context.Background(), "unencrypted connection")
 	}
 
 	if server.Name != l.host {
-		return "", nil, errors.New("wrong host name")
+		return "", nil, ctxerr.New(context.Background(), "wrong host name")
 	}
 
 	return "LOGIN", nil, nil
@@ -151,11 +152,11 @@ func (l *loginauth) Next(fromServer []byte, more bool) (toServer []byte, err err
 	case "Password:":
 		return []byte(l.password), nil
 	default:
-		return nil, errors.New("unexpected LOGIN prompt from server")
+		return nil, ctxerr.New(context.Background(), "unexpected LOGIN prompt from server")
 	}
 }
 
-func smtpAuth(e fleet.Email) (smtp.Auth, error) {
+func smtpAuth(ctx context.Context, e fleet.Email) (smtp.Auth, error) {
 	if e.SMTPSettings.SMTPAuthenticationType != fleet.AuthTypeNameUserNamePassword {
 		return nil, nil
 	}
@@ -174,7 +175,7 @@ func smtpAuth(e fleet.Email) (smtp.Auth, error) {
 	case fleet.AuthMethodNameLogin:
 		auth = LoginAuth(username, password, server)
 	default:
-		return nil, fmt.Errorf("unknown SMTP auth type '%s'", authMethod)
+		return nil, ctxerr.Errorf(ctx, "unknown SMTP auth type '%s'", authMethod)
 	}
 	return auth, nil
 }
@@ -182,15 +183,15 @@ func smtpAuth(e fleet.Email) (smtp.Auth, error) {
 func (m mailService) sendMail(ctx context.Context, e fleet.Email, msg []byte) error {
 	smtpHost := fmt.Sprintf(
 		"%s:%d", e.SMTPSettings.SMTPServer, e.SMTPSettings.SMTPPort)
-	auth, err := smtpAuth(e)
+	auth, err := smtpAuth(ctx, e)
 	if err != nil {
-		return fmt.Errorf("failed to get smtp auth: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to get smtp auth")
 	}
 
 	if e.SMTPSettings.SMTPAuthenticationMethod == fleet.AuthMethodNameCramMD5 {
 		err = smtp.SendMail(smtpHost, auth, e.SMTPSettings.SMTPSenderAddress, e.To, msg)
 		if err != nil {
-			return fmt.Errorf("failed to send mail. crammd5 auth method: %w", err)
+			return ctxerr.Wrap(ctx, err, "failed to send mail. crammd5 auth method")
 		}
 		return nil
 	}
@@ -202,18 +203,18 @@ func (m mailService) sendMail(ctx context.Context, e fleet.Email, msg []byte) er
 
 	var client *smtp.Client
 	if e.SMTPSettings.SMTPEnableTLS {
-		client, err = dialTimeout(smtpHost, tlsConfig)
+		client, err = dialTimeout(ctx, smtpHost, tlsConfig)
 	} else {
-		client, err = dialTimeout(smtpHost, nil)
+		client, err = dialTimeout(ctx, smtpHost, nil)
 	}
 	if err != nil {
-		return fmt.Errorf("could not dial smtp host: %w", err)
+		return ctxerr.Wrap(ctx, err, "could not dial smtp host")
 	}
 	defer client.Close()
 
 	if e.SMTPSettings.SMTPDomain != "" {
 		if err = client.Hello(e.SMTPSettings.SMTPDomain); err != nil {
-			return fmt.Errorf("client hello error: %w", err)
+			return ctxerr.Wrap(ctx, err, "client hello error")
 		}
 	}
 	if e.SMTPSettings.SMTPEnableStartTLS {
@@ -224,42 +225,42 @@ func (m mailService) sendMail(ctx context.Context, e fleet.Email, msg []byte) er
 				if !e.SMTPSettings.SMTPEnableTLS && e.SMTPSettings.SMTPVerifySSLCerts {
 					return ErrSTARTTLSWithoutSSLTLS
 				}
-				return fmt.Errorf("startTLS error: %w", err)
+				return ctxerr.Wrap(ctx, err, "startTLS error")
 			}
 		}
 	}
 	if auth != nil {
 		if err = client.Auth(auth); err != nil {
-			return fmt.Errorf("client auth error: %w", err)
+			return ctxerr.Wrap(ctx, err, "client auth error")
 		}
 	}
 	if err = client.Mail(e.SMTPSettings.SMTPSenderAddress); err != nil {
-		return fmt.Errorf("could not issue mail to provided address: %w", err)
+		return ctxerr.Wrap(ctx, err, "could not issue mail to provided address")
 	}
 	for _, recip := range e.To {
 		if err = client.Rcpt(recip); err != nil {
-			return fmt.Errorf("failed to get recipient: %w", err)
+			return ctxerr.Wrap(ctx, err, "failed to get recipient")
 		}
 	}
 	writer, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("getting client data: %w", err)
+		return ctxerr.Wrap(ctx, err, "getting client data")
 	}
 
 	_, err = writer.Write(msg)
 	if err != nil {
-		return fmt.Errorf("failed to write: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to write")
 	}
 
 	if err = writer.Close(); err != nil {
-		return fmt.Errorf("failed to close writer: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to close writer")
 	}
 
 	if err := client.Quit(); err != nil {
 		// Ignore EOF errors on quit, which can happen if the server
 		// closes the connection after the message is sent.
 		if !errors.Is(err, io.EOF) {
-			return fmt.Errorf("error on client quit: %w", err)
+			return ctxerr.Wrap(ctx, err, "error on client quit")
 		}
 	}
 	return nil
@@ -269,7 +270,7 @@ const dialTimeoutDuration = 28 * time.Second
 
 // dialTimeout sets a timeout on net.Dial to prevent email from attempting to
 // send indefinitely.
-func dialTimeout(addr string, tlsConfig *tls.Config) (client *smtp.Client, err error) {
+func dialTimeout(ctx context.Context, addr string, tlsConfig *tls.Config) (client *smtp.Client, err error) {
 	// Ensure that errors are always returned after at least 5s to
 	// eliminate (some) timing attacks (in which a malicious user tries to
 	// port scan using the email functionality in Fleet)
@@ -289,11 +290,11 @@ func dialTimeout(addr string, tlsConfig *tls.Config) (client *smtp.Client, err e
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("dialing with timeout: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "dialing with timeout")
 	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, fmt.Errorf("split host port: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "split host port")
 	}
 
 	// Set a deadline to ensure we time out quickly when there is a TCP
@@ -302,7 +303,7 @@ func dialTimeout(addr string, tlsConfig *tls.Config) (client *smtp.Client, err e
 	_ = conn.SetDeadline(time.Now().Add(28 * time.Second))
 	client, err = smtp.NewClient(conn, host)
 	if err != nil {
-		return nil, fmt.Errorf("SMTP connection error: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "SMTP connection error")
 	}
 	// Clear deadlines
 	_ = conn.SetDeadline(time.Time{})

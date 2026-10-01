@@ -79,12 +79,18 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 	}
 	if err != nil {
 		svc.debugLogger.ErrorContext(ctx, "failed to sign CSR", "err", err)
-		certRep, err := msg.Fail(cert.Leaf, pk, scep.BadRequest)
-		return certRep.Raw, err
+		certRep, failErr := msg.Fail(cert.Leaf, pk, scep.BadRequest)
+		if failErr != nil {
+			return nil, failErr
+		}
+		return certRep.Raw, nil
 	}
 
 	certRep, err := msg.Success(cert.Leaf, pk, crt)
-	return certRep.Raw, err
+	if err != nil {
+		return nil, err
+	}
+	return certRep.Raw, nil
 }
 
 func (svc *service) GetNextCACert(ctx context.Context) ([]byte, error) {
@@ -95,7 +101,7 @@ func (svc *service) GetNextCACert(ctx context.Context) ([]byte, error) {
 func NewSCEPService(ds fleet.MDMAssetRetriever, signer scepserver.CSRSignerContext, logger *slog.Logger) scepserver.Service {
 	return &service{
 		signer:      signer,
-		debugLogger: slog.New(slog.DiscardHandler),
+		debugLogger: logger,
 		ds:          ds,
 	}
 }
