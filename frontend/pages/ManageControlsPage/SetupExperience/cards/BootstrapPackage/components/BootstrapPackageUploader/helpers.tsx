@@ -36,7 +36,7 @@ export const UPLOAD_ERROR_MESSAGES = {
 };
 
 export const getErrorMessage = (err: AxiosResponse<IApiError>) => {
-  const apiReason = err.data.errors[0].reason;
+  const apiReason = err?.data?.errors?.[0]?.reason ?? "";
 
   const error = Object.values(UPLOAD_ERROR_MESSAGES).find((errType) =>
     errType.condition(apiReason)
@@ -48,3 +48,4 @@ export const getErrorMessage = (err: AxiosResponse<IApiError>) => {
 
   return error.message;
 };
+

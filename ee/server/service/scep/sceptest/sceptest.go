@@ -11,7 +11,6 @@ import (
 	"crypto/x509"
 	_ "embed"
 	"encoding/binary"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -151,7 +150,7 @@ func NewTestDynamicChallengeServer(t *testing.T) *httptest.Server {
 
 	dynamicChallengeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Println(r.URL.Path)
+		t.Logf("dynamic challenge request: %s", r.URL.Path)
 		if _, err := w.Write([]byte("dynamic challenge")); err != nil {
 			t.Errorf("write dynamic challenge response: %v", err)
 		}
