@@ -240,7 +240,7 @@ func CertWithEnrollmentIDMiddleware(next http.Handler, hasher HashFn, store stor
 		id, err := store.EnrollmentFromHash(r.Context(), hasher(cert))
 		if err != nil {
 			ctxlog.Logger(r.Context(), logger).Info(
-				"msg", "retreiving enrollment from hash",
+				"msg", "retrieving enrollment from hash",
 				"err", err,
 			)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -17,7 +17,7 @@ func ParseJSONtoUser(jsonData []byte) (User, error) {
 	return user, nil
 }
 
-// GetIssues fetches issues from GitHub using optional search criteria.
+// GetUserName fetches a GitHub user's login and display name, using a local cache when possible.
 func GetUserName(userLogin string) (User, error) {
 	var user User
 
@@ -45,3 +45,4 @@ func init() {
 	// Ensure any package-level initialization here if needed
 	username_mapping = make(map[string]string)
 }
+

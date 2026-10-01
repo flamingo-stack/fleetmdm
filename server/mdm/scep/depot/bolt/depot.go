@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
 
@@ -172,19 +173,45 @@ func (db *Depot) incrementSerial(s *big.Int) error {
 }
 
 func (db *Depot) HasCN(cn string, allowTime int, cert *x509.Certificate, revokeOldCertificate bool) (bool, error) {
-	// TODO: implement allowTime
-	// TODO: implement revocation
 	if cert == nil {
 		return false, errors.New("nil certificate provided")
 	}
 	var hasCN bool
-	err := db.View(func(tx *bolt.Tx) error {
-		curs := tx.Bucket([]byte(certBucket)).Cursor()
+	err := db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(certBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %q not found!", certBucket)
+		}
+		curs := bucket.Cursor()
 		prefix := []byte(cert.Subject.CommonName)
 		for k, v := curs.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = curs.Next() {
 			if bytes.Equal(v, cert.Raw) {
 				hasCN = true
 				return nil
+			}
+
+			existingCert, err := x509.ParseCertificate(v)
+			if err != nil {
+				continue
+			}
+
+			if allowTime > 0 {
+				renewalStart := existingCert.NotAfter.AddDate(0, 0, -allowTime)
+				if time.Now().Before(renewalStart) {
+					// Not yet within the allowed renewal window for this
+					// existing certificate; treat as if the CN already has a
+					// valid, non-renewable certificate on record.
+					hasCN = true
+					return nil
+				}
+			}
+
+			if revokeOldCertificate {
+				keyCopy := make([]byte, len(k))
+				copy(keyCopy, k)
+				if err := bucket.Delete(keyCopy); err != nil {
+					return err
+				}
 			}
 		}
 

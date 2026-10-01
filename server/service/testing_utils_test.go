@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -65,15 +64,14 @@ import (
 	nanodep_mock "github.com/fleetdm/fleet/v4/server/mock/nanodep"
 	"github.com/fleetdm/fleet/v4/server/platform/endpointer"
 	common_mysql "github.com/fleetdm/fleet/v4/server/platform/mysql"
-	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/fleetdm/fleet/v4/server/service/async"
 	"github.com/fleetdm/fleet/v4/server/service/middleware/auth"
 	"github.com/fleetdm/fleet/v4/server/service/middleware/log"
 	"github.com/fleetdm/fleet/v4/server/service/mock"
 	"github.com/fleetdm/fleet/v4/server/service/redis_key_value"
 	"github.com/fleetdm/fleet/v4/server/service/redis_lock"
+	"github.com/fleetdm/fleet/v4/server/service/svctest"
 	"github.com/fleetdm/fleet/v4/server/sso"
-	"github.com/fleetdm/fleet/v4/server/test"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -328,53 +326,11 @@ func newTestServiceWithClock(t *testing.T, ds fleet.Datastore, rs fleet.QueryRes
 	})
 }
 
+// createTestUsers is a thin wrapper around svctest.CreateTestUsers so that
+// internal service tests and svctest share a single source of truth for the
+// seeded test users, avoiding duplicated/drifting copies.
 func createTestUsers(t *testing.T, ds fleet.Datastore) map[string]fleet.User {
-	users := make(map[string]fleet.User)
-	// Map iteration is random so we sort and iterate using the testUsers keys.
-	var keys []string
-	for key := range testUsers {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	userID := uint(1)
-	for _, key := range keys {
-		u := testUsers[key]
-		user := &fleet.User{
-			ID:         userID, // We need to set this in case ds is a mocked Datastore.
-			Name:       "Test Name " + u.Email,
-			Email:      u.Email,
-			GlobalRole: u.GlobalRole,
-		}
-		err := user.SetPassword(u.PlaintextPassword, 10, 10)
-		require.Nil(t, err)
-		user, err = ds.NewUser(context.Background(), user)
-		require.Nil(t, err)
-		users[user.Email] = *user
-		userID++
-	}
-	return users
-}
-
-var testUsers = map[string]struct {
-	Email             string
-	PlaintextPassword string
-	GlobalRole        *string
-}{
-	"admin1": {
-		PlaintextPassword: test.GoodPassword,
-		Email:             TestAdminUserEmail,
-		GlobalRole:        ptr.String(fleet.RoleAdmin),
-	},
-	"user1": {
-		PlaintextPassword: test.GoodPassword,
-		Email:             TestMaintainerUserEmail,
-		GlobalRole:        ptr.String(fleet.RoleMaintainer),
-	},
-	"user2": {
-		PlaintextPassword: test.GoodPassword,
-		Email:             TestObserverUserEmail,
-		GlobalRole:        ptr.String(fleet.RoleObserver),
-	},
+	return svctest.CreateTestUsers(t, ds)
 }
 
 func createEnrollSecrets(t *testing.T, count int) []*fleet.EnrollSecret {
