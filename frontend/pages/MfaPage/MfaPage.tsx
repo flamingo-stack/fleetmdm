@@ -33,6 +33,7 @@ const MfaPage = ({ router, params }: IMfaPage) => {
   } = useContext(AppContext);
   const { redirectLocation } = useContext(RoutingContext);
   const [isExpired, setIsExpired] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [shouldFinishMFA, setShouldFinishMFA] = useState(
     !!local.getItem("auth_pending_mfa")
   );
@@ -73,7 +74,12 @@ const MfaPage = ({ router, params }: IMfaPage) => {
         router.push(redirectLocation || DASHBOARD);
       });
     } catch (response) {
-      setIsExpired(true);
+      const status = (response as { status?: number })?.status;
+      if (status === 401 || status === 410) {
+        setIsExpired(true);
+      } else {
+        setHasError(true);
+      }
     }
   };
 
@@ -111,6 +117,19 @@ const MfaPage = ({ router, params }: IMfaPage) => {
         <>
           <div className={`${baseClass}__description`}>
             <p>Log in again for a new link.</p>
+          </div>
+          <Button onClick={onClickLoginButton}>Back to login</Button>
+        </>
+      </AuthenticationFormWrapper>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <AuthenticationFormWrapper className={baseClass} header="Something went wrong">
+        <>
+          <div className={`${baseClass}__description`}>
+            <p>An error occurred. Please try again.</p>
           </div>
           <Button onClick={onClickLoginButton}>Back to login</Button>
         </>

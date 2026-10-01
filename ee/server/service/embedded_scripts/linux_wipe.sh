@@ -30,7 +30,7 @@ unmount_network_filesystems() {
         mnt=$(printf '%b' "$mnt_esc")
         # Never unmount critical mountpoints that may contain required userland.
         case "$mnt" in
-            /|/usr|/bin|/sbin|/lib|/lib64|/usr/bin|/usr/sbin|/usr/lib|/usr/lib64)
+            /|/usr|/bin|/sbin|/lib|/lib64|/usr/bin|/usr/sbin|/usr/lib|/usr/lib64|/etc|/var|/opt|/srv)
                 echo "Skipping critical network-mounted filesystem: $mnt"
                 continue
                 ;;
@@ -230,3 +230,4 @@ else
     echo "Wiping, system will be unreachable"
     (/usr/bin/nohup sh $0 wipe >/dev/null 2>/dev/null </dev/null) &
 fi
+

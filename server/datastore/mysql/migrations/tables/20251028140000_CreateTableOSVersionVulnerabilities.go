@@ -40,70 +40,14 @@ func Up_20251028140000(tx *sql.Tx) error {
 		return fmt.Errorf("creating operating_system_version_vulnerabilities table: %w", err)
 	}
 
-	// Backfill the table with existing data
-	// This runs as part of the migration to populate historical data
-	// Note: This table contains ONLY Linux kernel vulnerabilities
-	// Non-Linux OS vulnerabilities continue to be queried from operating_system_vulnerabilities table
-	fmt.Printf("[INFO] Starting backfill of operating_system_version_vulnerabilities table\n")
-
-	// Backfill per-team Linux kernel vulnerabilities
-	fmt.Printf("[INFO] Backfilling per-team Linux kernel vulnerabilities...\n")
-	result, err := tx.Exec(`
-		INSERT INTO operating_system_version_vulnerabilities
-			(os_version_id, cve, team_id, source, resolved_in_version, created_at)
-		SELECT
-			khc.os_version_id,
-			sc.cve,
-			khc.team_id,
-			MIN(sc.source),
-			MIN(sc.resolved_in_version),
-			MIN(sc.created_at) as created_at
-		FROM kernel_host_counts khc
-		JOIN software_cve sc ON sc.software_id = khc.software_id
-		WHERE khc.hosts_count > 0
-		GROUP BY khc.team_id, khc.os_version_id, sc.cve, khc.team_id
-		ON DUPLICATE KEY UPDATE
-			source = VALUES(source),
-			resolved_in_version = VALUES(resolved_in_version),
-			created_at = VALUES(created_at),
-			updated_at = CURRENT_TIMESTAMP(6)
-	`)
-	if err != nil {
-		return fmt.Errorf("backfilling per-team Linux kernel vulnerabilities: %w", err)
-	}
-	rowsAffected, _ := result.RowsAffected()
-	fmt.Printf("[INFO] Backfilled %d per-team Linux kernel vulnerability entries\n", rowsAffected)
-
-	// Backfill "all teams" aggregated Linux kernel vulnerabilities
-	// team_id = NULL represents pre-aggregated data across all teams
-	fmt.Printf("[INFO] Backfilling 'all teams' aggregated Linux kernel vulnerabilities...\n")
-	result, err = tx.Exec(`
-		INSERT INTO operating_system_version_vulnerabilities
-			(os_version_id, cve, team_id, source, resolved_in_version, created_at)
-		SELECT
-			khc.os_version_id,
-			sc.cve,
-			NULL as team_id,
-			MIN(sc.source),
-			MIN(sc.resolved_in_version),
-			MIN(sc.created_at) as created_at
-		FROM kernel_host_counts khc
-		JOIN software_cve sc ON sc.software_id = khc.software_id
-		WHERE khc.hosts_count > 0
-		GROUP BY khc.os_version_id, sc.cve
-		ON DUPLICATE KEY UPDATE
-			source = VALUES(source),
-			resolved_in_version = VALUES(resolved_in_version),
-			created_at = VALUES(created_at),
-			updated_at = CURRENT_TIMESTAMP(6)
-	`)
-	if err != nil {
-		return fmt.Errorf("backfilling 'all teams' Linux kernel vulnerabilities: %w", err)
-	}
-	rowsAffected, _ = result.RowsAffected()
-	fmt.Printf("[INFO] Backfilled %d 'all teams' Linux kernel vulnerability entries\n", rowsAffected)
-
-	fmt.Printf("[INFO] Backfill of operating_system_version_vulnerabilities table completed successfully\n")
+	// NOTE: The historical backfill of this table (previously performed here via
+	// large INSERT ... SELECT ... GROUP BY statements joining kernel_host_counts
+	// and software_cve) has been intentionally removed from this schema migration.
+	// Running such a backfill synchronously inside the migration transaction can
+	// hold locks on kernel_host_counts and software_cve for a long time on large
+	// deployments, risking migration timeouts and blocking concurrent writes.
+	// The backfill is instead performed by a background job/worker after the
+	// schema migration completes.
 
 	return nil
 }

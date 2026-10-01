@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/fleetdm/fleet/v4/tools/dibble/pkg/themes"
 )
@@ -116,15 +118,31 @@ func Profiles(c Client, log Logger, theme themes.Theme, teams []Team, count int)
 	return res
 }
 
+// uuidFallbackCounter is used only if cryptorand.Read fails, to ensure the
+// fallback UUID is still unique per call rather than a fixed constant.
+var uuidFallbackCounter uint64
+
 // randomUUIDv4 returns a fresh RFC 4122 v4 UUID. Per-profile UUIDs prevent
 // macOS from treating every seeded profile as the same payload (which would
 // cause install/update collisions).
 func randomUUIDv4() string {
 	var b [16]byte
 	if _, err := cryptorand.Read(b[:]); err != nil {
-		// Vanishingly unlikely; fall back to a clearly-fake-but-unique-ish
-		// value so callers can still spot seeded rows.
-		return "00000000-0000-0000-0000-000000000000"
+		// Vanishingly unlikely; fall back to a value derived from the
+		// current time and a monotonic counter so repeated failures within
+		// the same seed run still produce distinct UUIDs, rather than a
+		// fixed all-zero UUID that would reintroduce the collision bug this
+		// function exists to avoid.
+		n := atomic.AddUint64(&uuidFallbackCounter, 1)
+		now := uint64(time.Now().UnixNano())
+		binary := [16]byte{}
+		for i := 0; i < 8; i++ {
+			binary[i] = byte(now >> (8 * uint(i)))
+		}
+		for i := 0; i < 8; i++ {
+			binary[8+i] = byte(n >> (8 * uint(i)))
+		}
+		b = binary
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant 10

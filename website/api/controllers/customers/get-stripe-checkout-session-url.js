@@ -43,8 +43,10 @@ module.exports = {
     // What if the stripe customer id doesn't already exist on the user?
     if (!stripeCustomerId) {
       // Create a new customer entry in the Stripe API for this user before we create a checkout session for their license dispenser purchase.
+      // Note: An idempotency key derived from the user's id is used so that retries (see .retry() below) do not result in duplicate Stripe Customer records if a previous attempt actually succeeded on Stripe's end but the response was lost (e.g. due to a timeout).
       stripeCustomerId = await sails.helpers.stripe.saveBillingInfo.with({
-        emailAddress: this.req.me.emailAddress
+        emailAddress: this.req.me.emailAddress,
+        idempotencyKey: `saveBillingInfo-${this.req.me.id}`
       })
       .timeout(5000)
       .retry()
