@@ -198,18 +198,20 @@ const TicketDestinations = (): JSX.Element => {
     if (integrationEditing) {
       const deleteIntegrationDestination = () => {
         if (integrationEditing.type === "jira") {
-          integrations?.jira.splice(integrationEditing.originalIndex, 1);
+          const jiraCopy = [...(integrations?.jira || [])];
+          jiraCopy.splice(integrationEditing.originalIndex, 1);
           return configAPI.update({
             integrations: {
-              jira: integrations?.jira,
+              jira: jiraCopy,
               zendesk: zendeskIntegrations,
             },
           });
         }
-        integrations?.zendesk.splice(integrationEditing.originalIndex, 1);
+        const zendeskCopy = [...(integrations?.zendesk || [])];
+        zendeskCopy.splice(integrationEditing.originalIndex, 1);
         return configAPI.update({
           integrations: {
-            zendesk: integrations?.zendesk,
+            zendesk: zendeskCopy,
             jira: jiraIntegrations,
           },
         });

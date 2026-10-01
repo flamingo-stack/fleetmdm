@@ -31,13 +31,14 @@ const UninstallSoftwareModal = ({
     try {
       await deviceUserAPI.uninstallSelfServiceSoftware(token, softwareId);
       onSuccess();
+      setIsUninstalling(false);
+      onExit();
     } catch (error) {
       // We only show toast message to end user if API returns an error
       renderFlash("error", "Couldn't uninstall. Please try again.");
+      setIsUninstalling(false);
     }
-    setIsUninstalling(false);
-    onExit();
-  }, [softwareId, renderFlash, onSuccess, onExit]);
+  }, [softwareId, renderFlash, onSuccess, onExit, token]);
 
   const displaySoftwareName = softwareName || "software";
 

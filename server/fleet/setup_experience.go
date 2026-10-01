@@ -17,7 +17,7 @@ const (
 
 func (s SetupExperienceStatusResultStatus) IsValid() bool {
 	switch s {
-	case SetupExperienceStatusPending, SetupExperienceStatusRunning, SetupExperienceStatusSuccess, SetupExperienceStatusFailure:
+	case SetupExperienceStatusPending, SetupExperienceStatusRunning, SetupExperienceStatusSuccess, SetupExperienceStatusFailure, SetupExperienceStatusCancelled:
 		return true
 	default:
 		return false
@@ -277,3 +277,4 @@ var SetupExperienceSupportedPlatforms = []string{
 	"linux",
 	"android",
 }
+
