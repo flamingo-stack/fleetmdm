@@ -273,6 +273,17 @@ func collectCVE(api *apiClient, db *sql.DB) error {
 
 // reconcileSnapshot mirrors Datastore.recordSnapshot in
 // server/chart/internal/mysql/data.go.
+//
+// IMPORTANT: this is a standalone-process duplicate of that production SCD
+// reconciliation logic (open-row lookup, close/upsert semantics, batching).
+// There is no shared package or compile-time coupling enforcing consistency
+// between the two implementations. If server/chart/internal/mysql/data.go
+// changes the SCD encoding or reconciliation semantics (e.g. valid_to
+// sentinel handling, batching size/behavior, or the close/upsert decision
+// logic), this function must be updated to match or chart data written by
+// this cron tool will silently drift from what the server itself would
+// produce. Ideally this logic would be extracted into a shared, tested
+// package imported by both server/chart/internal/mysql and this tool.
 func reconcileSnapshot(db *sql.DB, dataset string, entityBitmaps map[string]*roaring.Bitmap, bucketStart time.Time) error {
 	rows, err := db.Query(
 		`SELECT entity_id, host_bitmap, encoding_type, valid_from
