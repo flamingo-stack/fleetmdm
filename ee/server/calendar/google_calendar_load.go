@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -126,7 +125,7 @@ func (lowLevelAPI *GoogleCalendarLoadAPI) CreateEvent(event *calendar.Event) (*c
 }
 
 func (lowLevelAPI *GoogleCalendarLoadAPI) UpdateEvent(event *calendar.Event) (*calendar.Event, error) {
-	return nil, errors.New("GoogleCalendarLoadAPI.UpdateEvent is not implemented")
+	return nil, fmt.Errorf("update event: %w", errNotImplemented)
 }
 
 func (lowLevelAPI *GoogleCalendarLoadAPI) GetEvent(id, _ string) (*calendar.Event, error) {
@@ -249,3 +248,5 @@ func (lowLevelAPI *GoogleCalendarLoadAPI) Watch(eventUUID string, channelID stri
 func (lowLevelAPI *GoogleCalendarLoadAPI) Stop(channelID string, resourceID string) error {
 	return nil
 }
+
+var errNotImplemented = errors.New("GoogleCalendarLoadAPI.UpdateEvent is not implemented")

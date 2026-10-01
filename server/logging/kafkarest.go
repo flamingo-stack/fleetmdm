@@ -79,9 +79,9 @@ func (l *kafkaRESTProducer) Write(ctx context.Context, logs []json.RawMessage) e
 }
 
 func checkResponse(resp *http.Response) (err error) {
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Error: %d. %s", resp.StatusCode, string(body))
+		return fmt.Errorf("kafka rest unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil

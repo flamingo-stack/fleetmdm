@@ -12,11 +12,22 @@ import (
 )
 
 func rSign(pkgPath, cert string) error {
-	pemPath := filepath.Join(os.TempDir(), "cert.pem")
-	defer os.Remove(pemPath)
-	err := os.WriteFile(pemPath, []byte(cert), 0o600)
+	pemFile, err := os.CreateTemp("", "cert-*.pem")
 	if err != nil {
+		return fmt.Errorf("creating cert temp file: %s", err)
+	}
+	pemPath := pemFile.Name()
+	defer os.Remove(pemPath)
+	if err := pemFile.Chmod(0o600); err != nil {
+		pemFile.Close()
+		return fmt.Errorf("setting cert temp file permissions: %s", err)
+	}
+	if _, err := pemFile.WriteString(cert); err != nil {
+		pemFile.Close()
 		return fmt.Errorf("writing cert data: %s", err)
+	}
+	if err := pemFile.Close(); err != nil {
+		return fmt.Errorf("closing cert temp file: %s", err)
 	}
 
 	return retry.Do(func() error {
@@ -30,8 +41,7 @@ func rSign(pkgPath, cert string) error {
 		cmd.Stdout = &outBuf
 		cmd.Stderr = &outBuf
 		if err := cmd.Run(); err != nil {
-			fmt.Println(outBuf.String())
-			return fmt.Errorf("rcodesign: %w", err)
+			return fmt.Errorf("rcodesign: %w: %s", err, outBuf.String())
 		}
 		return nil
 	}, retry.WithMaxAttempts(3))
@@ -56,8 +66,7 @@ func rNotarizeStaple(pkg, apiKeyID, apiKeyIssuer, apiKeyContent string) error {
 		cmd.Stdout = &outBuf
 		cmd.Stderr = &outBuf
 		if err := cmd.Run(); err != nil {
-			fmt.Println(outBuf.String())
-			return fmt.Errorf("rcodesign notarize: %w", err)
+			return fmt.Errorf("rcodesign notarize: %w: %s", err, outBuf.String())
 		}
 		return nil
 	}, retry.WithMaxAttempts(3))
@@ -72,8 +81,8 @@ func writeAPIKeys(issuer, id, content string) (string, error) {
 	// The underliying tools (rcodesign and Transporter) expect to find a
 	// certificate key in this path.
 	path := filepath.Join(homedir, ".appstoreconnect", "private_keys")
-	if err = secure.MkdirAll(path, 0o600); err != nil {
-		return "", fmt.Errorf("finding home dir: %s", err)
+	if err = secure.MkdirAll(path, 0o700); err != nil {
+		return "", fmt.Errorf("creating private keys dir: %s", err)
 	}
 
 	keyPath := filepath.Join(path, fmt.Sprintf("AuthKey_%s.p8", id))

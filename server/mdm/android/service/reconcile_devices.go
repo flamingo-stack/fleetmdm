@@ -34,6 +34,8 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 		if asset, ok := assets[fleet.MDMAssetAndroidFleetServerSecret]; ok && len(asset.Value) > 0 {
 			_ = client.SetAuthenticationSecret(string(asset.Value))
 		}
+	} else {
+		logger.DebugContext(ctx, "failed to get android fleet server secret asset during reconcile", "err", err)
 	}
 
 	devices, err := ds.ListAndroidEnrolledDevicesForReconcile(ctx)
@@ -65,6 +67,7 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 
 	checked := 0
 	unenrolled := 0
+	var unenrollErrs []error
 	for _, dev := range devices {
 		if dev == nil || dev.DeviceID == "" {
 			continue
@@ -72,11 +75,10 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 		checked++
 		deviceName := fmt.Sprintf("%s/devices/%s", enterprise.Name(), dev.DeviceID)
 		_, ok := deviceNameMap[deviceName]
-		switch {
-		case ok:
+		if ok {
 			// Device exists, no-op.
 			continue
-		case !ok:
+		} else {
 			// BYO unenroll wipes only the work profile; clear host_mdm_actions before flipping host_mdm.enrolled so the post-ack "Wiped"
 			// badge clears.
 			if cerr := clearAndroidBYOWipeRef(ctx, ds, dev.HostID); cerr != nil {
@@ -86,7 +88,9 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 			}
 
 			if _, derr := ds.SetAndroidHostUnenrolled(ctx, dev.HostID); derr != nil {
+				wrapped := fmt.Errorf("mark android host %d unenrolled during reconcile: %w", dev.HostID, derr)
 				logger.ErrorContext(ctx, "failed to mark android host unenrolled during reconcile", "host_id", dev.HostID, "err", derr)
+				unenrollErrs = append(unenrollErrs, wrapped)
 				continue
 			}
 			// Emit system activity to mirror Pub/Sub DELETED handling.
@@ -110,5 +114,11 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 	}
 
 	logger.DebugContext(ctx, "android reconcile complete", "checked", checked, "unenrolled", unenrolled)
+
+	if len(unenrollErrs) > 0 {
+		return ctxerr.Wrap(ctx, fmt.Errorf("failed to mark %d android host(s) unenrolled during reconcile: %w", len(unenrollErrs), unenrollErrs[0]))
+	}
+
 	return nil
 }
+

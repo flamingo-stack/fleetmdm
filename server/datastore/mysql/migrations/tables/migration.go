@@ -3,6 +3,7 @@ package tables
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/goose"
 	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
 )
 
 var MigrationClient = goose.New("migration_status_tables", goose.MySqlDialect{})
@@ -29,14 +29,20 @@ type migrationStep func(tx *sql.Tx) error
 func basicMigrationStep(statement string, errorMessage string) migrationStep {
 	return func(tx *sql.Tx) error {
 		_, err := tx.Exec(statement)
-		return errors.Wrap(err, errorMessage)
+		if err != nil {
+			return fmt.Errorf("%s: %w", errorMessage, err)
+		}
+		return nil
 	}
 }
 
 func basicMigrationStepWithArgs(statement string, args []any, errorMessage string) migrationStep {
 	return func(tx *sql.Tx) error {
 		_, err := tx.Exec(statement, args...)
-		return errors.Wrap(err, errorMessage)
+		if err != nil {
+			return fmt.Errorf("%s: %w", errorMessage, err)
+		}
+		return nil
 	}
 }
 
@@ -74,9 +80,10 @@ func incrementalMigrationStep(count getTotalCountFn, execute executeWithProgress
 					return
 				case <-ticker.C:
 					current := atomicCurrent.Load()
-					if current == total {
+					switch {
+					case current >= total:
 						_, _ = fmt.Fprint(outputTo, "    Almost done...\n")
-					} else {
+					default:
 						_, _ = fmt.Fprintf(outputTo, "    %d%% complete\n", (100*current)/total)
 					}
 				}
@@ -234,26 +241,26 @@ func updateAppConfigJSON(tx *sql.Tx, fn func(config *fleet.AppConfig) error) err
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
-		return errors.Wrap(err, "select app_config_json")
+		return fmt.Errorf("select app_config_json: %w", err)
 	}
 
 	var config fleet.AppConfig
 	if err := json.Unmarshal(raw, &config); err != nil {
-		return errors.Wrap(err, "unmarshal app_config_json")
+		return fmt.Errorf("unmarshal app_config_json: %w", err)
 	}
 
 	if err := fn(&config); err != nil {
-		return errors.Wrap(err, "callback app_config_json")
+		return fmt.Errorf("callback app_config_json: %w", err)
 	}
 
 	b, err := json.Marshal(config)
 	if err != nil {
-		return errors.Wrap(err, "marshal updated app_config_json")
+		return fmt.Errorf("marshal updated app_config_json: %w", err)
 	}
 
 	const updateStmt = `UPDATE app_config_json SET json_value = ? WHERE id = 1`
 	if _, err := tx.Exec(updateStmt, b); err != nil {
-		return errors.Wrap(err, "update app_config_json")
+		return fmt.Errorf("update app_config_json: %w", err)
 	}
 
 	return nil

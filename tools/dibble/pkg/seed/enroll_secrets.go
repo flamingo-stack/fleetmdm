@@ -16,13 +16,17 @@ import (
 func EnrollSecrets(c Client, log Logger, teams []Team) Result {
 	res := Result{Entity: "enroll-secrets"}
 	for _, t := range teams {
-		secret := randomEnrollSecret()
+		secret, err := randomEnrollSecret()
+		if err != nil {
+			res.Errors = append(res.Errors, fmt.Errorf("generate enroll secret for team=%s (id=%d): %w", t.Name, t.ID, err))
+			continue
+		}
 		body := map[string]any{
 			"secrets": []map[string]string{{"secret": secret}},
 		}
 		// PATCH replaces the team's enroll-secret list with this one. Find
 		// them in the UI under Settings → [team] → Add hosts → Show enroll secret.
-		err := c.Patch(fmt.Sprintf("/api/latest/fleet/fleets/%d/secrets", t.ID), body, nil)
+		err = c.Patch(fmt.Sprintf("/api/latest/fleet/fleets/%d/secrets", t.ID), body, nil)
 		switch {
 		case err == nil:
 			res.Created++
@@ -39,11 +43,10 @@ func EnrollSecrets(c Client, log Logger, teams []Team) Result {
 	return res
 }
 
-func randomEnrollSecret() string {
+func randomEnrollSecret() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// Vanishingly unlikely; fall back to a fixed-but-clearly-fake value.
-		return "dibble-fallback-secret"
+		return "", fmt.Errorf("generate random enroll secret: %w", err)
 	}
-	return "dibble-" + hex.EncodeToString(b[:])
+	return "dibble-" + hex.EncodeToString(b[:]), nil
 }

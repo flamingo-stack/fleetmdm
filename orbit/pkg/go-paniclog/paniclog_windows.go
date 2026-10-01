@@ -10,7 +10,7 @@
 package paniclog
 
 import (
-	"errors"
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -57,28 +57,28 @@ func setStdHandle(stdhandle int32, handle syscall.Handle) error {
 func redirectStderr(f *os.File) (UndoFunction, error) {
 	stderrFd, err := getStdHandle(syscall.STD_ERROR_HANDLE)
 	if err != nil {
-		return nil, errors.New("Failed to redirect stderr to file: " + err.Error())
+		return nil, fmt.Errorf("failed to redirect stderr to file: %w", err)
 	}
 
 	// duplicate the handle to match unix behavior
 	fHandle, err := dupFD(f.Fd())
 	if err != nil {
-		return nil, errors.New("Failed to duplicate file: " + err.Error())
+		return nil, fmt.Errorf("failed to duplicate file: %w", err)
 	}
 
 	err = setStdHandle(syscall.STD_ERROR_HANDLE, fHandle)
 	if err != nil {
-		return nil, errors.New("Failed to redirect stderr to file: " + err.Error())
+		return nil, fmt.Errorf("failed to redirect stderr to file: %w", err)
 	}
 
 	undo := func() error {
 		err := setStdHandle(syscall.STD_ERROR_HANDLE, stderrFd)
 		if err != nil {
-			return errors.New("Failed to redirect stderr to file: " + err.Error())
+			return fmt.Errorf("failed to redirect stderr to file: %w", err)
 		}
 		err = syscall.CloseHandle(fHandle)
 		if err != nil {
-			return errors.New("Failed to close STD_ERROR handle: " + err.Error())
+			return fmt.Errorf("failed to close STD_ERROR handle: %w", err)
 		}
 		return nil
 	}

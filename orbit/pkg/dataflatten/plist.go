@@ -11,7 +11,7 @@ import (
 func PlistFile(file string, opts ...FlattenOpts) ([]Row, error) {
 	rawdata, err := os.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading plist file %s: %w", file, err)
 	}
 	return Plist(rawdata, opts...)
 }
