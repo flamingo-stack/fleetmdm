@@ -179,8 +179,8 @@ const Advanced = ({
   const performSave = async () => {
     const payload = {
       server_settings: {
-        live_reporting_disabled: formData.disableLiveQuery,
-        discard_reports_data: formData.disableQueryReports,
+        live_query_disabled: formData.disableLiveQuery,
+        query_reports_disabled: formData.disableQueryReports,
         scripts_disabled: formData.disableScripts,
         deferred_save_host: appConfig.server_settings.deferred_save_host,
         ai_features_disabled: formData.disableAIFeatures,
@@ -289,3 +289,4 @@ const Advanced = ({
 };
 
 export default Advanced;
+

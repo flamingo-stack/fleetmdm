@@ -1,4 +1,4 @@
-// Pacakge dump is a NanoMDM service that dumps raw responses
+// Package dump is a NanoMDM service that dumps raw responses
 package dump
 
 import (
@@ -84,7 +84,7 @@ func (svc *Dumper) GetToken(r *mdm.Request, m *mdm.GetToken) (*mdm.GetTokenRespo
 func (svc *Dumper) CommandAndReportResults(r *mdm.Request, results *mdm.CommandResults) (*mdm.Command, error) {
 	_, _ = svc.file.Write(results.Raw)
 	cmd, err := svc.next.CommandAndReportResults(r, results)
-	if svc.cmd && err != nil && cmd != nil && cmd.Raw != nil {
+	if svc.cmd && err == nil && cmd != nil && cmd.Raw != nil {
 		_, _ = svc.file.Write(cmd.Raw)
 	}
 	return cmd, err
@@ -96,7 +96,7 @@ func (svc *Dumper) DeclarativeManagement(r *mdm.Request, m *mdm.DeclarativeManag
 		_, _ = svc.file.Write(m.Data)
 	}
 	respBytes, err := svc.next.DeclarativeManagement(r, m)
-	if svc.dm && err != nil {
+	if svc.dm && err == nil && len(respBytes) > 0 {
 		_, _ = svc.file.Write(respBytes)
 	}
 	return respBytes, err

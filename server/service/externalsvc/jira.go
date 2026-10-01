@@ -118,6 +118,12 @@ func doWithRetry(fn func() (*jira.Response, error)) error {
 			}
 		}
 
+		if resp == nil {
+			// no response received (e.g. connection failure), treat as
+			// non-retryable to avoid a nil-pointer dereference below
+			return backoff.Permanent(err)
+		}
+
 		if resp.StatusCode >= http.StatusInternalServerError {
 			// 500+ status, can be worth retrying
 			return err

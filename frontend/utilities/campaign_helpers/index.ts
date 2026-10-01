@@ -5,7 +5,6 @@ import {
   IHostWithQueryResults,
 } from "interfaces/campaign";
 import { IHost } from "interfaces/host";
-import { useContext } from "react";
 import { NotificationContext } from "context/notification";
 
 interface IResult {
@@ -147,9 +146,11 @@ const updateCampaignStateFromStatus = (
   };
 };
 
-export const updateCampaignState = (socketData: ISocketData) => {
+export const updateCampaignState = (
+  socketData: ISocketData,
+  renderFlash: React.ContextType<typeof NotificationContext>["renderFlash"]
+) => {
   return ({ campaign }: ICampaignState) => {
-    const { renderFlash } = useContext(NotificationContext);
     switch (socketData.type) {
       case "totals":
         return updateCampaignStateFromTotals(campaign, socketData);
