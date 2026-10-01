@@ -22,6 +22,7 @@ import (
 	"github.com/go-kit/kit/endpoint"
 )
 
+// >>> OPENFRAME(idevice-cert-auth): cert-serial extraction for iOS/iPadOS mTLS device auth — openframe/docs/idevice-cert-auth.md
 // extractCertSerialFromHeader extracts certificate serial from X-Client-Cert-Serial
 // header (set by load balancer during mTLS) for iOS/iPadOS device authentication.
 func extractCertSerialFromHeader(ctx context.Context, r *http.Request) context.Context {
@@ -38,6 +39,8 @@ func extractCertSerialFromHeader(ctx context.Context, r *http.Request) context.C
 
 	return certserial.NewContext(ctx, serial)
 }
+
+// <<< OPENFRAME(idevice-cert-auth)
 
 func logJSON(ctx context.Context, logger *slog.Logger, v any, key string) {
 	jsonV, err := json.Marshal(v)
@@ -76,6 +79,7 @@ func authenticatedDevice(svc fleet.Service, logger *slog.Logger, next endpoint.E
 		var debug bool
 		var authnMethod authz_ctx.AuthenticationMethod
 
+		// >>> OPENFRAME(idevice-cert-auth): cert/token/URL authentication branching for iOS/iPadOS device auth — openframe/docs/idevice-cert-auth.md
 		if certSerial, ok := certserial.FromContext(ctx); ok {
 			// Header presence signals cert auth intent, even if serial is invalid.
 			host, debug, err = svc.AuthenticateDeviceByCertificate(ctx, certSerial, identifier)
@@ -92,6 +96,7 @@ func authenticatedDevice(svc fleet.Service, logger *slog.Logger, next endpoint.E
 				authnMethod = authz_ctx.AuthnDeviceURL
 			}
 		}
+		// <<< OPENFRAME(idevice-cert-auth)
 
 		if err != nil {
 			logging.WithErr(ctx, err)
