@@ -132,9 +132,12 @@ func (ds *Datastore) enqueueSetupExperienceItems(ctx context.Context, hostPlatfo
 				//
 				// Cross-host collision protection: also constrain on mwe.host_uuid so we reject rows
 				// already linked to a different host (e.g. another device on the network shares a Windows
-				// computer name and has finished osquery ingest). A residual
-				// edge case is two hosts sharing the same computer_name both freshly enrolling within the
-				// 5-minute window with neither linked yet. Follow-up bug: https://github.com/fleetdm/fleet/issues/45380
+				// computer name and has finished osquery ingest). To further narrow the residual case of two
+				// hosts sharing the same computer_name both freshly enrolling within the 5-minute window
+				// with neither linked yet, require the matched hosts row to itself be a fresh enrollee
+				// (last_enrolled_at within the same window) rather than matching any host with that
+				// computer_name; this reduces (without fully eliminating) the chance of attributing the row
+				// to the wrong host of the pair. Follow-up bug: https://github.com/fleetdm/fleet/issues/45380
 				if !found {
 					stmtByName := `
 					SELECT mwe.awaiting_configuration, mwe.created_at
@@ -144,10 +147,11 @@ func (ds *Datastore) enqueueSetupExperienceItems(ctx context.Context, hostPlatfo
 					  AND h.platform = 'windows'
 					  AND h.computer_name <> ''
 					  AND (mwe.host_uuid = h.uuid OR mwe.host_uuid IS NULL OR mwe.host_uuid = '')
+					  AND h.last_enrolled_at >= ?
 					ORDER BY mwe.created_at DESC, mwe.id DESC
 					LIMIT 1
 					`
-					if err := sqlx.GetContext(ctx, ds.reader(ctx), &mdmState, stmtByName, hostUUID, hostUUID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+					if err := sqlx.GetContext(ctx, ds.reader(ctx), &mdmState, stmtByName, hostUUID, hostUUID, time.Now().Add(-windowsFreshEnrollmentWindow)); err != nil && !errors.Is(err, sql.ErrNoRows) {
 						return false, ctxerr.Wrap(ctx, err, "checking windows mdm enrollment state by device_name for setup experience age guard")
 					} else if err == nil {
 						found = true
@@ -1120,3 +1124,4 @@ func (ds *Datastore) CancelPendingSetupExperienceSteps(ctx context.Context, host
 	}
 	return nil
 }
+

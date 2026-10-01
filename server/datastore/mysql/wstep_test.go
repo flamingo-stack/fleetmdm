@@ -96,7 +96,48 @@ func TestWSTEPStore(t *testing.T) {
 		return nil
 	})
 
-	// TODO: test WSTEPAssociateCertHash when the intended usage is clear
+	// WSTEPAssociateCertHash upserts a mapping from a device UUID to a certificate hash.
+	certHash := fmt.Sprintf("%x", sha256.Sum256(testCert.Raw))
+
+	err = ds.WSTEPAssociateCertHash(context.Background(), "test-device-uuid", certHash)
+	require.NoError(t, err)
+
+	ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
+		var dest []struct {
+			DeviceUUID string `db:"device_uuid"`
+			CertHash   string `db:"cert_hash"`
+		}
+		err = sqlx.SelectContext(context.Background(), q, &dest, "SELECT device_uuid, cert_hash FROM wstep_cert_auth_associations WHERE device_uuid = ?", "test-device-uuid")
+		if err != nil {
+			return err
+		}
+		require.Len(t, dest, 1)
+		require.Equal(t, "test-device-uuid", dest[0].DeviceUUID)
+		require.Equal(t, certHash, dest[0].CertHash)
+
+		return nil
+	})
+
+	// calling it again with a new hash for the same device UUID should upsert (update) the existing row
+	newCertHash := fmt.Sprintf("%x", sha256.Sum256([]byte("some-other-cert-bytes")))
+	err = ds.WSTEPAssociateCertHash(context.Background(), "test-device-uuid", newCertHash)
+	require.NoError(t, err)
+
+	ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
+		var dest []struct {
+			DeviceUUID string `db:"device_uuid"`
+			CertHash   string `db:"cert_hash"`
+		}
+		err = sqlx.SelectContext(context.Background(), q, &dest, "SELECT device_uuid, cert_hash FROM wstep_cert_auth_associations WHERE device_uuid = ?", "test-device-uuid")
+		if err != nil {
+			return err
+		}
+		require.Len(t, dest, 1)
+		require.Equal(t, "test-device-uuid", dest[0].DeviceUUID)
+		require.Equal(t, newCertHash, dest[0].CertHash)
+
+		return nil
+	})
 }
 
 var testCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -156,3 +197,4 @@ PQAARDBzDlWvlMGWcbdrdypdeA==
 // // prevent static analysis tools from raising issues due to detection of private key
 // // in code.
 // func testingKey(s string) string { return strings.ReplaceAll(s, "TESTING KEY", "PRIVATE KEY") }
+

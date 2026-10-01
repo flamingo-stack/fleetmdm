@@ -104,6 +104,10 @@ const enroll = async () => {
     enroll_secret: FLEET_ENROLL_SECRET,
   });
 
+  if (!enroll_secret) {
+    throw new Error("enroll_secret is empty, refusing to enroll");
+  }
+
   let host_identifier = host_details.system_info.hardware_serial;
   if (!host_identifier) {
     host_identifier = host_details.system_info.uuid;
@@ -297,3 +301,4 @@ chrome.alarms.onAlarm.addListener(async ({ name }) => {
       console.error(`unknown alarm ${name}`);
   }
 });
+

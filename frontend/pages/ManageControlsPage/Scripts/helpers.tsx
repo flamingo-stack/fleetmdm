@@ -34,8 +34,12 @@ export const getWhen = (summary: IScriptBatchSummaryV2) => {
       }
       return (
         <>
-          <Icon name="pending-outline" color="ui-fleet-black-50" size="small" />
-          Started{" "}
+          <Icon
+            name={canceled ? "close-filled" : "pending-outline"}
+            color="ui-fleet-black-50"
+            size="small"
+          />
+          {canceled ? "Canceled" : "Started"}{" "}
           <HumanTimeDiffWithFleetLaunchCutoff
             timeString={started_at}
             tooltipPosition="right"
@@ -84,3 +88,4 @@ export const getWhen = (summary: IScriptBatchSummaryV2) => {
       return null;
   }
 };
+

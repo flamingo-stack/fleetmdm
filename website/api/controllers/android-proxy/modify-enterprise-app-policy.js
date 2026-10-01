@@ -62,7 +62,16 @@ module.exports = {
       throw 'notFound';
     }
     // Return an unauthorized response if the provided secret does not match.
-    if (thisAndroidEnterprise.fleetServerSecret !== fleetServerSecret) {
+    // Note: We use crypto.timingSafeEqual to perform a constant-time comparison, to avoid leaking
+    // information about the secret through response-timing side channels.
+    let crypto = require('crypto');
+    let expectedSecretBuffer = Buffer.from(thisAndroidEnterprise.fleetServerSecret);
+    let providedSecretBuffer = Buffer.from(fleetServerSecret);
+    let isSecretValid = (
+      expectedSecretBuffer.length === providedSecretBuffer.length &&
+      crypto.timingSafeEqual(expectedSecretBuffer, providedSecretBuffer)
+    );
+    if (!isSecretValid) {
       throw 'unauthorized';
     }
 
@@ -124,3 +133,4 @@ module.exports = {
 
 
 };
+
