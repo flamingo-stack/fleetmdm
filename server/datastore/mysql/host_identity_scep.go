@@ -19,12 +19,12 @@ import (
 
 func (ds *Datastore) GetHostIdentityCertBySerialNumber(ctx context.Context, serialNumber uint64) (*types.HostIdentityCertificate, error) {
 	var hostIdentityCert types.HostIdentityCertificate
-	err := sqlx.GetContext(ctx, ds.reader(ctx), &hostIdentityCert, fmt.Sprintf(`
+	err := sqlx.GetContext(ctx, ds.reader(ctx), &hostIdentityCert, `
 		SELECT serial, host_id, name, not_valid_after, public_key_raw
 		FROM host_identity_scep_certificates
-		WHERE serial = %d
+		WHERE serial = ?
 			AND not_valid_after > NOW()
-			AND revoked = 0`, serialNumber))
+			AND revoked = 0`, serialNumber)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, notFound("host identity certificate")

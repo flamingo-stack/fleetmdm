@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -230,13 +231,12 @@ func (d *fileDepot) HasCN(_ string, allowTime int, cert *x509.Certificate, revok
 			addDB.WriteString(line + "\n")
 		}
 	}
-	file.Close()
 	for key, value := range candidates {
 		if value == "no" {
 			return false, errors.New("DN " + dn + " already exists")
 		}
 		if revokeOldCertificate {
-			fmt.Println("Revoking certificate with serial " + key + " from DB. Recreation of CRL needed.")
+			log.Printf("Revoking certificate with serial %s from DB. Recreation of CRL needed.", key)
 			entries := strings.Split(value, "\t")
 			addDB.WriteString("R\t" + entries[1] + "\t" + makeOpenSSLTime(time.Now()) + "\t" + strings.ToUpper(entries[3]) + "\t" + entries[4] + "\t" + entries[5] + "\n")
 		}
@@ -249,6 +249,7 @@ func (d *fileDepot) HasCN(_ string, allowTime int, cert *x509.Certificate, revok
 		if err != nil {
 			return false, err
 		}
+		defer file.Close()
 		if _, err := file.Write(addDB.Bytes()); err != nil {
 			return false, err
 		}

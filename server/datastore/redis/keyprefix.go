@@ -137,13 +137,20 @@ func twoKeys(args []interface{}, prefix string) {
 	prefixOne(args, 1, prefix)
 }
 
-// evalArgs: args = [script, numKeys, k1, ..., kN, arg1, ...].
+// evalArgs: args = [script, numKeys, k1, ..., kN, arg1, ...]. If numKeys is
+// malformed (larger than the number of args actually supplied), that's a
+// caller bug: fail closed and skip prefixing entirely rather than silently
+// prefixing only some of the intended keys, which could leave later key args
+// operating on another tenant's keyspace.
 func evalArgs(args []interface{}, prefix string) {
 	if len(args) < 2 {
 		return
 	}
 	n := toInt(args[1])
 	if n <= 0 {
+		return
+	}
+	if 2+n > len(args) {
 		return
 	}
 	for i := 0; i < n; i++ {
@@ -216,6 +223,21 @@ func sortArgs(args []interface{}, prefix string) {
 		if strings.EqualFold(toString(args[i]), "STORE") {
 			prefixOne(args, i+1, prefix)
 			return
+		}
+	}
+}
+
+// geoRadiusArgs: GEORADIUS/GEORADIUSBYMEMBER key ... [STORE dst] [STOREDIST dst].
+// Prefix the source key and any STORE/STOREDIST destination key(s) so results
+// aren't written into another tenant's keyspace.
+func geoRadiusArgs(args []interface{}, prefix string) {
+	if len(args) == 0 {
+		return
+	}
+	prefixOne(args, 0, prefix)
+	for i := 1; i < len(args)-1; i++ {
+		if strings.EqualFold(toString(args[i]), "STORE") || strings.EqualFold(toString(args[i]), "STOREDIST") {
+			prefixOne(args, i+1, prefix)
 		}
 	}
 }
@@ -342,6 +364,10 @@ var specialCmds = map[string]prefixRule{
 
 	// SORT key ... [STORE dst]
 	"SORT": sortArgs,
+
+	// GEORADIUS/GEORADIUSBYMEMBER key ... [STORE dst] [STOREDIST dst]
+	"GEORADIUS":           geoRadiusArgs,
+	"GEORADIUSBYMEMBER":   geoRadiusArgs,
 
 	// pub/sub channel commands — every arg is a channel
 	"SUBSCRIBE":    allArgs,

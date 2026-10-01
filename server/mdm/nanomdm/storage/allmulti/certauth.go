@@ -12,21 +12,24 @@ func (ms *MultiAllStorage) HasCertHash(r *mdm.Request, hash string) (bool, error
 	val, err := ms.execStores(r.Context, func(s storage.AllStorage) (interface{}, error) {
 		return s.HasCertHash(r, hash)
 	})
-	return val.(bool), err
+	b, _ := val.(bool)
+	return b, err
 }
 
 func (ms *MultiAllStorage) EnrollmentHasCertHash(r *mdm.Request, hash string) (bool, error) {
 	val, err := ms.execStores(r.Context, func(s storage.AllStorage) (interface{}, error) {
 		return s.EnrollmentHasCertHash(r, hash)
 	})
-	return val.(bool), err
+	b, _ := val.(bool)
+	return b, err
 }
 
 func (ms *MultiAllStorage) IsCertHashAssociated(r *mdm.Request, hash string) (bool, error) {
 	val, err := ms.execStores(r.Context, func(s storage.AllStorage) (interface{}, error) {
 		return s.IsCertHashAssociated(r, hash)
 	})
-	return val.(bool), err
+	b, _ := val.(bool)
+	return b, err
 }
 
 func (ms *MultiAllStorage) AssociateCertHash(r *mdm.Request, hash string, certNotValidAfter time.Time) error {
@@ -40,5 +43,7 @@ func (ms *MultiAllStorage) EnrollmentFromHash(ctx context.Context, hash string) 
 	val, err := ms.execStores(ctx, func(s storage.AllStorage) (interface{}, error) {
 		return s.EnrollmentFromHash(ctx, hash)
 	})
-	return val.(string), err
+	str, _ := val.(string)
+	return str, err
 }
+
