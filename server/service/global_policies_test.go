@@ -159,6 +159,17 @@ func TestGlobalPoliciesAuth(t *testing.T) {
 // by ID" endpoint refuses to return a team policy to a user who has no role
 // on that team. This guards against the regression described in the
 // "Cross-Team Policy Data Exposure" disclosure.
+//
+// This test asserts behavior at the service layer only (via the svc.authz
+// gate invoked inside GetPolicyByID). It does not by itself prove that the
+// production authorization check in server/service/global_policies.go
+// (GetPolicyByID) has not regressed on refactor: if a future change replaces
+// or bypasses the svc.authz.Authorize call for fleet.ActionRead against the
+// policy's *fleet.Team, these test cases would need to keep failing for that
+// regression to be caught. Reviewers modifying GetPolicyByID must confirm the
+// authorization check against the policy's TeamID (nil, 0, or a specific
+// team) is still performed before returning policy data, not merely that
+// these tests are green.
 func TestGetPolicyByIDCrossTeamAuth(t *testing.T) {
 	ds := new(mock.Store)
 	svc, ctx := newTestService(t, ds, nil, nil)

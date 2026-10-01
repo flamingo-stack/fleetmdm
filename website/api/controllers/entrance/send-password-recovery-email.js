@@ -16,9 +16,9 @@ module.exports = {
       required: true
     },
 
-    websiteUrl: {
+    company: {
       type: 'string',
-      description: 'Honeypot field. If filled, the submission is silently discarded.'
+      description: 'Optional field.'
     }
 
   },
@@ -33,9 +33,9 @@ module.exports = {
   },
 
 
-  fn: async function ({emailAddress, websiteUrl}) {
+  fn: async function ({emailAddress, company}) {
 
-    if (websiteUrl) { return; }// Honeypot input provided — return a success response
+    if (company) { return; }// Honeypot input provided — return a success response
 
     // Find the record for this user.
     // (Even if no such user exists, pretend it worked to discourage sniffing.)
@@ -71,3 +71,4 @@ module.exports = {
 
 
 };
+

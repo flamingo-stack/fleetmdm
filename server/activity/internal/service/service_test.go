@@ -398,6 +398,7 @@ func TestListActivitiesCursorPaginationMetadata(t *testing.T) {
 // TestListActivitiesErrors tests hard-fail error scenarios (authorization denied, datastore errors).
 func TestListActivitiesErrors(t *testing.T) {
 	t.Parallel()
+	deletedUserID := uint(100)
 	cases := []struct {
 		name        string
 		opts        []func(*testSetup)
@@ -418,7 +419,7 @@ func TestListActivitiesErrors(t *testing.T) {
 			name: "user enrichment error",
 			opts: []func(*testSetup){
 				withActivities([]*api.Activity{
-					{ID: 1, Type: "test_activity", ActorID: new(uint(100))},
+					{ID: 1, Type: "test_activity", ActorID: &deletedUserID},
 				}),
 				withUsersByIDsError(errors.New("user service error")),
 			},

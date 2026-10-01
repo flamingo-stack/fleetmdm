@@ -54,6 +54,14 @@ func convertPlatforms(platformsIn string) (string, error) {
 		}
 	}
 
+	// if more than one platform is present, the empty-string sentinel
+	// (meaning "all platforms") must not be mixed in, or it will corrupt
+	// the resulting platform CSV by introducing an empty segment that
+	// downstream parsers interpret as "match everything".
+	if _, ok := mapped[""]; ok && len(mapped) > 1 {
+		delete(mapped, "")
+	}
+
 	// convert set to slice
 	result := make([]string, 0, len(mapped))
 

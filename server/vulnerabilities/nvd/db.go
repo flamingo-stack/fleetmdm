@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS cpe_2 (
     product TEXT,
     version TEXT,
     target_sw TEXT,
-    sw_edition TEST,
+    sw_edition TEXT,
     deprecated BOOLEAN DEFAULT FALSE
 );
 CREATE VIEW IF NOT EXISTS cpe AS
@@ -107,17 +107,17 @@ const batchSize = 800
 func GenerateCPEDB(path string, items []cpedict.CPEItem) error {
 	err := os.Remove(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return fmt.Errorf("remove existing cpe db: %w", err)
 	}
 	db, err := sqliteDB(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("open sqlite db: %w", err)
 	}
 	defer db.Close()
 
 	err = applyCPEDatabaseSchema(db)
 	if err != nil {
-		return err
+		return fmt.Errorf("apply cpe schema: %w", err)
 	}
 
 	cpesCount := 0
@@ -128,7 +128,7 @@ func GenerateCPEDB(path string, items []cpedict.CPEItem) error {
 	for _, item := range items {
 		cpes, deprecations, err := generateCPEItem(item)
 		if err != nil {
-			return err
+			return fmt.Errorf("generate cpe item: %w", err)
 		}
 		cpesBatch = append(cpesBatch, cpes...)
 		cpesCount++
@@ -141,7 +141,7 @@ func GenerateCPEDB(path string, items []cpedict.CPEItem) error {
 		if cpesCount > batchSize {
 			err = bulkInsertCPEs(cpesCount, db, cpesBatch)
 			if err != nil {
-				return err
+				return fmt.Errorf("bulk insert cpes: %w", err)
 			}
 			cpesBatch = []interface{}{}
 			cpesCount = 0
@@ -149,7 +149,7 @@ func GenerateCPEDB(path string, items []cpedict.CPEItem) error {
 		if deprecationsCount > batchSize {
 			err := bulkInsertDeprecations(deprecationsCount, db, deprecationsBatch)
 			if err != nil {
-				return err
+				return fmt.Errorf("bulk insert deprecations: %w", err)
 			}
 			deprecationsBatch = []interface{}{}
 			deprecationsCount = 0
@@ -158,19 +158,19 @@ func GenerateCPEDB(path string, items []cpedict.CPEItem) error {
 	if cpesCount > 0 {
 		err = bulkInsertCPEs(cpesCount, db, cpesBatch)
 		if err != nil {
-			return err
+			return fmt.Errorf("bulk insert cpes: %w", err)
 		}
 	}
 	if deprecationsCount > 0 {
 		err := bulkInsertDeprecations(deprecationsCount, db, deprecationsBatch)
 		if err != nil {
-			return err
+			return fmt.Errorf("bulk insert deprecations: %w", err)
 		}
 	}
 
 	_, err = db.Exec(`INSERT INTO cpe_search (rowid, title, target_sw) select rowid, title, target_sw from cpe`)
 	if err != nil {
-		return err
+		return fmt.Errorf("populate cpe search index: %w", err)
 	}
 	return nil
 }
@@ -181,7 +181,10 @@ func bulkInsertDeprecations(deprecationsCount int, db *sqlx.DB, allDeprecations 
 		fmt.Sprintf(`INSERT INTO deprecated_by(cpe_id, cpe23) VALUES %s`, values),
 		allDeprecations...,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("insert deprecated_by rows: %w", err)
+	}
+	return nil
 }
 
 func bulkInsertCPEs(cpesCount int, db *sqlx.DB, allCPEs []interface{}) error {
@@ -201,5 +204,8 @@ INSERT INTO cpe_2 (
 VALUES %s`, values),
 		allCPEs...,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("insert cpe_2 rows: %w", err)
+	}
+	return nil
 }

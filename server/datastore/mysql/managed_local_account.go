@@ -12,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// >>> OPENFRAME(managed-local-accounts): fork-specific managed local account rotation/status logic
 func (ds *Datastore) SaveHostManagedLocalAccount(ctx context.Context, hostUUID, plaintextPassword, commandUUID string) error {
 	encrypted, err := encrypt([]byte(plaintextPassword), ds.serverPrivateKey)
 	if err != nil {
@@ -139,20 +140,20 @@ func (ds *Datastore) SetManagedLocalAccountUUID(ctx context.Context, hostUUID, a
 }
 
 func (ds *Datastore) GetManagedLocalAccountByCommandUUID(ctx context.Context, commandUUID string) (*fleet.Host, error) {
-	return ds.lookupManagedLocalAccountHost(ctx, "command_uuid", commandUUID)
+	const stmt = `SELECT host_uuid FROM host_managed_local_account_passwords WHERE command_uuid = ?`
+	return ds.lookupManagedLocalAccountHost(ctx, stmt, commandUUID)
 }
 
 func (ds *Datastore) GetManagedLocalAccountByPendingCommandUUID(ctx context.Context, commandUUID string) (*fleet.Host, error) {
-	return ds.lookupManagedLocalAccountHost(ctx, "pending_command_uuid", commandUUID)
+	const stmt = `SELECT host_uuid FROM host_managed_local_account_passwords WHERE pending_command_uuid = ?`
+	return ds.lookupManagedLocalAccountHost(ctx, stmt, commandUUID)
 }
 
 // lookupManagedLocalAccountHost shares the join-to-hosts lookup used by both the
 // AccountConfiguration ack (matches command_uuid) and the SetAutoAdminPassword ack
-// (matches pending_command_uuid). The column name is interpolated, not parameterized,
-// because callers pass a fixed identifier — never untrusted input.
-func (ds *Datastore) lookupManagedLocalAccountHost(ctx context.Context, column, commandUUID string) (*fleet.Host, error) {
-	stmt := fmt.Sprintf(`SELECT host_uuid FROM host_managed_local_account_passwords WHERE %s = ?`, column)
-
+// (matches pending_command_uuid). Callers pass a fully-formed, parameterized statement
+// so no identifier is ever built from a runtime string.
+func (ds *Datastore) lookupManagedLocalAccountHost(ctx context.Context, stmt, commandUUID string) (*fleet.Host, error) {
 	var hostUUID string
 	if err := sqlx.GetContext(ctx, ds.reader(ctx), &hostUUID, stmt, commandUUID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -180,19 +181,19 @@ func (ds *Datastore) lookupManagedLocalAccountHost(ctx context.Context, column, 
 // inside the window do not extend the timer. The pre-existing rotateAt is read back
 // in either case so callers can show the deadline to the user.
 func (ds *Datastore) MarkManagedLocalAccountPasswordViewed(ctx context.Context, hostUUID string) (time.Time, error) {
-	stmt := fmt.Sprintf(`
+	const stmt = `
 		UPDATE host_managed_local_account_passwords
-		SET status = '%s',
+		SET status = ?,
 		    auto_rotate_at = NOW(6) + INTERVAL 65 MINUTE,
 		    initiated_by_fleet = 1
 		WHERE host_uuid = ?
 		  AND auto_rotate_at IS NULL
 		  AND encrypted_password IS NOT NULL
-		  AND (status IS NULL OR status <> '%s')
+		  AND (status IS NULL OR status <> ?)
 		  AND pending_encrypted_password IS NULL
-	`, fleet.MDMDeliveryPending, fleet.MDMDeliveryFailed)
+	`
 
-	if _, err := ds.writer(ctx).ExecContext(ctx, stmt, hostUUID); err != nil {
+	if _, err := ds.writer(ctx).ExecContext(ctx, stmt, fleet.MDMDeliveryPending, hostUUID, fleet.MDMDeliveryFailed); err != nil {
 		return time.Time{}, ctxerr.Wrap(ctx, err, "mark managed local account password viewed")
 	}
 
@@ -238,20 +239,20 @@ func (ds *Datastore) InitiateManagedLocalAccountRotation(ctx context.Context, ho
 	// flight the hint is stale (the row is now waiting on the device ack instead
 	// of the cron). Complete/Fail also clear auto_rotate_at; this just covers the
 	// pending-but-unacked window between enqueue and ack.
-	stmt := fmt.Sprintf(`
+	const stmt = `
 		UPDATE host_managed_local_account_passwords
 		SET pending_encrypted_password = ?,
 		    pending_command_uuid = ?,
 		    auto_rotate_at = NULL,
-		    status = '%s'
+		    status = ?
 		WHERE host_uuid = ?
 		  AND encrypted_password IS NOT NULL
 		  AND account_uuid IS NOT NULL
-		  AND (status IS NULL OR status <> '%s')
+		  AND (status IS NULL OR status <> ?)
 		  AND pending_encrypted_password IS NULL
-	`, fleet.MDMDeliveryPending, fleet.MDMDeliveryFailed)
+	`
 
-	result, err := ds.writer(ctx).ExecContext(ctx, stmt, encryptedPassword, cmdUUID, hostUUID)
+	result, err := ds.writer(ctx).ExecContext(ctx, stmt, encryptedPassword, cmdUUID, fleet.MDMDeliveryPending, hostUUID, fleet.MDMDeliveryFailed)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "initiate managed local account rotation")
 	}
@@ -298,18 +299,18 @@ func (ds *Datastore) InitiateManagedLocalAccountRotation(ctx context.Context, ho
 // initiated_by_fleet=0 tells the cron *not* to re-log the activity (the manual path
 // already logged it with the user as actor at click time).
 func (ds *Datastore) MarkManagedLocalAccountRotationDeferred(ctx context.Context, hostUUID string) error {
-	stmt := fmt.Sprintf(`
+	const stmt = `
 		UPDATE host_managed_local_account_passwords
-		SET status = '%s',
+		SET status = ?,
 		    auto_rotate_at = NOW(6),
 		    initiated_by_fleet = 0
 		WHERE host_uuid = ?
 		  AND encrypted_password IS NOT NULL
-		  AND (status IS NULL OR status <> '%s')
+		  AND (status IS NULL OR status <> ?)
 		  AND pending_encrypted_password IS NULL
-	`, fleet.MDMDeliveryPending, fleet.MDMDeliveryFailed)
+	`
 
-	if _, err := ds.writer(ctx).ExecContext(ctx, stmt, hostUUID); err != nil {
+	if _, err := ds.writer(ctx).ExecContext(ctx, stmt, fleet.MDMDeliveryPending, hostUUID, fleet.MDMDeliveryFailed); err != nil {
 		return ctxerr.Wrap(ctx, err, "mark managed local account rotation deferred")
 	}
 	return nil
@@ -338,21 +339,21 @@ func (ds *Datastore) ClearManagedLocalAccountRotation(ctx context.Context, hostU
 // a row that has since started a different rotation (defense in depth — the unique
 // pending_command_uuid should make this impossible in practice).
 func (ds *Datastore) CompleteManagedLocalAccountRotation(ctx context.Context, hostUUID, cmdUUID string) error {
-	stmt := fmt.Sprintf(`
+	const stmt = `
 		UPDATE host_managed_local_account_passwords
 		SET encrypted_password = pending_encrypted_password,
 		    command_uuid = pending_command_uuid,
 		    pending_encrypted_password = NULL,
 		    pending_command_uuid = NULL,
-		    status = '%s',
+		    status = ?,
 		    auto_rotate_at = NULL,
 		    initiated_by_fleet = 0
 		WHERE host_uuid = ?
 		  AND pending_encrypted_password IS NOT NULL
 		  AND pending_command_uuid = ?
-	`, fleet.MDMDeliveryVerified)
+	`
 
-	result, err := ds.writer(ctx).ExecContext(ctx, stmt, hostUUID, cmdUUID)
+	result, err := ds.writer(ctx).ExecContext(ctx, stmt, fleet.MDMDeliveryVerified, hostUUID, cmdUUID)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "complete managed local account rotation")
 	}
@@ -369,18 +370,18 @@ func (ds *Datastore) CompleteManagedLocalAccountRotation(ctx context.Context, ho
 // continue to view it; auto_rotate_at is cleared so we don't keep retrying a failed
 // rotation on the cron.
 func (ds *Datastore) FailManagedLocalAccountRotation(ctx context.Context, hostUUID, cmdUUID, errorMessage string) error {
-	stmt := fmt.Sprintf(`
+	const stmt = `
 		UPDATE host_managed_local_account_passwords
 		SET pending_encrypted_password = NULL,
 		    pending_command_uuid = NULL,
-		    status = '%s',
+		    status = ?,
 		    auto_rotate_at = NULL,
 		    initiated_by_fleet = 0
 		WHERE host_uuid = ?
 		  AND pending_command_uuid = ?
-	`, fleet.MDMDeliveryFailed)
+	`
 
-	result, err := ds.writer(ctx).ExecContext(ctx, stmt, hostUUID, cmdUUID)
+	result, err := ds.writer(ctx).ExecContext(ctx, stmt, fleet.MDMDeliveryFailed, hostUUID, cmdUUID)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "fail managed local account rotation")
 	}
@@ -403,7 +404,7 @@ func (ds *Datastore) FailManagedLocalAccountRotation(ctx context.Context, hostUU
 // initiated_by_fleet is returned alongside so the cron can skip activity logging
 // for deferred manual rotations (which were logged at click time).
 func (ds *Datastore) GetManagedLocalAccountsForAutoRotation(ctx context.Context) ([]fleet.HostManagedLocalAccountAutoRotationInfo, error) {
-	stmt := fmt.Sprintf(`
+	const stmt = `
 		SELECT
 			hmlap.host_uuid,
 			h.id AS host_id,
@@ -417,13 +418,15 @@ func (ds *Datastore) GetManagedLocalAccountsForAutoRotation(ctx context.Context)
 		  AND hmlap.account_uuid IS NOT NULL
 		  AND hmlap.encrypted_password IS NOT NULL
 		  AND hmlap.pending_encrypted_password IS NULL
-		  AND (hmlap.status IS NULL OR hmlap.status <> '%s')
+		  AND (hmlap.status IS NULL OR hmlap.status <> ?)
 		LIMIT 100
-	`, fleet.MDMDeliveryFailed)
+	`
 
 	var hosts []fleet.HostManagedLocalAccountAutoRotationInfo
-	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &hosts, stmt); err != nil {
+	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &hosts, stmt, fleet.MDMDeliveryFailed); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "get managed local accounts for auto rotation")
 	}
 	return hosts, nil
 }
+
+// <<< OPENFRAME(managed-local-accounts)
