@@ -5,8 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
-	"fmt"
 	"log/slog"
 	"math/big"
 	"time"
@@ -52,12 +50,12 @@ func NewHostIdentitySCEPDepot(db *sqlx.DB, ds fleet.Datastore, logger *slog.Logg
 func (d *HostIdentitySCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 	cert, err := assets.KeyPair(context.Background(), d.ds, fleet.MDMAssetHostIdentityCACert, fleet.MDMAssetHostIdentityCAKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting assets: %w", err)
+		return nil, nil, ctxerr.Wrap(context.Background(), err, "getting assets")
 	}
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(context.Background(), "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -86,10 +84,10 @@ func (d *HostIdentitySCEPDepot) HasCN(cn string, allowTime int, cert *x509.Certi
 // Put stores a certificate under the given name.
 func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
 	if crt.Subject.CommonName == "" || len(crt.Subject.CommonName) > maxCommonNameLength {
-		return errors.New("common name empty or too long")
+		return ctxerr.New(context.Background(), "common name empty or too long")
 	}
 	if !crt.SerialNumber.IsInt64() {
-		return errors.New("cannot represent serial number as int64")
+		return ctxerr.New(context.Background(), "cannot represent serial number as int64")
 	}
 
 	// Extract the ECC uncompressed point (04-prefixed X || Y); 0x04 means this is the raw representation
@@ -98,11 +96,11 @@ func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
 	//   - P-384: 97 bytes
 	key, ok := crt.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
-		return errors.New("public key not in ECDSA format")
+		return ctxerr.New(context.Background(), "public key not in ECDSA format")
 	}
 	pubKeyRaw, err := types.CreateECDSAPublicKeyRaw(key)
 	if err != nil {
-		return fmt.Errorf("creating public key raw: %w", err)
+		return ctxerr.Wrap(context.Background(), err, "creating public key raw")
 	}
 	certPEM := certificate.EncodeCertPEM(crt)
 
@@ -112,7 +110,7 @@ func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
 		existingCert, err := d.ds.GetHostIdentityCertByName(context.Background(), name)
 		switch {
 		case err != nil && !fleet.IsNotFound(err):
-			return fmt.Errorf("checking existing certificate: %w", err)
+			return ctxerr.Wrap(context.Background(), err, "checking existing certificate")
 		case err == nil:
 			// Certificate exists, check if rate limit applies
 			if time.Since(existingCert.CreatedAt) < cooldown {

@@ -2,24 +2,24 @@ package hostidentity
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
 )
 
-func initAssets(ds fleet.Datastore) error {
+func initAssets(ctx context.Context, ds fleet.Datastore) error {
 	// Check if we have existing certs and keys
 	expectedAssets := []fleet.MDMAssetName{
 		fleet.MDMAssetHostIdentityCACert,
 		fleet.MDMAssetHostIdentityCAKey,
 	}
-	savedAssets, err := ds.GetAllMDMConfigAssetsByName(context.Background(), expectedAssets, nil)
+	savedAssets, err := ds.GetAllMDMConfigAssetsByName(ctx, expectedAssets, nil)
 	if err != nil {
 		// allow not found errors as it means we're generating the assets for the first time.
 		if !fleet.IsNotFound(err) {
-			return fmt.Errorf("loading existing host identity assets from the database: %w", err)
+			return ctxerr.Wrap(ctx, err, "loading existing host identity assets from the database")
 		}
 	}
 
@@ -34,7 +34,7 @@ func initAssets(ds fleet.Datastore) error {
 		)
 		scepCert, scepKey, err := depot.NewCACertKey(caCert)
 		if err != nil {
-			return fmt.Errorf("generating host identity SCEP cert and key: %w", err)
+			return ctxerr.Wrap(ctx, err, "generating host identity SCEP cert and key")
 		}
 
 		// Store our config assets encrypted
@@ -49,8 +49,8 @@ func initAssets(ds fleet.Datastore) error {
 			})
 		}
 
-		if err := ds.InsertMDMConfigAssets(context.Background(), assets, nil); err != nil {
-			return fmt.Errorf("inserting host identity SCEP assets: %w", err)
+		if err := ds.InsertMDMConfigAssets(ctx, assets, nil); err != nil {
+			return ctxerr.Wrap(ctx, err, "inserting host identity SCEP assets")
 		}
 	}
 	return nil

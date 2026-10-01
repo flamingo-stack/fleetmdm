@@ -63,7 +63,7 @@ func (ds *AndroidDatastore) GetEnterprise(ctx context.Context) (*android.Enterpr
 
 func (ds *AndroidDatastore) UpdateEnterprise(ctx context.Context, enterprise *android.EnterpriseDetails) error {
 	if enterprise == nil || enterprise.ID == 0 {
-		return errors.New("missing enterprise ID")
+		return ctxerr.New(ctx, "missing enterprise ID")
 	}
 	stmt := `UPDATE android_enterprises
     SET signup_name = ?,
