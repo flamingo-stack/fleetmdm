@@ -76,14 +76,28 @@ const rebuildQueryStringWithTeamId = (
     parts.splice(pageIndex, 1, "page=0");
   }
 
-  // Backward compat: rewrite legacy team_id= to fleet_id=
-  const legacyIndex = parts.findIndex((p) => p.startsWith("team_id="));
-  if (legacyIndex !== -1) {
-    parts.splice(
-      legacyIndex,
-      1,
-      parts[legacyIndex].replace("team_id=", "fleet_id=")
-    );
+  // Backward compat: rewrite legacy team_id= to fleet_id=, but only if there
+  // isn't already a fleet_id= param present. If both are present, the
+  // fleet_id= param takes precedence and the stale legacy param is simply
+  // dropped below in the main fleet_id handling, avoiding a second splice
+  // against stale indices.
+  const hasFleetIdParam = parts.some((p) => p.startsWith("fleet_id="));
+  if (!hasFleetIdParam) {
+    const legacyIndex = parts.findIndex((p) => p.startsWith("team_id="));
+    if (legacyIndex !== -1) {
+      parts.splice(
+        legacyIndex,
+        1,
+        parts[legacyIndex].replace("team_id=", "fleet_id=")
+      );
+    }
+  } else {
+    // Drop any stray legacy team_id= params since fleet_id= is authoritative
+    for (let i = parts.length - 1; i >= 0; i -= 1) {
+      if (parts[i].startsWith("team_id=")) {
+        parts.splice(i, 1);
+      }
+    }
   }
 
   const teamIndex = parts.findIndex((p) => p.startsWith("fleet_id="));
@@ -186,13 +200,25 @@ const getUserTeams = ({
     : filterUserTeamsByRole(currentUser.teams, permittedAccessByTeamRole);
 };
 
+// Name of the built-in "Workstations" fleet, as seeded/created elsewhere in
+// the app (e.g. wherever the default "Workstations" team is provisioned).
+// Kept as a single documented constant here since this hook is the only
+// consumer of the match today; if a shared location for team-name constants
+// is introduced, this should be moved there to avoid drift.
+const WORKSTATIONS_TEAM_NAME = "workstations";
+// U+1F4BB PERSONAL COMPUTER emoji, optionally followed by a variation
+// selector (U+FE0F), as may be produced by different emoji input methods.
+const WORKSTATIONS_EMOJI_PREFIX_PATTERN = /^\u{1F4BB}\uFE0F?\s*/u;
+
 // Prefer a fleet named "Workstations" (with or without emoji prefix),
 // otherwise fall back to the fleet with the lowest ID.
 export const preferredOrLowestIdFleet = (fleets: ITeamSummary[]) => {
-  const name = "workstations";
   const workstations = fleets.find((t) => {
-    const lower = t.name.toLowerCase();
-    return lower === name || lower === `\u{1F4BB} ${name}`;
+    const lower = t.name
+      .toLowerCase()
+      .replace(WORKSTATIONS_EMOJI_PREFIX_PATTERN, "")
+      .trim();
+    return lower === WORKSTATIONS_TEAM_NAME;
   });
   return workstations ?? sortBy(fleets, (t) => t.id)[0];
 };
@@ -462,11 +488,17 @@ export const useTeamIdParam = ({
   if (hasLegacyTeamIdParam) {
     // Backward compat: redirect legacy ?team_id= URLs to ?fleet_id=
     // Skip other reconciliation to avoid a second redirect overwriting this one.
-    router.replace(
-      pathname
-        .concat(search.replace(/\bteam_id=/g, "fleet_id="))
-        .concat(hash || "")
-    );
+    // If a fleet_id= param is also already present in the URL, treat it as
+    // authoritative and simply drop the stale legacy team_id= param instead
+    // of overwriting fleet_id=, so this path can never disagree with
+    // rebuildQueryStringWithTeamId's own legacy-param handling.
+    const hasFleetIdParam = /(?:^|[?&])fleet_id=/.test(search);
+    const newSearch = hasFleetIdParam
+      ? search.replace(/([?&])team_id=[^&]*(&)?/g, (_match, lead, trail) =>
+          trail ? lead : lead === "?" ? "?" : ""
+        )
+      : search.replace(/\bteam_id=/g, "fleet_id=");
+    router.replace(pathname.concat(newSearch).concat(hash || ""));
   } else if (isFreeTier) {
     // free tier should never have fleet_id param, so change to "All teams"
     if (query.fleet_id) {

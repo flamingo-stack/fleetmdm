@@ -106,7 +106,13 @@ func (c *collector) exec(ctx context.Context) {
 		c.addSkipStats(failed)
 		return
 	}
-	defer conn.Do("DEL", keyLock) //nolint:errcheck
+	defer func() {
+		if _, err := conn.Do("DEL", keyLock); err != nil {
+			if c.errHandler != nil {
+				c.errHandler(c.name, err)
+			}
+		}
+	}()
 
 	// at this point, the lock has been acquired, execute the collector handler
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.lockTimeout.Seconds())*time.Second)
@@ -179,9 +185,11 @@ func (c *collector) nextRunAfter() time.Duration {
 	var jitter time.Duration
 	if c.jitterPct > 0 {
 		maxJitter := time.Duration(c.jitterPct) * c.execInterval / time.Duration(100.0)
-		randDuration, err := rand.Int(rand.Reader, big.NewInt(int64(maxJitter)))
-		if err == nil {
-			jitter = time.Duration(randDuration.Int64())
+		if maxJitter > 0 {
+			randDuration, err := rand.Int(rand.Reader, big.NewInt(int64(maxJitter)))
+			if err == nil {
+				jitter = time.Duration(randDuration.Int64())
+			}
 		}
 	}
 

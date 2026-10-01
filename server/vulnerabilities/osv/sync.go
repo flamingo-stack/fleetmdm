@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -43,9 +44,8 @@ func Refresh(
 	upToDateVersions := make([]string, 0, len(syncResult.Downloaded)+len(syncResult.Skipped))
 	upToDateVersions = append(upToDateVersions, syncResult.Downloaded...)
 	upToDateVersions = append(upToDateVersions, syncResult.Skipped...)
-	err = removeOldOSVArtifacts(now, vulnPath, upToDateVersions)
-	if err != nil {
-		return syncResult.Downloaded, fmt.Errorf("warning: failed to clean up old OSV artifacts: %w", err)
+	if err := removeOldOSVArtifacts(now, vulnPath, upToDateVersions); err != nil {
+		log.Warn().Err(err).Msg("failed to clean up old OSV artifacts")
 	}
 
 	return syncResult.Downloaded, nil
@@ -270,7 +270,7 @@ func RefreshRHEL(
 	upToDateVersions = append(upToDateVersions, syncResult.Downloaded...)
 	upToDateVersions = append(upToDateVersions, syncResult.Skipped...)
 	if err := removeOldRHELOSVArtifacts(now, vulnPath, upToDateVersions); err != nil {
-		return syncResult.Downloaded, fmt.Errorf("warning: failed to clean up old RHEL OSV artifacts: %w", err)
+		log.Warn().Err(err).Msg("failed to clean up old RHEL OSV artifacts")
 	}
 
 	return syncResult.Downloaded, nil

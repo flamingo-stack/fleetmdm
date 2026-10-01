@@ -55,6 +55,7 @@ type updateSoftwareInstallerRequest struct {
 	LabelsIncludeAll  []string
 	Categories        []string
 	DisplayName       *string
+	AutomaticInstall  *bool
 	// Configuration is the in-house app's managed app configuration as raw XML bytes (iOS / iPadOS only). nil means leave unchanged.
 	Configuration []byte
 }
@@ -64,8 +65,13 @@ type uploadSoftwareInstallerResponse struct {
 	Err             error                    `json:"error,omitempty"`
 }
 
-// TODO: We parse the whole body before running svc.authz.Authorize.
-// An authenticated but unauthorized user could abuse this.
+// NOTE: This handler parses the whole multipart body (including a potentially
+// large file upload) before svc.authz.Authorize runs. An authenticated but
+// unauthorized user could abuse this to force the server to buffer/parse
+// arbitrary large uploads before being rejected. This is a known
+// resource-exhaustion risk that should be addressed by moving authorization
+// earlier in the request pipeline (e.g. checking authz before or during body
+// parsing) rather than after DecodeRequest completes.
 func (updateSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	decoded := updateSoftwareInstallerRequest{}
 
@@ -151,6 +157,15 @@ func (updateSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http
 			return nil, &fleet.BadRequestError{Message: fmt.Sprintf("failed to decode self_service bool in multipart form: %s", err.Error())}
 		}
 		decoded.SelfService = &parsed
+	}
+
+	val, ok = r.MultipartForm.Value["automatic_install"]
+	if ok && len(val) > 0 && val[0] != "" {
+		parsed, err := strconv.ParseBool(val[0])
+		if err != nil {
+			return nil, &fleet.BadRequestError{Message: fmt.Sprintf("failed to decode automatic_install bool in multipart form: %s", err.Error())}
+		}
+		decoded.AutomaticInstall = &parsed
 	}
 
 	// decode labels and categories
@@ -293,8 +308,13 @@ func (svc *Service) UpdateSoftwareInstaller(ctx context.Context, payload *fleet.
 	return nil, fleet.ErrMissingLicense
 }
 
-// TODO: We parse the whole body before running svc.authz.Authorize.
-// An authenticated but unauthorized user could abuse this.
+// NOTE: This handler parses the whole multipart body (including a potentially
+// large file upload) before svc.authz.Authorize runs. An authenticated but
+// unauthorized user could abuse this to force the server to buffer/parse
+// arbitrary large uploads before being rejected. This is a known
+// resource-exhaustion risk that should be addressed by moving authorization
+// earlier in the request pipeline (e.g. checking authz before or during body
+// parsing) rather than after DecodeRequest completes.
 func (uploadSoftwareInstallerRequest) DecodeRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	decoded := uploadSoftwareInstallerRequest{}
 
@@ -1153,3 +1173,4 @@ func (svc *Service) GetInHouseAppPackage(ctx context.Context, titleID uint, toke
 
 	return nil, fleet.ErrMissingLicense
 }
+
