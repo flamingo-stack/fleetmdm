@@ -16,9 +16,10 @@ import (
 // host_scim_user) are normally populated by the MDM enrollment and SCIM sync
 // flows rather than any public API.
 type IDPOptions struct {
-	DSN       string
-	UserCount int // how many seeded users get an mdm_idp_accounts row
-	HostCount int // how many hosts get a host_mdm_idp_accounts assignment
+	DSN             string
+	UserCount       int // how many seeded users get an mdm_idp_accounts row
+	HostCount       int // how many hosts get a host_mdm_idp_accounts assignment
+	OrganizationIDs []uint // required tenant scope: only hosts/users in these orgs are touched
 }
 
 // idpUser is the subset of the GET /users response we care about.
@@ -26,6 +27,7 @@ type idpUser struct {
 	ID    uint   `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	OrganizationID uint `json:"organization_id"`
 }
 
 // idpHost is the subset of the GET /hosts response we care about.
@@ -33,6 +35,20 @@ type idpHost struct {
 	ID       uint   `json:"id"`
 	UUID     string `json:"uuid"`
 	Hostname string `json:"hostname"`
+	OrganizationID uint `json:"organization_id"`
+}
+
+// inOrganization reports whether id is present in orgIDs. Following the
+// established seeder convention, any mutation against hosts/users pulled
+// from a shared list endpoint must be scoped by organizationIds before it is
+// written.
+func inOrganization(id uint, orgIDs []uint) bool {
+	for _, o := range orgIDs {
+		if o == id {
+			return true
+		}
+	}
+	return false
 }
 
 // IDP seeds IDP linkage for the most-recently-created Fleet users so they
@@ -56,6 +72,11 @@ type idpHost struct {
 // for mdm_idp_accounts, user_name for scim_users, host_uuid/host_id for the
 // linkage tables) are reused rather than re-inserted; linkage inserts use
 // INSERT IGNORE.
+//
+// opt.OrganizationIDs is required: hosts and users fetched from the shared
+// list endpoints are filtered down to this tenant scope (via inOrganization)
+// before any mutation, so this seeder cannot attach IDP identities across
+// tenant boundaries in a shared multi-tenant deployment.
 func IDP(ctx context.Context, c Client, log Logger, opt IDPOptions) Result {
 	res := Result{Entity: "idp"}
 	if opt.UserCount <= 0 {
@@ -64,21 +85,37 @@ func IDP(ctx context.Context, c Client, log Logger, opt IDPOptions) Result {
 	if opt.HostCount < 0 {
 		opt.HostCount = 0
 	}
+	if len(opt.OrganizationIDs) == 0 {
+		res.Errors = append(res.Errors, errors.New("idp: organizationIds is required to scope host/user mutations"))
+		return res
+	}
 
-	users, err := fetchUsersForIDP(c, opt.UserCount)
+	allUsers, err := fetchUsersForIDP(c, opt.UserCount)
 	if err != nil {
 		res.Errors = append(res.Errors, fmt.Errorf("list users: %w", err))
 		return res
 	}
+	users := make([]idpUser, 0, len(allUsers))
+	for _, u := range allUsers {
+		if inOrganization(u.OrganizationID, opt.OrganizationIDs) {
+			users = append(users, u)
+		}
+	}
 	if len(users) == 0 {
-		res.Errors = append(res.Errors, errors.New("no users found — run `dibble users` first"))
+		res.Errors = append(res.Errors, errors.New("no users found in scope — run `dibble users` first"))
 		return res
 	}
 
-	hosts, err := fetchHostsForIDP(c, opt.HostCount)
+	allHosts, err := fetchHostsForIDP(c, opt.HostCount)
 	if err != nil {
 		res.Errors = append(res.Errors, fmt.Errorf("list hosts: %w", err))
 		return res
+	}
+	hosts := make([]idpHost, 0, len(allHosts))
+	for _, h := range allHosts {
+		if inOrganization(h.OrganizationID, opt.OrganizationIDs) {
+			hosts = append(hosts, h)
+		}
 	}
 
 	dsn, err := mysqlDSN(opt.DSN, false)
@@ -138,7 +175,7 @@ func IDP(ctx context.Context, c Client, log Logger, opt IDPOptions) Result {
 	// 2. Assign hosts (round-robin) to both linkage tables using the paired
 	// identities from step 1.
 	if len(hosts) == 0 && opt.HostCount > 0 {
-		log.Printf("idp: no hosts found — run osquery-perf to enroll some first")
+		log.Printf("idp: no hosts found in scope — run osquery-perf to enroll some first")
 	}
 	for i, h := range hosts {
 		pair := seeded[i%len(seeded)]
