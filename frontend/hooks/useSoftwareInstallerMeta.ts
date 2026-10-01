@@ -93,11 +93,6 @@ export const useSoftwareInstaller = (
           0
       );
 
-    const fmaVersions =
-      isFleetMaintainedApp && "fleet_maintained_versions" in softwareInstaller
-        ? softwareInstaller.fleet_maintained_versions
-        : [];
-
     const isCustomPackage =
       installerType === "package" && !isFleetMaintainedApp;
 
@@ -141,7 +136,6 @@ export const useSoftwareInstaller = (
         isAndroidPlayStoreWebApp,
         isFleetMaintainedApp,
         isLatestFmaVersion,
-        fmaVersions,
         isCustomPackage,
         isIosOrIpadosApp,
         sha256,

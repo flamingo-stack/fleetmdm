@@ -44,7 +44,7 @@ const baseClass = "software-script-details-modal";
 
 export type IPackageInstallDetails = {
   host_display_name?: string;
-  install_uuid?: string; // not actually optional
+  install_uuid: string;
 };
 
 export const renderContactOption = (url?: string) => (
@@ -201,8 +201,7 @@ export const SoftwareScriptDetailsModal = ({
   onRerun,
   contactUrl,
 }: ISoftwareInstallDetailsProps) => {
-  // will always be present
-  const installUUID = detailsFromProps.install_uuid ?? "";
+  const installUUID = detailsFromProps.install_uuid;
 
   const [showInstallDetails, setShowInstallDetails] = useState(false);
   const toggleInstallDetails = () => {
@@ -223,6 +222,7 @@ export const SoftwareScriptDetailsModal = ({
     {
       ...DEFAULT_USE_QUERY_OPTIONS,
       staleTime: 3000,
+      enabled: !!installUUID,
       select: (data) => data.results as ISoftwareScriptResult,
     }
   );
@@ -263,6 +263,15 @@ export const SoftwareScriptDetailsModal = ({
     : undefined;
 
   const renderContent = () => {
+    if (!installUUID) {
+      return (
+        <DataError
+          description="Couldn't get script details. Missing install UUID."
+          excludeIssueLink
+        />
+      );
+    }
+
     if (isLoading) {
       return <Spinner />;
     }

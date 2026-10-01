@@ -22,11 +22,11 @@ parasails.registerPage('command-details', {
     $('[purpose="copy-button"]').on('click', async function() {
       let code = $(this).closest('[purpose="codeblock"]').find('pre:visible code').text();
       if(code) {
+        navigator.clipboard.writeText(code);
         $(this).addClass('copied');
-        await setTimeout(()=>{
+        setTimeout(()=>{
           $(this).removeClass('copied');
         }, 2000);
-        navigator.clipboard.writeText(code);
       }
     });
   },
