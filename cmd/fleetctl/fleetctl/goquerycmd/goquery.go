@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/AbGuthrie/goquery/v2"
 	gqconfig "github.com/AbGuthrie/goquery/v2/config"
@@ -26,6 +27,7 @@ type activeQuery struct {
 
 type goqueryClient struct {
 	client       *service.Client
+	mu           sync.Mutex
 	queryCounter int
 	queries      map[string]activeQuery
 	// goquery passes the UUID, while we need the hostname (or ID) to
@@ -62,7 +64,9 @@ func (c *goqueryClient) CheckHost(query string) (gqhosts.Host, error) {
 		return gqhosts.Host{}, fmt.Errorf("host %s not found", query)
 	}
 
+	c.mu.Lock()
 	c.hostnameByUUID[host.UUID] = host.Hostname
+	c.mu.Unlock()
 
 	return gqhosts.Host{
 		UUID:         host.UUID,
@@ -73,20 +77,25 @@ func (c *goqueryClient) CheckHost(query string) (gqhosts.Host, error) {
 }
 
 func (c *goqueryClient) ScheduleQuery(uuid, query string) (string, error) {
+	c.mu.Lock()
 	c.queryCounter++
 	queryName := strconv.Itoa(c.queryCounter)
 
 	hostname, ok := c.hostnameByUUID[uuid]
 	if !ok {
+		c.mu.Unlock()
 		return "", errors.New("could not lookup host")
 	}
+	c.mu.Unlock()
 
 	res, err := c.client.LiveQuery(query, nil, []string{}, []string{hostname})
 	if err != nil {
 		return "", err
 	}
 
+	c.mu.Lock()
 	c.queries[queryName] = activeQuery{status: "Pending"}
+	c.mu.Unlock()
 
 	// We need to start a separate thread due to goquery expecting
 	// scheduling a query and retrieving results to be separate
@@ -94,11 +103,15 @@ func (c *goqueryClient) ScheduleQuery(uuid, query string) (string, error) {
 	go func() {
 		select {
 		case hostResult := <-res.Results():
+			c.mu.Lock()
 			c.queries[queryName] = activeQuery{status: "Completed", results: hostResult.Rows}
+			c.mu.Unlock()
 
 			// Print an error
 		case err := <-res.Errors():
+			c.mu.Lock()
 			c.queries[queryName] = activeQuery{status: "error: " + err.Error()}
+			c.mu.Unlock()
 		}
 	}()
 
@@ -107,7 +120,9 @@ func (c *goqueryClient) ScheduleQuery(uuid, query string) (string, error) {
 }
 
 func (c *goqueryClient) FetchResults(queryName string) (gqmodels.Rows, string, error) {
+	c.mu.Lock()
 	res, ok := c.queries[queryName]
+	c.mu.Unlock()
 	if !ok {
 		return nil, "", fmt.Errorf("Unknown query %s", queryName)
 	}

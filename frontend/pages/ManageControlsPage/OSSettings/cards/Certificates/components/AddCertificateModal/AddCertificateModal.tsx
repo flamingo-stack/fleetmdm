@@ -144,6 +144,7 @@ const AddCertModal = ({
         nameEquals: "subject_alternative_name",
       });
       const nameConflict = getErrorReason(e, {
+        nameEquals: "name",
         reasonIncludes: "already exists",
       });
       if (sanReason) {
@@ -253,3 +254,4 @@ const AddCertModal = ({
 };
 
 export default AddCertModal;
+
