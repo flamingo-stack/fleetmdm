@@ -34,6 +34,7 @@ const DeleteScriptModal = ({
     try {
       await scriptAPI.deleteScript(id);
       renderFlash("success", "Successfully deleted.");
+      afterDelete();
     } catch (e) {
       const error = e as AxiosResponse<IApiError>;
       const apiErrMessage = getErrorMessage(error);
@@ -43,9 +44,9 @@ const DeleteScriptModal = ({
           ? apiErrMessage
           : "Couldn’t delete. Please try again."
       );
+    } finally {
+      setIsDeleting(false);
     }
-    setIsDeleting(false);
-    afterDelete();
   };
 
   return (
@@ -87,3 +88,4 @@ const DeleteScriptModal = ({
 };
 
 export default DeleteScriptModal;
+

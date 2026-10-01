@@ -23,6 +23,7 @@ func ExtractIPAMetadata(tfr *fleet.TempFileReader) (*InstallerMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 
 	var plistData struct {
 		BundleID string `plist:"CFBundleIdentifier"`

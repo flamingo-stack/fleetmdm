@@ -62,7 +62,7 @@ const ConfirmInviteForm = ({
   const [formData, setFormData] = useState<IConfirmInviteFormData>({
     name: defaultFormData?.name || "",
     password: defaultFormData?.password || "",
-    password_confirmation: defaultFormData?.password || "",
+    password_confirmation: defaultFormData?.password_confirmation || "",
   });
   const [formErrors, setFormErrors] = useState<IConfirmInviteFormErrors>({});
 
