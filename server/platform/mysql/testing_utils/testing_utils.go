@@ -72,12 +72,12 @@ func TruncateTables(t testing.TB, db *sqlx.DB, logger *slog.Logger, nonEmptyTabl
         table_type = 'BASE TABLE'
     `
 			if err := sqlx.SelectContext(ctx, tx, &tables, sql); err != nil {
-				return err
+				return fmt.Errorf("selecting table names from information_schema: %w", err)
 			}
 		}
 
 		if _, err := tx.ExecContext(ctx, `SET FOREIGN_KEY_CHECKS=0`); err != nil {
-			return err
+			return fmt.Errorf("disabling foreign key checks: %w", err)
 		}
 		for _, tbl := range tables {
 			if nonEmptyTables[tbl] {
@@ -87,11 +87,11 @@ func TruncateTables(t testing.TB, db *sqlx.DB, logger *slog.Logger, nonEmptyTabl
 				return fmt.Errorf("cannot truncate table %s, it contains seed data from schema.sql", tbl)
 			}
 			if _, err := tx.ExecContext(ctx, "TRUNCATE TABLE "+tbl); err != nil {
-				return err
+				return fmt.Errorf("truncating table %s: %w", tbl, err)
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `SET FOREIGN_KEY_CHECKS=1`); err != nil {
-			return err
+			return fmt.Errorf("enabling foreign key checks: %w", err)
 		}
 		return nil
 	}, logger))

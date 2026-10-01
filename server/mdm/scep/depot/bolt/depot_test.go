@@ -11,25 +11,32 @@ import (
 )
 
 // createDepot creates a Bolt database in a temporary location.
-func createDB(mode os.FileMode, options *bolt.Options) *Depot {
+func createDB(t *testing.T, mode os.FileMode, options *bolt.Options) *Depot {
 	// Create temporary path.
-	f, _ := ioutil.TempFile("", "bolt-")
+	f, err := ioutil.TempFile("", "bolt-")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
 	f.Close()
 	os.Remove(f.Name())
 
 	db, err := bolt.Open(f.Name(), mode, options)
 	if err != nil {
-		panic(err.Error())
+		t.Fatalf(err.Error())
 	}
+	t.Cleanup(func() {
+		db.Close()
+		os.Remove(f.Name())
+	})
 	d, err := NewBoltDepot(db)
 	if err != nil {
-		panic(err.Error())
+		t.Fatalf(err.Error())
 	}
 	return d
 }
 
 func TestDepot_Serial(t *testing.T) {
-	db := createDB(0o666, nil)
+	db := createDB(t, 0o666, nil)
 	tests := []struct {
 		name    string
 		want    *big.Int
@@ -53,7 +60,7 @@ func TestDepot_Serial(t *testing.T) {
 }
 
 func TestDepot_writeSerial(t *testing.T) {
-	db := createDB(0o666, nil)
+	db := createDB(t, 0o666, nil)
 
 	tests := []struct {
 		name    string
@@ -75,7 +82,7 @@ func TestDepot_writeSerial(t *testing.T) {
 }
 
 func TestDepot_incrementSerial(t *testing.T) {
-	db := createDB(0o666, nil)
+	db := createDB(t, 0o666, nil)
 
 	tests := []struct {
 		name    string
@@ -104,7 +111,7 @@ func TestDepot_incrementSerial(t *testing.T) {
 }
 
 func TestDepot_CreateOrLoadKey(t *testing.T) {
-	db := createDB(0o666, nil)
+	db := createDB(t, 0o666, nil)
 	tests := []struct {
 		bits    int
 		wantErr bool
@@ -124,7 +131,7 @@ func TestDepot_CreateOrLoadKey(t *testing.T) {
 }
 
 func TestDepot_CreateOrLoadCA(t *testing.T) {
-	db := createDB(0o666, nil)
+	db := createDB(t, 0o666, nil)
 	tests := []struct {
 		wantErr bool
 	}{

@@ -39,6 +39,10 @@ module.exports = {
 
   fn: async function ({tenant, state, error, error_description}) {// eslint-disable-line camelcase
 
+    // Whether verbose debug logging of raw Microsoft API response bodies is enabled.
+    // Controlled via the MICROSOFT_PROXY_VERBOSE_LOGGING environment variable rather than a hardcoded Fleet instance URL.
+    let isVerboseDebugLoggingEnabled = !!sails.config.custom.microsoftProxyVerboseLogging;
+
     // If an error or error_description are provided, then the admin did not consent, and we will return a 200 response.
     if(error || error_description) {// eslint-disable-line camelcase
       // If an admin did not consent (or a user who started connecting the integration does not have admin permissions), try to match the provided state to a MicrosoftComplianceTenant record, and redirect to that.
@@ -97,7 +101,7 @@ module.exports = {
         return {redirect: fleetInstanceUrlToRedirectTo };
       });
       // Log responses from Micrsoft APIs for Fleet's integration
-      if(informationAboutThisTenant.fleetInstanceUrl === 'https://dogfood.fleetdm.com') {
+      if(isVerboseDebugLoggingEnabled) {
         sails.log.info(`Microsoft proxy: receive-redirect-from-microsoft provisioned a new tenant: ${complianceTenantProvisionResponse.body}`);
       }
       // Example response:
@@ -146,7 +150,7 @@ module.exports = {
       });
 
       // Log responses from Micrsoft APIs for Fleet's integration
-      if(informationAboutThisTenant.fleetInstanceUrl === 'https://dogfood.fleetdm.com') {
+      if(isVerboseDebugLoggingEnabled) {
         sails.log.info(`Microsoft proxy: receive-redirect-from-microsoft created/found a compliance policy: ${createPolicyResponse.body}`);
       }
 
@@ -191,7 +195,7 @@ module.exports = {
       });
 
       // Log responses from Micrsoft APIs for Fleet's integration.
-      if(informationAboutThisTenant.fleetInstanceUrl === 'https://dogfood.fleetdm.com') {
+      if(isVerboseDebugLoggingEnabled) {
         sails.log.info(`Microsoft proxy: receive-redirect-from-microsoft created/found a entra ID group: ${groupResponse.body}`);
       }
       // Get the ID returned in the response.
@@ -240,7 +244,7 @@ module.exports = {
       // }
 
       // Log responses from Micrsoft APIs for Fleet's integration.
-      if(informationAboutThisTenant.fleetInstanceUrl === 'https://dogfood.fleetdm.com') {
+      if(isVerboseDebugLoggingEnabled) {
         sails.log.info(`Microsoft proxy: receive-redirect-from-microsoft assigned a compliance policy: ${assignPolicyResponse.body}`);
       }
 

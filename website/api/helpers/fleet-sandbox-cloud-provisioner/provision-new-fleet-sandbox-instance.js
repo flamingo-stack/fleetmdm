@@ -90,6 +90,9 @@ module.exports = {
     }
 
     // Start polling the /healthz endpoint of the created Fleet Sandbox instance, once it returns a 200 response, we'll continue.
+    // Note: the second argument to .until() is the overall timeout (in ms) for this polling operation, not the poll interval.
+    // We bound this to 5 minutes so that a permanently-unhealthy sandbox instance cannot hang this request indefinitely.
+    const FIVE_MINUTES_IN_MS = (5*60*1000);
     await sails.helpers.flow.until( async()=>{
       let healthCheckResponse = await sails.helpers.http.sendHttpRequest('GET', cloudProvisionerResponseData.URL+'/healthz')
       .timeout(5000)
@@ -99,7 +102,7 @@ module.exports = {
       if(healthCheckResponse) {
         return true;
       }
-    }, 10000)//∞
+    }, FIVE_MINUTES_IN_MS)
     .intercept('tookTooLong', ()=>{
       return new Error('This newly provisioned Fleet Sandbox instance (for '+emailAddress+') is taking too long to respond with a 2xx status code, even after repeatedly polling the health check endpoint.  Note that failed requests and non-2xx responses from the health check endpoint were ignored during polling.  Search for a bit of non-dynamic text from this error message in the fleetdm.com source code for more info on exactly how this polling works.');
     });

@@ -85,7 +85,11 @@ fi
 cd "$REPO_DIR"
 
 TODAY_UTC=$(date -u +%Y-%m-%d)
-YESTERDAY_UTC=$(date -u -v-1d +%Y-%m-%d 2>/dev/null || date -u -d "yesterday" +%Y-%m-%d)
+YESTERDAY_UTC=$(date -u -v-1d +%Y-%m-%d 2>/dev/null || date -u -d "yesterday" +%Y-%m-%d 2>/dev/null || true)
+if [ -z "$YESTERDAY_UTC" ]; then
+    echo "ERROR: Unable to compute yesterday's date; 'date' binary supports neither -v (BSD) nor -d (GNU) flags." >&2
+    exit 1
+fi
 
 # Get files changed today (since midnight UTC today)
 git log --since="${TODAY_UTC}T00:00:00Z" --name-only --pretty="" -- osv/cve \
@@ -119,3 +123,4 @@ echo "TODAY_COUNT=$TODAY_COUNT"
 echo "YESTERDAY_COUNT=$YESTERDAY_COUNT"
 
 exit 0
+
