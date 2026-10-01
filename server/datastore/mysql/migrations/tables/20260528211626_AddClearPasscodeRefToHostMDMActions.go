@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// >>> OPENFRAME(clear-passcode-ref): fork-specific migration to support Android AMAPI clear-passcode commands
 func init() {
 	MigrationClient.AddMigration(Up_20260528211626, Down_20260528211626)
 }
@@ -31,3 +32,5 @@ ALTER TABLE host_mdm_actions
 func Down_20260528211626(tx *sql.Tx) error {
 	return nil
 }
+
+// <<< OPENFRAME(clear-passcode-ref)

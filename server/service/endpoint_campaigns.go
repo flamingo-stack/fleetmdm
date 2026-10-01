@@ -89,19 +89,24 @@ func makeStreamDistributedQueryCampaignResultsHandler(config config.ServerConfig
 			// with the tenant team — leaving the whole campaign stream unfenced and the live_query
 			// activity stamped with a NULL team_id. Re-apply the pin from the upgrade request (read
 			// once: polling transports mutate the session request under a lock). The base ctx stays
-			// Background so the stream's cancellation semantics are unchanged. Fail closed in shared
-			// mode: the middleware 401s a headerless upgrade before the handler runs, so an unpinned
-			// session here means the handler was mounted outside the middleware.
+			// Background so the stream's cancellation semantics are unchanged. Fail closed
+			// unconditionally (regardless of shared-mode setting): if session.Request() is nil (some
+			// sockjs transports, e.g. certain polling/websocket edge cases) or the request carries no
+			// tenant pin, we cannot prove tenant fencing, so refuse to stream rather than risk
+			// cross-tenant exposure.
 			// — openframe/docs/mysql-multitenancy-feature.md
-			if req := session.Request(); req != nil {
+			req := session.Request()
+			if req != nil {
 				if teamID, ok := fleet.OpenframeTeamID(req.Context()); ok {
 					ctx = fleet.NewOpenframeTeamContext(ctx, teamID)
 				}
 			}
-			if _, ok := fleet.OpenframeTeamID(ctx); !ok && fleet.IsOpenframeSharedMode() {
-				logger.ErrorContext(ctx, "openframe shared mode: rejecting campaign stream without tenant pin")
-				conn.WriteJSONError("missing tenant") //nolint:errcheck
-				return
+			if _, ok := fleet.OpenframeTeamID(ctx); !ok {
+				if fleet.IsOpenframeSharedMode() || req == nil {
+					logger.ErrorContext(ctx, "openframe: rejecting campaign stream without tenant pin")
+					conn.WriteJSONError("missing tenant") //nolint:errcheck
+					return
+				}
 			}
 			// <<< OPENFRAME(mysql-multitenancy)
 

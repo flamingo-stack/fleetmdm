@@ -1,3 +1,11 @@
+// >>> OPENFRAME(mysqlredis-hosts): fork-only shim wrapping fleet.Datastore host
+// write methods (NewHost, EnrollOsquery, DeleteHost, DeleteHosts,
+// CleanupExpiredHosts, CleanupIncomingHosts, CanEnrollNewHost) with Redis-backed
+// enrolled-host-count enforcement and cache invalidation. Must be kept in sync
+// with upstream fleetdm/fleet's fleet.Datastore interface: any change to the
+// signatures or semantics of the wrapped methods upstream requires review here.
+// <<< OPENFRAME(mysqlredis-hosts)
+
 package mysqlredis
 
 import (
@@ -131,6 +139,7 @@ func (d *Datastore) NewHost(ctx context.Context, host *fleet.Host) (*fleet.Host,
 	}
 	if d.enforceHostLimit > 0 {
 		if err := addHosts(ctx, d.pool, h.ID); err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "enrolled limits: add host after NewHost"))
 			logging.WithErr(ctx, err)
 		}
 	}
@@ -150,6 +159,7 @@ func (d *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreEn
 	}
 	if d.enforceHostLimit > 0 {
 		if err := addHosts(ctx, d.pool, h.ID); err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "enrolled limits: add host after EnrollOsquery"))
 			logging.WithErr(ctx, err)
 		}
 	}
@@ -166,6 +176,7 @@ func (d *Datastore) DeleteHost(ctx context.Context, hid uint) error {
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, hid); err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "enrolled limits: remove host after DeleteHost"))
 			logging.WithErr(ctx, err)
 		}
 	}
@@ -182,6 +193,7 @@ func (d *Datastore) DeleteHosts(ctx context.Context, ids []uint) error {
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, ids...); err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "enrolled limits: remove hosts after DeleteHosts"))
 			logging.WithErr(ctx, err)
 		}
 	}
@@ -201,6 +213,7 @@ func (d *Datastore) CleanupExpiredHosts(ctx context.Context) ([]fleet.DeletedHos
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, ids...); err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "enrolled limits: remove hosts after CleanupExpiredHosts"))
 			logging.WithErr(ctx, err)
 		}
 	}
@@ -215,6 +228,7 @@ func (d *Datastore) CleanupIncomingHosts(ctx context.Context, now time.Time) ([]
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, ids...); err != nil {
+			ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "enrolled limits: remove hosts after CleanupIncomingHosts"))
 			logging.WithErr(ctx, err)
 		}
 	}

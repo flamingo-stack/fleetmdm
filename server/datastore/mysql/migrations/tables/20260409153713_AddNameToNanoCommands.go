@@ -9,6 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20260409153713, Down_20260409153713)
 }
 
+// >>> OPENFRAME(nano-commands-name)
 func Up_20260409153713(tx *sql.Tx) error {
 	if !columnExists(tx, "nano_commands", "name") {
 		_, err := tx.Exec(`
@@ -18,8 +19,15 @@ ALTER TABLE nano_commands ADD COLUMN name varchar(255) CHARACTER SET utf8mb4 COL
 		}
 	}
 
-	// Recreate the view to include the new name column
+	// Backfill existing rows so name is not silently left NULL for historical commands.
 	_, err := tx.Exec(`
+UPDATE nano_commands SET name = request_type WHERE name IS NULL`)
+	if err != nil {
+		return fmt.Errorf("failed to backfill nano_commands.name column: %w", err)
+	}
+
+	// Recreate the view to include the new name column
+	_, err = tx.Exec(`
 		CREATE OR REPLACE SQL SECURITY INVOKER VIEW nano_view_queue AS
 SELECT
     q.id COLLATE utf8mb4_unicode_ci AS id,
@@ -55,3 +63,5 @@ ORDER BY
 func Down_20260409153713(_ *sql.Tx) error {
 	return nil
 }
+
+// <<< OPENFRAME(nano-commands-name)
