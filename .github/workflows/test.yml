@@ -166,8 +166,8 @@ jobs:
         with:
           install-only: true
 
-      - name: Test OpenFrame release-bundled osquery schema search
-        run: go test -race ./schema ./server/config ./server/service ./cmd/fleet -run 'Test(SearchOsquery|ParseOsquery|NormalizeOsquery|SearchTerms|RankOsquery|OpenframeConfig)' -count=1
+      - name: Test OpenFrame configuration and schema endpoint retirement
+        run: go test -race ./server/config ./server/service ./cmd/fleet -run 'Test(OpenframeConfig|OpenframeOsquerySchemaRoute)' -count=1
 
       - name: Build with GoReleaser
         env:
