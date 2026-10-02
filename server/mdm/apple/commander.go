@@ -157,9 +157,9 @@ func (svc *MDMAppleCommander) DeviceLock(ctx context.Context, host *fleet.Host, 
 		}
 		if c, ok := err.(conflictInterface); ok && c.IsConflict() {
 			// Another goroutine won the race, fetch the command that was created
-			existingCmd, existingPIN, err := svc.storage.GetPendingLockCommand(ctx, host.UUID)
-			if err != nil {
-				return "", ctxerr.Wrap(ctx, err, "getting existing lock after race condition")
+			existingCmd, existingPIN, getErr := svc.storage.GetPendingLockCommand(ctx, host.UUID)
+			if getErr != nil {
+				return "", ctxerr.Wrap(ctx, getErr, "getting existing lock after race condition")
 			}
 			if existingCmd != nil {
 				// Send push notification for the existing command and return its PIN

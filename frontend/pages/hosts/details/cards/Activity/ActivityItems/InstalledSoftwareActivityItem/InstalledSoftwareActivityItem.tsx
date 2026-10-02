@@ -36,10 +36,16 @@ const InstalledSoftwareActivityItem = ({
   // passive voice so the activity reads "<software> was installed on this
   // host (self-service)." without misrepresenting who initiated it.
   if (self_service) {
-    const passivePrefix = getInstallUninstallStatusPredicatePassive(
+    let passivePrefix = getInstallUninstallStatusPredicatePassive(
       status,
       isScriptPackageSource
     );
+    if (tab !== "past") {
+      passivePrefix =
+        status === "pending_uninstall"
+          ? "will be uninstalled"
+          : "will be installed";
+    }
     return (
       <ActivityItem
         className={baseClass}

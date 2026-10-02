@@ -200,14 +200,21 @@ wipe_system_files() {
 prepare_system_reset() {
     cp /usr/bin/sync /sync_bin
     # https://docs.kernel.org/admin-guide/sysrq.html
-    echo "1" > /proc/sys/kernel/sysrq
+    if ! echo "1" > /proc/sys/kernel/sysrq 2>/dev/null; then
+        echo "Warning: failed to enable sysrq via /proc/sys/kernel/sysrq" >&2
+    elif [ "$(cat /proc/sys/kernel/sysrq 2>/dev/null)" != "1" ]; then
+        echo "Warning: sysrq write did not take effect; system_reset may not force a halt" >&2
+    fi
 }
 
 system_reset() {
     # Give the system time to sync
     /sync_bin
     # Halt the system immediately
-    echo "o" > /proc/sysrq-trigger
+    if ! echo "o" > /proc/sysrq-trigger 2>/dev/null; then
+        echo "Warning: failed to write to /proc/sysrq-trigger; falling back to reboot -f" >&2
+        reboot -f 2>/dev/null || echo "Error: reboot -f also failed; system may not halt" >&2
+    fi
 }
 
 wipe_all_files() {
@@ -230,3 +237,4 @@ else
     echo "Wiping, system will be unreachable"
     (/usr/bin/nohup sh $0 wipe >/dev/null 2>/dev/null </dev/null) &
 fi
+

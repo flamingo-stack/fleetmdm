@@ -37,7 +37,16 @@ module.exports = {
     if(connectionforThisInstanceExists) {
       // Before throwing conflict, verify the enterprise still exists in Google
       // If it doesn't exist, clean up the stale proxy record and continue with signup
-      let isEnterpriseManagedByFleet = await sails.helpers.androidProxy.getIsEnterpriseManagedByFleet(connectionforThisInstanceExists.androidEnterpriseId);
+      let isEnterpriseManagedByFleet;
+      try {
+        isEnterpriseManagedByFleet = await sails.helpers.androidProxy.getIsEnterpriseManagedByFleet(connectionforThisInstanceExists.androidEnterpriseId);
+      } catch (err) {
+        // If the check itself failed (e.g. transient Google API error), fail safe by
+        // treating this as if the enterprise still exists, rather than proceeding to
+        // the destructive cleanup path below.
+        sails.log.warn(`When checking if an existing Android enterprise is still managed by Fleet, an error occurred. Treating the enterprise as still existing. Error: ${require('util').inspect(err)}`);
+        throw 'enterpriseAlreadyExists';
+      }
       if(isEnterpriseManagedByFleet) {
         // Enterprise still exists in Google - throw conflict
         throw 'enterpriseAlreadyExists';
@@ -95,3 +104,4 @@ module.exports = {
 
 
 };
+

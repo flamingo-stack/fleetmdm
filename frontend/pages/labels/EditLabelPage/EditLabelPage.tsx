@@ -130,6 +130,14 @@ const EditLabelPage = ({ routeParams, router }: IEditLabelPageProps) => {
 
     if (!label) return null;
 
+    if (label.label_membership_type === "host_vitals") {
+      return null;
+    }
+
+    if (currentUser && !hasEditPermission(currentUser, label)) {
+      return null;
+    }
+
     if (label.label_type === "builtin") {
       return (
         <DataError
