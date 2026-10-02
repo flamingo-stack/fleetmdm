@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"strconv"
+	"strings"
 	"terraform-provider-fleetdm/fleetdm_client"
 )
 
@@ -83,6 +84,21 @@ func teamModelToTF(ctx context.Context, tm *fleetdm_client.TeamGetResponse, tf *
 	return nil
 }
 
+// isAlreadyExistsError does a best-effort check of the error message returned
+// by the thin Fleet API client wrapper to determine whether the failure was
+// caused by a name collision (HTTP 409/422 "already exists") rather than some
+// other failure. This is a stopgap until the client wrapper returns a typed
+// AlreadyExistsError that can be checked with errors.As.
+func isAlreadyExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "409") ||
+		strings.Contains(msg, "422")
+}
+
 // Create creates the resource from the plan and sets the initial Terraform state.
 func (r *teamsResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
@@ -95,10 +111,28 @@ func (r *teamsResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	newTeam, err := r.client.CreateTeam(plan.Name.ValueString(), plan.Description.ValueString())
 	if err != nil {
+		if isAlreadyExistsError(err) {
+			resp.Diagnostics.Append(diag.NewErrorDiagnostic(
+				"Team already exists",
+				fmt.Sprintf("A team named %q already exists in Fleet. If you intended to "+
+					"manage this existing team, import it instead (e.g. `terraform import`). "+
+					"Underlying error: %s", plan.Name.ValueString(), err)))
+			return
+		}
 		resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 			"Failed to create team",
 			fmt.Sprintf("Failed to create team: %s", err)))
 		return
+	}
+
+	// Persist the partial state (at minimum the ID and name/description) now
+	// that the team exists server-side. This ensures that if a later step in
+	// this function fails, Terraform still knows the team exists and can
+	// reconcile it on a subsequent apply/destroy instead of leaving it
+	// orphaned.
+	if convErr := teamModelToTF(ctx, newTeam, &plan); convErr == nil {
+		diags = resp.State.Set(ctx, plan)
+		resp.Diagnostics.Append(diags...)
 	}
 
 	if !plan.AgentOptions.IsNull() && !plan.AgentOptions.IsUnknown() {
@@ -113,14 +147,23 @@ func (r *teamsResource) Create(ctx context.Context, req resource.CreateRequest, 
 				// team creation with agent options is atomic, however under the
 				// hood it's two api calls. We need to clean up from the first
 				// call here, but this isn't atomic and it might fail.
-				err = r.client.DeleteTeam(newTeam.Team.ID)
-				if err != nil {
+				delErr := r.client.DeleteTeam(newTeam.Team.ID)
+				if delErr != nil {
 					resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 						"failed to clean up after failed team creation",
 						fmt.Sprintf("failed to delete team %s while cleaning up "+
 							"failure setting agent options: %s. Team will need to be "+
-							"manually deleted.", plan.Name.ValueString(), err)))
+							"manually deleted. Terraform state has been left pointing at "+
+							"this team so it can be reconciled on the next apply/destroy.",
+							plan.Name.ValueString(), delErr)))
+					// The team still exists in Fleet; the partial state set above
+					// (with the pre-agent-options team data) already reflects
+					// that, so we leave it in place rather than clearing it.
+					return
 				}
+				// Cleanup succeeded: the team no longer exists in Fleet, so
+				// remove it from Terraform state to match reality.
+				resp.State.RemoveResource(ctx)
 				return
 			}
 		}
@@ -131,7 +174,9 @@ func (r *teamsResource) Create(ctx context.Context, req resource.CreateRequest, 
 		resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 			"failed to convert fleet api return to TF structs",
 			fmt.Sprintf("failed to convert fleet api return to TF structs: %s", err)))
-		_ = r.client.DeleteTeam(newTeam.Team.ID) // Problematic. :-/
+		// The state already has a valid partial representation of the team
+		// (set above prior to the agent options update), so we leave it in
+		// place rather than deleting the team out from under it.
 		return
 	}
 
@@ -297,3 +342,4 @@ func (r *teamsResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	resp.State.RemoveResource(ctx)
 }
+
