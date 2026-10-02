@@ -1,31 +1,16 @@
 # osquery Schema Search API
 
 The schema search endpoint gives OpenFrame services the canonical Fleet/osquery table and column
-documentation they need before generating SQL. Search is local and deterministic. Fleet loads the
-vendored `schema/osquery_fleet_schema.json` as an immediate fallback, then can refresh the in-memory
-snapshot from a configured HTTP source without restarting.
+documentation they need before generating SQL. Search is local and deterministic. Fleet loads only
+the `schema/osquery_fleet_schema.json` embedded in its server binary. It does not download a schema
+at startup, during search, or on a timer. The catalog changes only when a newly built Fleet server
+containing an updated JSON file is deployed.
 
-## Automatic refresh
+## Release ownership
 
-```yaml
-osquery:
-  schema_refresh_enabled: true
-  schema_refresh_interval: 24h
-  schema_refresh_url: https://raw.githubusercontent.com/fleetdm/fleet/<compatible-tag-or-commit>/schema/osquery_fleet_schema.json
-```
-
-The equivalent environment variables are `FLEET_OSQUERY_SCHEMA_REFRESH_ENABLED`,
-`FLEET_OSQUERY_SCHEMA_REFRESH_INTERVAL`, and `FLEET_OSQUERY_SCHEMA_REFRESH_URL`. Generic Fleet
-configuration and the Fleet Helm chart keep refresh disabled and default to the upstream commit that
-produced the embedded schema. OpenFrame environment overlays can opt in to a 24-hour refresh from
-the reviewed `flamingo-stack/fleetmdm/main` schema. Do not point production deployments directly at
-mutable upstream `fleetdm/fleet/main`; pin the source if a deployment must remain on an older schema.
-
-Each Fleet replica performs one best-effort refresh after startup and then retries at the configured
-interval. A snapshot is replaced atomically only after a `200` response has been fully read and
-validated as a non-empty schema. Network, HTTP, size, and JSON failures keep the previous snapshot,
-so the embedded schema remains available during startup and outages. Search requests never perform
-network calls.
+The Fleet fork release owns the bundled schema. The agent release and rollout must keep device
+osquery versions compatible with that schema; updating the Fleet server alone does not upgrade
+device osquery. This endpoint does not select a historical schema by device version.
 
 ## Endpoint
 
@@ -99,17 +84,12 @@ Darwin and Windows).
 
 ## Files changed
 
-- `schema/osquery_search.go` — embedded fallback, atomic snapshot, and deterministic ranking.
-- `schema/osquery_refresh.go` — bounded HTTP refresh and validation.
-- `cmd/fleet/osquery_schema_refresh_openframe.go` — cancellable per-replica refresh loop.
-- `server/config/config.go` — YAML, environment, and CLI configuration.
-- `charts/fleet/values.yaml` — OpenFrame deployment defaults.
+- `schema/osquery_search.go` — release-bundled schema, validation, and deterministic ranking.
 - `server/service/osquery_schema_openframe.go` — HTTP request/response and endpoint.
 - `server/service/handler.go` — route registration.
 - `server/api_endpoints/api_endpoints.yml` — API-only user allowlist catalog entry.
 
 ## Upstream sync notes
 
-The schema search and refresh Go files are fork-added. Preserve the
-`OPENFRAME(osquery-schema-search)` blocks in `server/config/config.go`, `cmd/fleet/serve.go`,
-`server/service/handler.go`, and the Helm values when syncing upstream.
+The schema search Go files are fork-added. Preserve the
+`OPENFRAME(osquery-schema-search)` route block in `server/service/handler.go` when syncing upstream.

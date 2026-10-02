@@ -117,3 +117,27 @@ func TestNormalizeOsqueryPlatformAliases(t *testing.T) {
 func TestSearchTermsDeduplicatesTerms(t *testing.T) {
 	require.Equal(t, []string{"processes", "ports"}, searchTerms("processes processes ports processes", "all"))
 }
+
+func TestParseOsquerySchemaJSONRejectsInvalidCatalog(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed json", body: `{`},
+		{name: "empty schema", body: `[]`},
+		{name: "missing table name", body: `[{"name":"","columns":[{"name":"value","type":"text"}]}]`},
+		{name: "missing columns", body: `[{"name":"broken_table","columns":[]}]`},
+		{name: "duplicate table name", body: `[{"name":"duplicate","columns":[{"name":"one","type":"text"}]},{"name":"duplicate","columns":[{"name":"two","type":"text"}]}]`},
+		{name: "missing column name", body: `[{"name":"broken_table","columns":[{"name":"","type":"text"}]}]`},
+		{name: "missing column type", body: `[{"name":"broken_table","columns":[{"name":"value","type":""}]}]`},
+		{name: "duplicate column name", body: `[{"name":"broken_table","columns":[{"name":"value","type":"text"},{"name":"value","type":"integer"}]}]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOsquerySchemaJSON([]byte(tt.body))
+
+			require.Error(t, err)
+		})
+	}
+}

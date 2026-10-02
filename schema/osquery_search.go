@@ -10,7 +10,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync/atomic"
 )
 
 const (
@@ -50,15 +49,11 @@ type rankedOsqueryTable struct {
 	score int
 }
 
-type osquerySchemaSnapshot struct {
-	tables []OsqueryTable
-}
-
 var (
 	//go:embed osquery_fleet_schema.json
 	osquerySchemaJSON []byte
 
-	osquerySchemaState atomic.Pointer[osquerySchemaSnapshot]
+	osqueryTables []OsqueryTable
 
 	nonSearchCharacter = regexp.MustCompile(`[^a-z0-9]+`)
 	searchStopWords    = map[string]struct{}{
@@ -73,7 +68,7 @@ func init() {
 	if err != nil {
 		panic(fmt.Sprintf("parse embedded osquery schema: %v", err))
 	}
-	storeOsqueryTables(tables)
+	osqueryTables = tables
 }
 
 // SearchOsqueryTables returns the canonical table definitions most relevant to a phrase.
@@ -94,11 +89,6 @@ func SearchOsqueryTables(query, platform string, limit int) ([]OsqueryTable, err
 		return nil, fmt.Errorf("limit must be between 1 and %d", MaxOsquerySearchLimit)
 	}
 
-	tables, err := currentOsqueryTables()
-	if err != nil {
-		return nil, err
-	}
-
 	normalizedQuery := normalizeSearchText(query)
 	terms := searchTerms(normalizedQuery, platform)
 	if len(terms) == 0 {
@@ -108,7 +98,7 @@ func SearchOsqueryTables(query, platform string, limit int) ([]OsqueryTable, err
 		return nil, fmt.Errorf("query must not contain more than %d searchable terms", maxOsquerySearchTerms)
 	}
 
-	platformTables := slices.DeleteFunc(slices.Clone(tables), func(table OsqueryTable) bool {
+	platformTables := slices.DeleteFunc(slices.Clone(osqueryTables), func(table OsqueryTable) bool {
 		return !osqueryTableSupportsPlatform(table, platform)
 	})
 	return rankOsqueryTables(platformTables, terms, normalizedQuery, limit), nil
@@ -155,18 +145,6 @@ func parseOsquerySchemaJSON(data []byte) ([]OsqueryTable, error) {
 		}
 	}
 	return tables, nil
-}
-
-func currentOsqueryTables() ([]OsqueryTable, error) {
-	snapshot := osquerySchemaState.Load()
-	if snapshot == nil || len(snapshot.tables) == 0 {
-		return nil, errors.New("osquery schema is not loaded")
-	}
-	return snapshot.tables, nil
-}
-
-func storeOsqueryTables(tables []OsqueryTable) {
-	osquerySchemaState.Store(&osquerySchemaSnapshot{tables: tables})
 }
 
 // NormalizeOsqueryPlatform validates Fleet's public platform aliases.

@@ -131,7 +131,7 @@ and the heaviest standing rebase cost.
 | Area | Files |
 |------|-------|
 | Host assignments | `server/fleet/{policies,queries,hosts,datastore,service}.go`, `server/datastore/mysql/{policies,queries,hosts}.go`, `server/service/{global_policies,queries,handler,labels_util}.go`, `server/mock/{datastore,datastore_mock}.go`, `server/mock/service/service_mock.go`, `server/datastore/mysql/mysql.go`, `cmd/fleet/prepare.go` |
-| osquery schema search and refresh | `schema/osquery_{search,refresh}.go`, `cmd/fleet/osquery_schema_refresh_openframe.go`, `cmd/fleet/serve.go`, `server/config/config.go`, `server/service/{osquery_schema_openframe,handler}.go`, `server/api_endpoints/api_endpoints.yml`, `charts/fleet/values.yaml` |
+| osquery schema search | `schema/osquery_search.go`, `server/service/{osquery_schema_openframe,handler}.go`, `server/api_endpoints/api_endpoints.yml` |
 | Managed queries / policies | flag: `server/fleet/{queries,policies}.go`, `server/service/{queries,global_policies,team_policies}.go`, `server/datastore/mysql/{queries,policies}.go`, `schema.sql`; queries listing opt-in (`include_openframe_managed`): `server/fleet/{app,api_queries,service}.go`, `server/service/{global_schedule,team_schedule,queries_test}.go`, `server/mock/service/service_mock.go`; tests: `server/datastore/mysql/{queries,policies}_openframe_managed_test.go` — see [managed-queries.md](managed-queries.md), [managed-policies.md](managed-policies.md) |
 | osquery host id | `server/fleet/hosts.go` |
 | Query-results TTL cleanup | `server/config/config.go`, `server/fleet/{cron_schedules,datastore}.go`, `server/datastore/mysql/query_results.go`, `cmd/fleet/{cron,serve}.go` |
@@ -188,7 +188,7 @@ Computed from the fork working tree vs the upstream baseline
 `server/datastore/mysql/migrations/data/` (the ~473 idempotent upstream migrations —
 see [migrations.md](migrations.md)). Paths are repo-root-relative.
 
-### Added (49)
+### Added (45)
 
 ```
 .github/steps/sign-macos-package/action.yml
@@ -202,8 +202,6 @@ charts/fleet/templates/configmap.yaml
 charts/fleet/templates/secret.yaml
 charts/fleet/templates/vulnprocessing/bind-job.yaml
 charts/fleet/templates/vulnprocessing/pvc.yaml
-cmd/fleet/osquery_schema_refresh_openframe.go
-cmd/fleet/osquery_schema_refresh_openframe_test.go
 openframe/docs/README.md
 openframe/docs/agent-openframe-mode.md
 openframe/docs/api-expose-osquery-host-id.md
@@ -232,8 +230,6 @@ server/datastore/redis/keyprefix_test.go
 server/fleet/openframe.go
 schema/osquery_search.go
 schema/osquery_search_test.go
-schema/osquery_refresh.go
-schema/osquery_refresh_test.go
 server/service/osquery_schema_openframe.go
 server/service/osquery_schema_openframe_test.go
 server/service/openframe/openframe-encryption-service.go
