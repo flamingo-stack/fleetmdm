@@ -26,10 +26,19 @@ type Migrations []*Migration
 func (ms Migrations) Len() int      { return len(ms) }
 func (ms Migrations) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
 func (ms Migrations) Less(i, j int) bool {
-	if ms[i].Version == ms[j].Version {
-		log.Fatalf("goose: duplicate version %v detected:\n%v\n%v", ms[i].Version, ms[i].Source, ms[j].Source)
-	}
 	return ms[i].Version < ms[j].Version
+}
+
+// duplicateVersion returns an error if any two migrations share the same
+// version, instead of terminating the process from within the sort
+// comparator.
+func (ms Migrations) duplicateVersion() error {
+	for i := 1; i < len(ms); i++ {
+		if ms[i-1].Version == ms[i].Version {
+			return fmt.Errorf("goose: duplicate version %v detected:\n%v\n%v", ms[i].Version, ms[i-1].Source, ms[i].Source)
+		}
+	}
+	return nil
 }
 
 func (ms Migrations) Current(current int64) (*Migration, error) {
@@ -126,13 +135,20 @@ func (c *Client) collectMigrations(dirpath string, current, target int64) (Migra
 		}
 	}
 
-	migrations = sortAndConnectMigrations(migrations)
+	migrations, err := sortAndConnectMigrations(migrations)
+	if err != nil {
+		return nil, err
+	}
 
 	return migrations, nil
 }
 
-func sortAndConnectMigrations(migrations Migrations) Migrations {
+func sortAndConnectMigrations(migrations Migrations) (Migrations, error) {
 	sort.Sort(migrations)
+
+	if err := migrations.duplicateVersion(); err != nil {
+		return nil, err
+	}
 
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
@@ -145,7 +161,7 @@ func sortAndConnectMigrations(migrations Migrations) Migrations {
 		migrations[i].Previous = prev
 	}
 
-	return migrations
+	return migrations, nil
 }
 
 func versionFilter(v, current, target int64) bool {

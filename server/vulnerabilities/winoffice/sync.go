@@ -32,7 +32,7 @@ func syncBulletin(
 ) error {
 	remote, url, err := ghClient.WinOfficeBulletin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("list remote bulletins: %w", err)
 	}
 
 	// Nothing published yet on remote repo, so we do nothing.
@@ -42,12 +42,12 @@ func syncBulletin(
 
 	local, err := fsClient.WinOfficeBulletin()
 	if err != nil {
-		return err
+		return fmt.Errorf("list local bulletins: %w", err)
 	}
 
 	if len(local) == 0 {
 		if _, err := ghClient.Download(url); err != nil {
-			return err
+			return fmt.Errorf("download bulletin: %w", err)
 		}
 		return nil
 	}
@@ -58,7 +58,7 @@ func syncBulletin(
 
 	if local[0].Before(remote) {
 		if _, err := ghClient.Download(url); err != nil {
-			return err
+			return fmt.Errorf("download bulletin: %w", err)
 		}
 	}
 
@@ -66,7 +66,7 @@ func syncBulletin(
 	for _, l := range local {
 		if l.Before(remote) {
 			if err := fsClient.Delete(l); err != nil {
-				return err
+				return fmt.Errorf("delete local bulletin: %w", err)
 			}
 		}
 	}

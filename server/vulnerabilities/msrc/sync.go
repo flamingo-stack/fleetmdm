@@ -93,7 +93,7 @@ func sync(
 ) error {
 	remoteURLs, err := ghClient.MSRCBulletins(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetching remote msrc bulletins: %w", err)
 	}
 
 	var remote []io.MetadataFileName
@@ -103,18 +103,18 @@ func sync(
 
 	local, err := fsClient.MSRCBulletins()
 	if err != nil {
-		return err
+		return fmt.Errorf("listing local msrc bulletins: %w", err)
 	}
 
 	toDownload, toDelete := bulletinsDelta(os, local, remote)
 	for _, b := range toDownload {
 		if _, err := ghClient.Download(remoteURLs[b]); err != nil {
-			return err
+			return fmt.Errorf("downloading msrc bulletin %v: %w", b, err)
 		}
 	}
 	for _, d := range toDelete {
 		if err := fsClient.Delete(d); err != nil {
-			return err
+			return fmt.Errorf("deleting stale msrc bulletin %v: %w", d, err)
 		}
 	}
 

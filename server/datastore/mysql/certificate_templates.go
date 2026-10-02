@@ -341,7 +341,7 @@ WHERE host_uuid = ?`
 
 	var hTemplates []fleet.HostCertificateTemplate
 	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &hTemplates, stmt, hostUUID); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "getting host certificate templates")
 	}
 	return hTemplates, nil
 }
