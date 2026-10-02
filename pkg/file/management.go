@@ -99,7 +99,10 @@ var UpgradeCodeRegex = regexp.MustCompile(`((("\$UPGRADE_CODE")|(\$UPGRADE_CODE)
 var shellMetacharRegex = regexp.MustCompile("['" + `"` + "`" + `$\\|;&><!\n\r]`)
 
 // ValidatePackageIdentifiers checks that package IDs and upgrade codes do not
-// contain shell metacharacters.
+// contain shell metacharacters. Callers must invoke this before substituting
+// package IDs or upgrade codes into any script returned by GetInstallScript,
+// GetRemoveScript, or GetUninstallScript (e.g. via PackageIDRegex /
+// UpgradeCodeRegex substitution) to prevent shell injection.
 func ValidatePackageIdentifiers(packageIDs []string, upgradeCode string) error {
 	for _, id := range packageIDs {
 		if shellMetacharRegex.MatchString(id) {
@@ -134,3 +137,4 @@ func GetUninstallScript(extension string) string {
 		return ""
 	}
 }
+

@@ -148,7 +148,7 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 }
 
 func (svc *service) GetNextCACert(ctx context.Context) ([]byte, error) {
-	panic("not implemented")
+	return nil, errors.New("GetNextCACert not implemented")
 }
 
 // ServiceOption is a server configuration option

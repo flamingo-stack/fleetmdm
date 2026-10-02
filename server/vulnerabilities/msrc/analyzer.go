@@ -2,7 +2,6 @@ package msrc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -38,7 +37,7 @@ func Analyze(
 	// bulletin would cause every existing MSRC OS vulnerability for this OS to be marked as
 	// remediated. This usually indicates the bulletin file was corrupted during download.
 	if len(bulletin.Vulnerabilities) == 0 {
-		return nil, errors.New("MSRC bulletin contains no vulnerabilities (possible corrupted feed)")
+		return nil, ctxerr.New(ctx, "MSRC bulletin contains no vulnerabilities (possible corrupted feed)")
 	}
 
 	// Find matching products inside the bulletin

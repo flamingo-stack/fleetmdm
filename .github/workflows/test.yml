@@ -166,8 +166,10 @@ jobs:
         with:
           install-only: true
 
+      # >>> OPENFRAME(osquery-schema-tests): run fork-specific osquery schema tests in CI — openframe/docs/osquery-schema.md
       - name: Test OpenFrame osquery schema search and refresh
         run: go test -race ./schema ./server/config ./server/service ./cmd/fleet -run 'Test(SearchOsquery|RefreshOsquery|RankOsquery|RunOsquery|OpenframeConfig|OsquerySchema)' -count=1
+      # <<< OPENFRAME(osquery-schema-tests)
 
       - name: Build with GoReleaser
         env:
@@ -206,3 +208,4 @@ jobs:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: exit 1
       - run: echo "All checks passed"
+

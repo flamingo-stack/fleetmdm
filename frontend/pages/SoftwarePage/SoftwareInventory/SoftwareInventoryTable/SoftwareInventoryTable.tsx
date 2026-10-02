@@ -176,10 +176,9 @@ const SoftwareTable = ({
   const vulnFilterDetails = getVulnFilterRenderDetails(vulnFilters);
   const hasVulnFilters = vulnFilterDetails.filterCount > 0;
 
-  // Include showVersions — the titles view can have installers even when
-  // the versions view is empty, so the toggle should stay interactive.
-  const isTrulyEmpty =
-    !hasData && !hasQuery && !hasVulnFilters && !showVersions;
+  // isTrulyEmpty reflects whether the current view (titles or versions) has
+  // no data and no active query/filters — used to disable search/filters.
+  const isTrulyEmpty = !hasData && !hasQuery && !hasVulnFilters;
   const controlsDisabled = !isSoftwareEnabled || isTrulyEmpty;
 
   const handleShowVersionsToggle = () => {
@@ -241,7 +240,7 @@ const SoftwareTable = ({
           onChange={handleShowVersionsToggle}
           inactiveText="Show versions"
           activeText="Show versions"
-          disabled={controlsDisabled}
+          disabled={!isSoftwareEnabled}
         />
         <TooltipWrapper
           className={`${baseClass}__filters`}

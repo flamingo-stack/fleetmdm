@@ -441,29 +441,11 @@ func saveTeamsForUserDB(ctx context.Context, tx sqlx.ExtContext, user *fleet.Use
 	return nil
 }
 
-// DeleteUser deletes the associated user
+// DeleteUser deletes the associated user. If the user being deleted is a global
+// admin, it atomically checks that they are not the last global admin before
+// deleting, to prevent a race condition where concurrent requests could delete
+// all global admins.
 func (ds *Datastore) DeleteUser(ctx context.Context, id uint) error {
-	// Transfer user data to deleted_users table for audit/activity purposes
-	stmt := `
-		INSERT INTO users_deleted (id, name, email)
-		SELECT u.id, u.name, u.email
-		FROM users AS u
-		WHERE u.id = ?
-		ON DUPLICATE KEY UPDATE
-			name       = u.name,
-			email      = u.email`
-	_, err := ds.writer(ctx).ExecContext(ctx, stmt, id)
-	if err != nil {
-		return ctxerr.Wrap(ctx, err, "populate users_deleted entry")
-	}
-
-	return ds.deleteEntity(ctx, usersTable, id)
-}
-
-// DeleteUserIfNotLastAdmin atomically checks that the user being deleted is not the
-// last global admin before deleting. It uses SELECT ... FOR UPDATE to prevent concurrent
-// requests from bypassing the check (TOCTOU race condition).
-func (ds *Datastore) DeleteUserIfNotLastAdmin(ctx context.Context, id uint) error {
 	return ds.withTx(ctx, func(tx sqlx.ExtContext) error {
 		// Lock the admin rows to prevent concurrent modifications.
 		var count int
@@ -471,11 +453,20 @@ func (ds *Datastore) DeleteUserIfNotLastAdmin(ctx context.Context, id uint) erro
 			`SELECT COUNT(*) FROM users WHERE global_role = 'admin' FOR UPDATE`); err != nil {
 			return ctxerr.Wrap(ctx, err, "count global admins for delete")
 		}
-		if count <= 1 {
+
+		var isAdmin bool
+		if err := sqlx.GetContext(ctx, tx, &isAdmin,
+			`SELECT global_role = 'admin' FROM users WHERE id = ?`, id); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ctxerr.Wrap(ctx, notFound("User").WithID(id))
+			}
+			return ctxerr.Wrap(ctx, err, "check user role for delete")
+		}
+		if isAdmin && count <= 1 {
 			return fleet.ErrLastGlobalAdmin
 		}
 
-		// Transfer user data to deleted_users table for audit/activity purposes.
+		// Transfer user data to deleted_users table for audit/activity purposes
 		stmt := `
 			INSERT INTO users_deleted (id, name, email)
 			SELECT u.id, u.name, u.email

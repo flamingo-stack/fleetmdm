@@ -60,13 +60,12 @@ func (c *Client) runMigration(db *sql.DB, m *Migration, direction bool) error {
 		if fn != nil {
 			if err := fn(tx); err != nil {
 				tx.Rollback() //nolint:errcheck
-				log.Fatalf("FAIL %s (%v), quitting migration.", filepath.Base(m.Source), err)
-				return err
+				return fmt.Errorf("migration %s failed: %w", filepath.Base(m.Source), err)
 			}
 		}
 
 		if err = c.FinalizeMigration(tx, direction, m.Version); err != nil {
-			log.Fatalf("error finalizing migration %s, quitting. (%v)", filepath.Base(m.Source), err)
+			return fmt.Errorf("finalize migration %s: %w", filepath.Base(m.Source), err)
 		}
 	}
 

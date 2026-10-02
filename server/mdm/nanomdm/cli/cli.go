@@ -153,7 +153,7 @@ func (h *nanoLibSlogHandler) Enabled(_ context.Context, _ slog.Level) bool {
 }
 
 func (h *nanoLibSlogHandler) Handle(_ context.Context, r slog.Record) error {
-	kvs := make([]any, 0, 2+2*len(h.attrs)+2*r.NumAttrs())
+	kvs := make([]any, 0, 4+2*len(h.attrs)+2*r.NumAttrs())
 	kvs = append(kvs, "msg", r.Message)
 	for _, a := range h.attrs {
 		kvs = append(kvs, a.Key, a.Value.Any())
@@ -162,9 +162,16 @@ func (h *nanoLibSlogHandler) Handle(_ context.Context, r slog.Record) error {
 		kvs = append(kvs, a.Key, a.Value.Any())
 		return true
 	})
-	if r.Level >= slog.LevelInfo {
+	switch {
+	case r.Level >= slog.LevelError:
+		kvs = append(kvs, "level", "error")
 		h.logger.Info(kvs...)
-	} else {
+	case r.Level >= slog.LevelWarn:
+		kvs = append(kvs, "level", "warn")
+		h.logger.Info(kvs...)
+	case r.Level >= slog.LevelInfo:
+		h.logger.Info(kvs...)
+	default:
 		h.logger.Debug(kvs...)
 	}
 	return nil
