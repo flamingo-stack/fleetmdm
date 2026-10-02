@@ -1,14 +1,16 @@
+// >>> OPENFRAME(iam-auth-cache): Fork-specific IAM auth token caching for RDS/ElastiCache IAM auth, not present upstream — openframe/docs/iam-auth.md
 package aws_common
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 )
 
 const (
@@ -17,10 +19,11 @@ const (
 	maxJitter        = 30 * time.Second
 )
 
-// IAMTokenCache holds a cached token and its generation time
+// IAMTokenCache holds a cached token, its generation time, and its computed expiry duration
 type IAMTokenCache struct {
 	token     string
 	generated time.Time
+	expiry    time.Duration
 }
 
 // TokenGenerator is a function that generates a new IAM authentication token
@@ -45,13 +48,9 @@ func NewIAMAuthTokenManager(tokenGen TokenGenerator) *IAMAuthTokenManager {
 
 // GetToken retrieves a valid IAM authentication token, using cache when possible
 func (m *IAMAuthTokenManager) GetToken(ctx context.Context) (string, error) {
-	// Calculate expiry time with jitter
-	jitter := time.Duration(rand.Int63n(int64(maxJitter))) //nolint:gosec // jitter doesn't need cryptographic randomness
-	expiryTime := tokenRefreshTime + jitter
-
-	// Check if we have a valid cached token
+	// Check if we have a valid cached token, using the expiry computed when it was generated
 	m.cacheMu.RLock()
-	if m.cache != nil && time.Since(m.cache.generated) < expiryTime {
+	if m.cache != nil && time.Since(m.cache.generated) < m.cache.expiry {
 		token := m.cache.token
 		m.cacheMu.RUnlock()
 		return token, nil
@@ -63,7 +62,7 @@ func (m *IAMAuthTokenManager) GetToken(ctx context.Context) (string, error) {
 	defer m.cacheMu.Unlock()
 
 	// Double-check in case another goroutine generated a token while we were waiting
-	if m.cache != nil && time.Since(m.cache.generated) < expiryTime {
+	if m.cache != nil && time.Since(m.cache.generated) < m.cache.expiry {
 		return m.cache.token, nil
 	}
 
@@ -72,9 +71,14 @@ func (m *IAMAuthTokenManager) GetToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	// Calculate expiry time with jitter once, at generation time
+	jitter := time.Duration(rand.Int63n(int64(maxJitter))) //nolint:gosec // jitter doesn't need cryptographic randomness
+	expiryTime := tokenRefreshTime + jitter
+
 	m.cache = &IAMTokenCache{
 		token:     token,
 		generated: time.Now(),
+		expiry:    expiryTime,
 	}
 
 	return token, nil
@@ -85,16 +89,18 @@ func LoadAWSConfig(ctx context.Context, region, assumeRoleArn, stsExternalID str
 	opts := []func(*config.LoadOptions) error{config.WithRegion(region)}
 	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		return aws.Config{}, fmt.Errorf("failed to load AWS config: %w", err)
+		return aws.Config{}, ctxerr.Wrap(ctx, err, "failed to load AWS config")
 	}
 
 	// If assume role ARN is provided, configure it
 	if assumeRoleArn != "" {
 		cfg, err = ConfigureAssumeRoleProvider(cfg, opts, assumeRoleArn, stsExternalID)
 		if err != nil {
-			return aws.Config{}, fmt.Errorf("failed to configure assume role provider: %w", err)
+			return aws.Config{}, ctxerr.Wrap(ctx, err, "failed to configure assume role provider")
 		}
 	}
 
 	return cfg, nil
 }
+
+// <<< OPENFRAME(iam-auth-cache)

@@ -17,10 +17,13 @@ import (
 // ErrBadRoute is used for mux errors
 var ErrBadRoute = errors.New("bad route")
 
+// >>> OPENFRAME(domain-error-encoder)
 // DomainErrorEncoder handles domain-specific error encoding.
 // It returns true if it handled the error, false if default handling should be used.
 // The encoder should write the appropriate status code and response body.
 type DomainErrorEncoder func(ctx context.Context, err error, w http.ResponseWriter, enc *json.Encoder, jsonErr *JsonError) (handled bool)
+
+// <<< OPENFRAME(domain-error-encoder)
 
 type JsonError struct {
 	Message string              `json:"message"`
@@ -74,7 +77,9 @@ type conflictErrorInterface interface {
 // EncodeError encodes error and status header to the client.
 // The domainEncoder parameter allows services to inject domain-specific error
 // handling. If nil, only generic error handling is performed.
+// >>> OPENFRAME(domain-error-encoder)
 func EncodeError(ctx context.Context, err error, w http.ResponseWriter, domainEncoder DomainErrorEncoder) {
+	// <<< OPENFRAME(domain-error-encoder)
 	ctxerr.Handle(ctx, err)
 	origErr := err
 
@@ -92,12 +97,14 @@ func EncodeError(ctx context.Context, err error, w http.ResponseWriter, domainEn
 		UUID: uuid,
 	}
 
+	// >>> OPENFRAME(domain-error-encoder)
 	// Try domain-specific error encoder first
 	if domainEncoder != nil {
 		if handled := domainEncoder(ctx, err, w, enc, &jsonErr); handled {
 			return
 		}
 	}
+	// <<< OPENFRAME(domain-error-encoder)
 
 	switch e := err.(type) {
 	case validationErrorInterface:
@@ -159,6 +166,7 @@ func EncodeError(ctx context.Context, err error, w http.ResponseWriter, domainEn
 			return
 		}
 
+		// >>> OPENFRAME(client-closed-request)
 		// context.Canceled typically means the client disconnected before the server finished
 		// processing. Return 499 (Client Closed Request, nginx convention) so observability tools
 		// correctly classify it as a client error rather than a server error.
@@ -169,6 +177,7 @@ func EncodeError(ctx context.Context, err error, w http.ResponseWriter, domainEn
 			enc.Encode(jsonErr) //nolint:errcheck
 			return
 		}
+		// <<< OPENFRAME(client-closed-request)
 
 		// Get specific status code if it is available from this error type,
 		// defaulting to HTTP 500

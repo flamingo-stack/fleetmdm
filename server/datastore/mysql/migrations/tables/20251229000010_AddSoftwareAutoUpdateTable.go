@@ -27,6 +27,7 @@ func Up_20251229000010(tx *sql.Tx) error {
 	if err != nil {
 		return err
 	}
+	// >>> OPENFRAME(migration-idempotency): guard against pre-existing timezone column on divergent DBs — openframe/docs/migrations.md
 	if !columnExists(tx, "hosts", "timezone") {
 		_, err = tx.Exec(`
 					ALTER TABLE hosts ADD COLUMN timezone VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
@@ -35,6 +36,7 @@ func Up_20251229000010(tx *sql.Tx) error {
 			return err
 		}
 	}
+	// <<< OPENFRAME(migration-idempotency)
 	return nil
 }
 

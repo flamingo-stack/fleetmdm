@@ -24,6 +24,7 @@ type UserSummary struct {
 	APIOnly     bool   `db:"api_only"`
 }
 
+// OPENFRAME: BEGIN fork-specific API-only user endpoint scoping (see docs/design/api-only-user-endpoint-scoping.md)
 // APIEndpointRef represents an endpoint an API-only user has access to.
 type APIEndpointRef struct {
 	Method string `json:"method"`
@@ -49,6 +50,8 @@ func (o *OptionalAPIEndpoints) UnmarshalJSON(data []byte) error {
 	}
 	return json.Unmarshal(data, &o.Value)
 }
+
+// OPENFRAME: END fork-specific API-only user endpoint scoping
 
 // User is the model struct that represents a Fleet user.
 type User struct {
@@ -77,9 +80,11 @@ type User struct {
 	Settings *UserSettings `json:"settings,omitempty"`
 	Deleted  bool          `json:"-" db:"deleted"`
 
+	// OPENFRAME: BEGIN fork-specific API-only user endpoint scoping (see docs/design/api-only-user-endpoint-scoping.md)
 	// APIEndpoints if this user is an API-only user, this returns
 	// a list of all end-points the user has access to.
 	APIEndpoints []APIEndpointRef `json:"api_endpoints,omitempty"`
+	// OPENFRAME: END fork-specific API-only user endpoint scoping
 }
 
 type UserSettings struct {
@@ -231,9 +236,11 @@ type UserPayload struct {
 	Settings                 *UserSettings `json:"settings,omitempty"`
 	InviteID                 *uint         `json:"-"`
 
+	// OPENFRAME: BEGIN fork-specific API-only user endpoint scoping (see docs/design/api-only-user-endpoint-scoping.md)
 	// If this is an API-only user, then this can be used to specify which
 	// API endpoints the user has access to
 	APIEndpoints *[]APIEndpointRef `json:"api_endpoints,omitempty"`
+	// OPENFRAME: END fork-specific API-only user endpoint scoping
 }
 
 func (p *UserPayload) VerifyInviteCreate() error {

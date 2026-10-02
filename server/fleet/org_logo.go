@@ -51,6 +51,8 @@ type OrgLogoStore interface {
 	Exists(ctx context.Context, mode OrgLogoMode) (bool, error)
 }
 
+// >>> OPENFRAME(org-logo-svg-validation): SVG magic-byte sniffing, XXE/XSS-safe SVG validation, and WebP support for org logos — openframe/docs/org-logo.md
+
 // Magic-byte signatures used to identify accepted image formats. We compare
 // against raw upload bytes rather than trusting the multipart Content-Type
 // header.
@@ -226,3 +228,5 @@ func validateSVG(b []byte) error {
 	}
 	return nil
 }
+
+// <<< OPENFRAME(org-logo-svg-validation)

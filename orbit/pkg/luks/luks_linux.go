@@ -32,6 +32,7 @@ const (
 	entryDialogText      = "Passphrase:"
 	retryEntryDialogText = "Passphrase incorrect. Please try again."
 
+	// >>> OPENFRAME(luks-tpm2-recovery): TPM2/recovery-key dialog copy — openframe/docs/luks-tpm2-recovery.md
 	// Dialog copy shown when the LUKS2 volume is sealed with a TPM2 token
 	// (e.g. Ubuntu 23.10+ TPM-backed FDE). In that setup the user only has
 	// the recovery key shown during installation; there is no per-user
@@ -39,6 +40,7 @@ const (
 	entryDialogTitleTPM2     = "Enter disk recovery key"
 	entryDialogTextTPM2      = "Recovery key (saved during installation):"
 	retryEntryDialogTextTPM2 = "Recovery key incorrect. Please try again."
+	// <<< OPENFRAME(luks-tpm2-recovery)
 
 	infoTitle       = "Disk encryption"
 	infoFailedText  = "Failed to escrow key. Please try again later."
@@ -143,6 +145,7 @@ func (lr *LuksRunner) getEscrowKey(ctx context.Context, devicePath string) ([]by
 	// AESXTSPlain64Cipher is the default cipher used by ubuntu/kubuntu/fedora
 	device := luksdevice.New(luksdevice.AESXTSPlain64Cipher)
 
+	// >>> OPENFRAME(luks-tpm2-recovery): branch dialog copy for TPM2/recovery-key volumes — openframe/docs/luks-tpm2-recovery.md
 	// Inspect LUKS2 metadata once up front so we can branch the dialog copy
 	// for TPM-backed volumes — on those, the user has a recovery key from
 	// install time, not a typed passphrase.
@@ -154,6 +157,7 @@ func (lr *LuksRunner) getEscrowKey(ctx context.Context, devicePath string) ([]by
 	log.Debug().Str("encryption_type", encType).Msg("detected LUKS encryption type")
 
 	title, prompt, retry := dialogCopyForEncryptionType(encType)
+	// <<< OPENFRAME(luks-tpm2-recovery)
 
 	// Prompt user for existing LUKS passphrase / recovery key
 	passphrase, err := lr.entryPrompt(title, prompt)
@@ -223,6 +227,7 @@ func (lr *LuksRunner) getEscrowKey(ctx context.Context, devicePath string) ([]by
 	return escrowPassphrase, &keySlot, nil
 }
 
+// >>> OPENFRAME(luks-tpm2-recovery): dialog copy selection for TPM2/recovery-key volumes — openframe/docs/luks-tpm2-recovery.md
 // dialogCopyForEncryptionType returns the (title, prompt, retry) strings shown
 // to the end user when asking them to unlock the LUKS volume. TPM2-backed and
 // recovery-key setups use distinct copy today; passphrase / fido2 share the
@@ -234,6 +239,7 @@ func dialogCopyForEncryptionType(encType string) (title, prompt, retry string) {
 	}
 	return entryDialogTitle, entryDialogText, retryEntryDialogText
 }
+// <<< OPENFRAME(luks-tpm2-recovery)
 
 func (lr *LuksRunner) passphraseIsValid(ctx context.Context, device *luksdevice.LUKS, devicePath string, passphrase []byte, keyslot uint) (bool, error) {
 	if len(passphrase) == 0 {

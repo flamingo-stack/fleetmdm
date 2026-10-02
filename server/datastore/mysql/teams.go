@@ -175,6 +175,13 @@ var teamLabelsRefs = []string{
 }
 
 func (ds *Datastore) DeleteTeam(ctx context.Context, tid uint) error {
+	// >>> OPENFRAME(mysql-multitenancy): mirror the teamDB tenant pin so a caller cannot delete
+	// a team belonging to a different tenant on a shared DB. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok && tid != teamID {
+		return ctxerr.Wrap(ctx, notFound("Fleet").WithID(tid))
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	// Enqueue <Delete> commands for Windows profiles. This must run
 	// first because the main transaction deletes the config profile rows
 	// (which contain the SyncML bytes needed to generate <Delete> commands).
@@ -397,6 +404,13 @@ func saveUsersForTeamDB(ctx context.Context, exec sqlx.ExecerContext, team *flee
 }
 
 func (ds *Datastore) SaveTeam(ctx context.Context, team *fleet.Team) (*fleet.Team, error) {
+	// >>> OPENFRAME(mysql-multitenancy): mirror the teamDB tenant pin so a caller cannot overwrite
+	// a team belonging to a different tenant on a shared DB. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok && team.ID != teamID {
+		return nil, ctxerr.Wrap(ctx, notFound("Fleet").WithID(team.ID))
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	// We must normalize the name for full Unicode support (Unicode equivalence).
 	team.Name = norm.NFC.String(team.Name)
 	err := ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {

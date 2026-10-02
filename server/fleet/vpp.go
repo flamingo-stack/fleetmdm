@@ -211,6 +211,9 @@ type AppStoreAppUpdatePayload struct {
 	SoftwareAutoUpdateConfig
 }
 
+// >>> OPENFRAME(vpp-client-user): Fleet-fork client-user lifecycle model for
+// user-scoped VPP endpoints (Managed Apple ID / client_user_id mapping), not
+// part of upstream fleetdm/fleet — openframe/docs/vpp-client-user.md
 // VPPClientUserStatus is the lifecycle state of a row in vpp_client_users.
 type VPPClientUserStatus string
 
@@ -240,6 +243,12 @@ type VPPClientUser struct {
 	UpdatedAt      time.Time           `db:"updated_at" json:"updated_at"`
 }
 
+// <<< OPENFRAME(vpp-client-user)
+
+// >>> OPENFRAME(vpp-app-config-validation): Fleet-fork Fleet-variable
+// allow-list and validation for Apple managed-app-configuration payloads,
+// a security control against variable-injection not present upstream —
+// openframe/docs/vpp-app-config-validation.md
 // FleetVarsSupportedInAppleAppConfig is the allow-list of Fleet variables that
 // can appear in an iOS / iPadOS managed app configuration plist. Subset of the
 // variables supported in Apple configuration profiles — credential variables
@@ -321,6 +330,8 @@ func findUnsupportedFleetVar(v any) (string, bool) {
 	}
 	return "", false
 }
+
+// <<< OPENFRAME(vpp-app-config-validation)
 
 // VPPInstallReleaseInfo carries the per-install data the cancel path needs to
 // decide whether (and how) to release a previously-reserved VPP license seat

@@ -240,6 +240,7 @@ export FLEET_MDM_APPLE_BM_SERVER_TOKEN=%[1]s/abm_token
 export FLEET_MDM_APPLE_BM_CERT=%[1]s/abm_cert.crt
 export FLEET_MDM_APPLE_BM_KEY=%[1]s/abm_key.key
 `, flagDir)
+	// >>> OPENFRAME(mdm-ca-rollover): fork-only CA cert rollover subcommand — openframe/docs/mdm-ca-rollover.md
 	case "rollover-ca-cert":
 		if err := rolloverCmd.Parse(os.Args[2:]); err != nil {
 			log.Fatal("parsing rollover-ca-cert flags", err)
@@ -349,6 +350,14 @@ export FLEET_MDM_APPLE_BM_KEY=%[1]s/abm_key.key
 		notBefore := oldCert.NotBefore
 		notAfter := oldCert.NotAfter.AddDate(flagExtendYears, 0, 0).UTC()
 
+		// Guard against silently producing an already-expired certificate:
+		// if this tool is run long after the old CA's original NotAfter, the
+		// extended NotAfter (computed from oldCert.NotAfter, not from now)
+		// could still land in the past.
+		if !notAfter.After(time.Now()) {
+			log.Fatalf("computed new NotAfter %s is not after the current time; increase -extend-years", notAfter.Format(time.RFC3339))
+		}
+
 		tmpl := x509.Certificate{
 			Subject:               oldCert.Subject,
 			SerialNumber:          newSerial,
@@ -383,6 +392,7 @@ export FLEET_MDM_APPLE_BM_KEY=%[1]s/abm_key.key
 		log.Printf("  new NotAfter:      %s", notAfter.Format(time.RFC3339))
 		log.Printf("  new serial:        %s", newSerial.String())
 		return
+	// <<< OPENFRAME(mdm-ca-rollover)
 	default:
 		log.Fatalf("invalid subcommand %s, valid subcommands: import, export, rollover-ca-cert", os.Args[1]) //nolint:gosec // dismiss G107
 	}
