@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { SingleValue } from "react-select-5";
+import { Table } from "@flamingo-stack/openframe-frontend-core";
 
 import { AppContext } from "context/app";
 import { IConfig } from "interfaces/config";
@@ -401,7 +402,7 @@ const PolicyAutomationsFields = forwardRef<
               ))}
             </div>
           )}
-          <table className={`${baseClass}__table`}>
+          <Table className={`${baseClass}__table`}>
             <tbody>
               {rows.map((row) => (
                 <tr
@@ -446,7 +447,7 @@ const PolicyAutomationsFields = forwardRef<
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           <div className={`${baseClass}__learn-more`}>
             <CustomLink
               url="https://fleetdm.com/learn-more-about/policy-automations"

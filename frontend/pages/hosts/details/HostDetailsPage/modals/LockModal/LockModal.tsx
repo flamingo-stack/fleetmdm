@@ -1,5 +1,7 @@
 import React, { useContext } from "react";
 
+import { Image } from "@flamingo-stack/openframe-frontend-core";
+
 import { LEARN_MORE_ABOUT_BASE_LINK } from "utilities/constants";
 
 import PATHS from "router/paths";
@@ -42,7 +44,7 @@ const IosOrIpadLockPreview = ({ platform }: { platform: string }) => {
         />
         .
       </p>
-      <img src={previewImage} alt={altText} />
+      <Image src={previewImage} alt={altText} />
     </Card>
   );
 };
