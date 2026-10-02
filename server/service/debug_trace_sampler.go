@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -34,7 +33,7 @@ func patchTraceSamplerHandler(logger *slog.Logger, ds fleet.Datastore) http.Hand
 		v, ok := viewer.FromContext(r.Context())
 		if !ok {
 			handleServerError(w, r, logger, "debug trace_sampler PATCH refused: viewer missing from context", "viewer required",
-				errors.New("viewer missing from context"))
+				ctxerr.New(r.Context(), "viewer missing from context"))
 			return
 		}
 
@@ -44,7 +43,7 @@ func patchTraceSamplerHandler(logger *slog.Logger, ds fleet.Datastore) http.Hand
 			return
 		}
 
-		if err := validateTraceSamplerPatch(req); err != nil {
+		if err := validateTraceSamplerPatch(r.Context(), req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -99,9 +98,9 @@ func handleServerError(w http.ResponseWriter, r *http.Request, logger *slog.Logg
 	http.Error(w, clientMsg, http.StatusInternalServerError)
 }
 
-func validateTraceSamplerPatch(req traceSamplerPatchRequest) error {
+func validateTraceSamplerPatch(ctx context.Context, req traceSamplerPatchRequest) error {
 	if req.HighVolumeRatio == nil && req.StandardRatio == nil && req.ForceFull == nil {
-		return errors.New("request body must include at least one of high_volume_ratio, standard_ratio, force_full")
+		return ctxerr.New(ctx, "request body must include at least one of high_volume_ratio, standard_ratio, force_full")
 	}
 	if req.HighVolumeRatio != nil && (*req.HighVolumeRatio < 0 || *req.HighVolumeRatio > 1) {
 		return fmt.Errorf("high_volume_ratio must be in [0, 1], got %v", *req.HighVolumeRatio)

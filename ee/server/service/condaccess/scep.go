@@ -12,6 +12,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/assets"
 	scepdepot "github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
@@ -49,7 +50,7 @@ func RegisterSCEP(
 	fleetConfig *config.FleetConfig,
 ) error {
 	if fleetConfig == nil {
-		return errors.New("fleet config is nil")
+		return ctxerr.New(ctx, "fleet config is nil")
 	}
 	err := initAssets(ctx, ds)
 	if err != nil {
@@ -94,14 +95,14 @@ func challengeMiddleware(ds fleet.Datastore, next scepserver.CSRSignerContext) s
 		// Always require a valid challenge password
 
 		if m.ChallengePassword == "" {
-			return nil, errors.New("missing challenge")
+			return nil, ctxerr.New(ctx, "missing challenge")
 		}
 		_, err := ds.VerifyEnrollSecret(ctx, m.ChallengePassword)
 		switch {
 		case fleet.IsNotFound(err):
-			return nil, errors.New("invalid challenge")
+			return nil, ctxerr.New(ctx, "invalid challenge")
 		case err != nil:
-			return nil, fmt.Errorf("verifying enrollment secret: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "verifying enrollment secret")
 		}
 		return next.SignCSRContext(ctx, m)
 	}
@@ -171,7 +172,7 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, errors.New("private key not in RSA format")
+		return nil, ctxerr.New(ctx, "private key not in RSA format")
 	}
 
 	if err := msg.DecryptPKIEnvelope(cert.Leaf, pk); err != nil {
@@ -180,7 +181,7 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 
 	crt, err := svc.signer.SignCSRContext(ctx, msg.CSRReqMessage)
 	if err == nil && crt == nil {
-		err = errors.New("signer returned nil certificate without error")
+		err = ctxerr.New(ctx, "signer returned nil certificate without error")
 	}
 	if err != nil {
 		svc.logger.ErrorContext(ctx, "failed to sign CSR", "err", err)
@@ -207,8 +208,8 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 }
 
 // GetNextCACert is not implemented for conditional access SCEP.
-func (svc *service) GetNextCACert(_ context.Context) ([]byte, error) {
-	return nil, errors.New("not implemented")
+func (svc *service) GetNextCACert(ctx context.Context) ([]byte, error) {
+	return nil, ctxerr.New(ctx, "not implemented")
 }
 
 // NewSCEPService creates a new conditional access SCEP service.

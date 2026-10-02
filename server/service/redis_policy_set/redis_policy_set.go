@@ -2,10 +2,12 @@
 package redis_policy_set
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/datastore/redis"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	redigo "github.com/gomodule/redigo/redis"
@@ -61,7 +63,7 @@ func (r *redisFailingPolicySet) ListSets() ([]uint, error) {
 }
 
 // AddHost adds the given host to the policy sets.
-func (r *redisFailingPolicySet) AddHost(policyID uint, host fleet.PolicySetHost) error {
+func (r *redisFailingPolicySet) AddHost(ctx context.Context, policyID uint, host fleet.PolicySetHost) error {
 	// The order of the following two operations is important.
 	//
 	// The ordering of operations in AddHost and RemoveSet has been chosen to avoid
@@ -73,10 +75,10 @@ func (r *redisFailingPolicySet) AddHost(policyID uint, host fleet.PolicySetHost)
 	// same node.  There is no additional connection cost for standalone mode, as
 	// the second connection will come from the pool (same for cluster mode if
 	// both key happen to live on the same node).
-	if err := r.addHostToPolicySet(policyID, host); err != nil {
+	if err := r.addHostToPolicySet(ctx, policyID, host); err != nil {
 		return err
 	}
-	if err := r.addPolicyToSetOfSets(policyID); err != nil {
+	if err := r.addPolicyToSetOfSets(ctx, policyID); err != nil {
 		return err
 	}
 	return nil
@@ -86,7 +88,7 @@ func (r *redisFailingPolicySet) AddHost(policyID uint, host fleet.PolicySetHost)
 //
 // SMEMBERS blocks the Redis instance for the duration of the call, so if the set is big
 // it could impact performance overall.
-func (r *redisFailingPolicySet) scanPolicySet(policyID uint) ([]string, error) {
+func (r *redisFailingPolicySet) scanPolicySet(ctx context.Context, policyID uint) ([]string, error) {
 	const hostsScanCount = 100
 	var hosts []string
 
@@ -97,12 +99,12 @@ func (r *redisFailingPolicySet) scanPolicySet(policyID uint) ([]string, error) {
 	for {
 		res, err := redigo.Values(conn.Do("SSCAN", r.policySetKey(policyID), cursor, "COUNT", hostsScanCount))
 		if err != nil {
-			return nil, fmt.Errorf("scan keys: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "scan keys")
 		}
 		var curElems []string
 		_, err = redigo.Scan(res, &cursor, &curElems)
 		if err != nil {
-			return nil, fmt.Errorf("convert scan results: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "convert scan results")
 		}
 		hosts = append(hosts, curElems...)
 		if cursor == 0 {
@@ -113,16 +115,16 @@ func (r *redisFailingPolicySet) scanPolicySet(policyID uint) ([]string, error) {
 }
 
 // ListHosts returns the list of hosts present in the policy set.
-func (r *redisFailingPolicySet) ListHosts(policyID uint) ([]fleet.PolicySetHost, error) {
-	hostEntries, err := r.scanPolicySet(policyID)
+func (r *redisFailingPolicySet) ListHosts(ctx context.Context, policyID uint) ([]fleet.PolicySetHost, error) {
+	hostEntries, err := r.scanPolicySet(ctx, policyID)
 	if err != nil {
 		return nil, err
 	}
 	hosts := make([]fleet.PolicySetHost, len(hostEntries))
 	for i := range hostEntries {
-		policySetHost, err := parseHostEntry(hostEntries[i])
+		policySetHost, err := parseHostEntry(ctx, hostEntries[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse host entry: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "failed to parse host entry")
 		}
 		hosts[i] = *policySetHost
 	}
@@ -148,55 +150,55 @@ func (r *redisFailingPolicySet) RemoveHosts(policyID uint, hosts []fleet.PolicyS
 }
 
 // RemoveSet removes a policy set.
-func (r *redisFailingPolicySet) RemoveSet(policyID uint) error {
+func (r *redisFailingPolicySet) RemoveSet(ctx context.Context, policyID uint) error {
 	// The order of the following two operations is important.
 	//
 	// See comment in AddHost.
-	if err := r.removePolicyFromSetOfSets(policyID); err != nil {
+	if err := r.removePolicyFromSetOfSets(ctx, policyID); err != nil {
 		return err
 	}
-	if err := r.removePolicySet(policyID); err != nil {
+	if err := r.removePolicySet(ctx, policyID); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *redisFailingPolicySet) addHostToPolicySet(policyID uint, host fleet.PolicySetHost) error {
+func (r *redisFailingPolicySet) addHostToPolicySet(ctx context.Context, policyID uint, host fleet.PolicySetHost) error {
 	conn := redis.ConfigureDoer(r.pool, r.pool.Get())
 	defer conn.Close()
 
 	if _, err := conn.Do("SADD", r.policySetKey(policyID), hostEntry(host)); err != nil {
-		return fmt.Errorf("add host entry to policy set: %w", err)
+		return ctxerr.Wrap(ctx, err, "add host entry to policy set")
 	}
 	return nil
 }
 
-func (r *redisFailingPolicySet) removePolicySet(policyID uint) error {
+func (r *redisFailingPolicySet) removePolicySet(ctx context.Context, policyID uint) error {
 	conn := redis.ConfigureDoer(r.pool, r.pool.Get())
 	defer conn.Close()
 
 	if _, err := conn.Do("DEL", r.policySetKey(policyID)); err != nil {
-		return fmt.Errorf("remove policy set: %w", err)
+		return ctxerr.Wrap(ctx, err, "remove policy set")
 	}
 	return nil
 }
 
-func (r *redisFailingPolicySet) addPolicyToSetOfSets(policyID uint) error {
+func (r *redisFailingPolicySet) addPolicyToSetOfSets(ctx context.Context, policyID uint) error {
 	conn := redis.ConfigureDoer(r.pool, r.pool.Get())
 	defer conn.Close()
 
 	if _, err := conn.Do("SADD", r.policySetOfSetsKey(), policyID); err != nil {
-		return fmt.Errorf("add policy id to set of failing sets: %w", err)
+		return ctxerr.Wrap(ctx, err, "add policy id to set of failing sets")
 	}
 	return nil
 }
 
-func (r *redisFailingPolicySet) removePolicyFromSetOfSets(policyID uint) error {
+func (r *redisFailingPolicySet) removePolicyFromSetOfSets(ctx context.Context, policyID uint) error {
 	conn := redis.ConfigureDoer(r.pool, r.pool.Get())
 	defer conn.Close()
 
 	if _, err := conn.Do("SREM", r.policySetOfSetsKey(), policyID); err != nil {
-		return fmt.Errorf("remove policy id from set of failing sets: %w", err)
+		return ctxerr.Wrap(ctx, err, "remove policy id from set of failing sets")
 	}
 	return nil
 }
@@ -213,14 +215,14 @@ func hostEntry(host fleet.PolicySetHost) string {
 	return fmt.Sprint(host.ID) + "," + host.Hostname
 }
 
-func parseHostEntry(v string) (*fleet.PolicySetHost, error) {
+func parseHostEntry(ctx context.Context, v string) (*fleet.PolicySetHost, error) {
 	parts := strings.SplitN(v, ",", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid format: %s", v)
+		return nil, ctxerr.New(ctx, fmt.Sprintf("invalid format: %s", v))
 	}
 	id, err := strconv.ParseUint(parts[0], 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("invalid id: %s", v)
+		return nil, ctxerr.New(ctx, fmt.Sprintf("invalid id: %s", v))
 	}
 	return &fleet.PolicySetHost{
 		ID:       uint(id),
