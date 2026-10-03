@@ -51,7 +51,14 @@ export default {
       createQueryRequestBody.name = createQueryRequestBody.name.trim();
     }
 
-    return sendRequest("POST", QUERIES, createQueryRequestBody);
+    // >>> OPENFRAME(managed-queries): every query created from the UI is OpenFrame-managed — openframe/docs/managed-queries.md
+    const managedQueryRequestBody = {
+      ...createQueryRequestBody,
+      openframe_managed: true,
+    };
+    // <<< OPENFRAME(managed-queries)
+
+    return sendRequest("POST", QUERIES, managedQueryRequestBody);
   },
   destroy: (id: string | number) => {
     const { QUERIES } = endpoints;

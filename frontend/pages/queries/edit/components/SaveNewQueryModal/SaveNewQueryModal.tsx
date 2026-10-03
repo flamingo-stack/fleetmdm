@@ -45,6 +45,7 @@ import labelsAPI, {
 } from "services/entities/labels";
 
 import DiscardDataOption from "../DiscardDataOption";
+import OpenframeManagedOption from "../OpenframeManagedOption";
 
 const baseClass = "save-query-modal";
 export interface ISaveNewQueryModalProps {
@@ -269,6 +270,7 @@ const SaveNewQueryModal = ({
         >
           Observers can run
         </Checkbox>
+        <OpenframeManagedOption />
         <Slider
           onChange={() => setAutomationsEnabled(!automationsEnabled)}
           value={automationsEnabled}
