@@ -28,6 +28,8 @@ import InputField from "components/forms/fields/InputField";
 import TeamsDropdown from "components/TeamsDropdown";
 import { useTeamIdParam } from "hooks/useTeamIdParam";
 
+import OpenframeManagedOption from "../OpenframeManagedOption";
+
 const baseClass = "save-as-new-query-modal";
 
 interface ISaveAsNewQueryModal {
@@ -210,6 +212,7 @@ const SaveAsNewQueryModal = ({
             />
           </div>
         )}
+        <OpenframeManagedOption />
         <div className="modal-cta-wrap">
           <Button
             type="submit"
