@@ -124,3 +124,24 @@ func TestHandlesErrorsCode(t *testing.T) {
 		})
 	}
 }
+
+func TestEncodeErrorWithDomainEncoder(t *testing.T) {
+	t.Run("handled true short-circuits default handling", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		domainEncoder := func(ctx context.Context, err error, w http.ResponseWriter) (handled bool) {
+			w.WriteHeader(http.StatusTeapot)
+			return true
+		}
+		EncodeError(context.Background(), newAndExciting{}, recorder, domainEncoder)
+		assert.Equal(t, http.StatusTeapot, recorder.Code)
+	})
+
+	t.Run("handled false falls through to generic handling", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		domainEncoder := func(ctx context.Context, err error, w http.ResponseWriter) (handled bool) {
+			return false
+		}
+		EncodeError(context.Background(), newAndExciting{}, recorder, domainEncoder)
+		assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+	})
+}

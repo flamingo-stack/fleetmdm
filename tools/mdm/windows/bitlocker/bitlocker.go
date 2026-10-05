@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -123,6 +124,10 @@ func Connect(driveLetter string) (Volume, error) {
 	comshim.Add(1)
 	v := Volume{letter: driveLetter}
 
+	// Escape single quotes to prevent breaking out of the WQL string literal
+	// when building the ExecQuery below.
+	sanitizedDriveLetter := strings.ReplaceAll(driveLetter, "'", "''")
+
 	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
 	if err != nil {
 		comshim.Done()
@@ -141,7 +146,7 @@ func Connect(driveLetter string) (Volume, error) {
 	}
 	v.wmiSvc = serviceRaw.ToIDispatch()
 
-	raw, err := oleutil.CallMethod(v.wmiSvc, "ExecQuery", "SELECT * FROM Win32_EncryptableVolume WHERE DriveLetter = '"+driveLetter+"'")
+	raw, err := oleutil.CallMethod(v.wmiSvc, "ExecQuery", "SELECT * FROM Win32_EncryptableVolume WHERE DriveLetter = '"+sanitizedDriveLetter+"'")
 	if err != nil {
 		v.Close()
 		return v, fmt.Errorf("ExecQuery: %w", err)
@@ -410,3 +415,4 @@ func (v *Volume) GetBitlockerStatus() (*EncryptionStatus, error) {
 
 	return encStatus, nil
 }
+

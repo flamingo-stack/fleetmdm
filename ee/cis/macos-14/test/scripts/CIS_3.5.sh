@@ -16,9 +16,24 @@
 # different.
 AUDIT_DIRS=("/var/audit")
 CONFIGURED_DIR="$(/usr/bin/sudo /usr/bin/awk -F: '/^dir:/ { print $2; exit }' /etc/security/audit_control | /usr/bin/tr -d '[:space:]')"
-if [ -n "$CONFIGURED_DIR" ] && [ "$CONFIGURED_DIR" != "/var/audit" ]; then
-    AUDIT_DIRS+=("$CONFIGURED_DIR")
-fi
+# Validate CONFIGURED_DIR is an absolute path under a safe root before
+# ever using it in find/chmod/chown, to avoid a misconfigured or
+# malformed `dir:` line (e.g. "/" or a relative path) causing these
+# commands to operate far outside the intended audit directories.
+case "$CONFIGURED_DIR" in
+    /var/audit)
+        ;;
+    /var/audit/*|/private/var/audit/*)
+        if [ -n "$CONFIGURED_DIR" ]; then
+            AUDIT_DIRS+=("$CONFIGURED_DIR")
+        fi
+        ;;
+    *)
+        if [ -n "$CONFIGURED_DIR" ]; then
+            echo "Refusing to use unsafe configured audit dir: '$CONFIGURED_DIR'" >&2
+        fi
+        ;;
+esac
 
 for dir in "${AUDIT_DIRS[@]}"; do
     if [ -d "$dir" ]; then
@@ -29,3 +44,4 @@ for dir in "${AUDIT_DIRS[@]}"; do
         /usr/bin/sudo /usr/bin/find "$dir" -mindepth 1 -exec /bin/chmod 0440 {} \;
     fi
 done
+

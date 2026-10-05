@@ -44,7 +44,8 @@ func GetEstimatedTicketsForProject(projectID, limit int) ([]ProjectItem, error) 
 // GetEstimatedTicketsForProjectWithTotal returns filtered estimated issues and the total
 // number of items in the drafting project (unfiltered). This allows callers to warn when
 // the drafting project's total exceeds the fetch limit (some estimated items might be
-// beyond the first page).
+// beyond the first page). If the total exceeds the limit, an error is returned alongside
+// the (possibly truncated) results so callers cannot silently ignore the truncation.
 func GetEstimatedTicketsForProjectWithTotal(projectID, limit int) ([]ProjectItem, int, error) {
 	// Get the label for this project
 	label, exists := ProjectLabels[projectID]
@@ -78,6 +79,11 @@ func GetEstimatedTicketsForProjectWithTotal(projectID, limit int) ([]ProjectItem
 			}
 		}
 	}
+
+	if total > limit {
+		return estimatedIssues, total, fmt.Errorf("drafting project total (%d) exceeds fetch limit (%d): results may be incomplete", total, limit)
+	}
+
 	return estimatedIssues, total, nil
 }
 
