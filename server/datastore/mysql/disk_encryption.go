@@ -136,7 +136,7 @@ func (ds *Datastore) SaveLUKSData(
 	keySlot uint,
 ) (bool, error) {
 	if encryptedBase64Passphrase == "" || encryptedBase64Salt == "" { // should have been caught at service level
-		return false, errors.New("passphrase and salt must be set")
+		return false, ctxerr.New(ctx, "passphrase and salt must be set")
 	}
 
 	existingKey, err := ds.getExistingHostDiskEncryptionKey(ctx, host)
@@ -168,7 +168,7 @@ VALUES
 		case errors.As(err, &mysqlErr) && mysqlErr.Number == 1062:
 			ds.logger.ErrorContext(ctx, "Primary key already exists in LUKS host_disk_encryption_keys. Falling back to update",
 				"host_id",
-				host)
+				host.ID)
 			// This should never happen unless there is a bug in the code or an infra issue (like huge replication lag).
 		default:
 			return false, ctxerr.Wrap(ctx, err, "inserting LUKS key")
@@ -382,3 +382,4 @@ func bulkDeleteHostDiskEncryptionKeysDB(ctx context.Context, tx sqlx.ExtContext,
 	_, err = tx.ExecContext(ctx, deleteStmt, deleteArgs...)
 	return err
 }
+

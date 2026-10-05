@@ -37,12 +37,12 @@ func main() {
 func checkNVDVulnerabilities(vulnPath string, logger *slog.Logger) {
 	metaMap := make(map[string]fleet.CVEMeta)
 	if err := nvd.CVEMetaFromNVDFeedFiles(context.Background(), metaMap, vulnPath, logger); err != nil {
-		panic(err)
+		panic(fmt.Errorf("loading CVE metadata from NVD feed files in %s: %w", vulnPath, err))
 	}
 
 	vulns, err := cvefeed.LoadJSONDictionary(filepath.Join(vulnPath, "nvdcve-1.1-2025.json.gz"))
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("loading NVD 2025 dictionary from %s: %w", vulnPath, err))
 	}
 
 	// make sure VulnCheck enrichment is working
@@ -65,7 +65,7 @@ func checkNVDVulnerabilities(vulnPath string, logger *slog.Logger) {
 
 	vulns, err = cvefeed.LoadJSONDictionary(filepath.Join(vulnPath, "nvdcve-1.1-2024.json.gz"))
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("loading NVD 2024 dictionary from %s: %w", vulnPath, err))
 	}
 
 	// make sure VulnCheck enrichment is working on less recent vulns
@@ -99,7 +99,7 @@ func checkNVDVulnerabilities(vulnPath string, logger *slog.Logger) {
 
 	vulns, err = cvefeed.LoadJSONDictionary(filepath.Join(vulnPath, "nvdcve-1.1-2023.json.gz"))
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("loading NVD 2023 dictionary from %s: %w", vulnPath, err))
 	}
 
 	// make sure we're rewriting docker_desktop to docker
@@ -124,20 +124,23 @@ func checkGovalDictionaryVulnerabilities(vulnPath string) {
 		if err != nil {
 			panic(fmt.Sprintf("failed to move file from %s/%s to %s/%s: %v", vulnPath, filename, vulnPath, destFilename, err))
 		}
+		// Ensure the file is always renamed back to its original short name, even if
+		// LoadDb or Verfiy below panics, so the directory isn't left in an inconsistent
+		// state for subsequent runs/tools that expect the short name.
+		defer func() {
+			if err := os.Rename(fmt.Sprintf("%s/%s", vulnPath, destFilename), fmt.Sprintf("%s/%s", vulnPath, filename)); err != nil {
+				panic(fmt.Sprintf("failed to move file from %s/%s to %s/%s: %v", vulnPath, destFilename, vulnPath, filename, err))
+			}
+		}()
 
 		db, err := goval_dictionary.LoadDb(platform, vulnPath)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("loading goval dictionary db for platform %s from %s: %w", p, vulnPath, err))
 		}
 
 		err = db.Verfiy()
 		if err != nil {
-			panic(err)
-		}
-
-		err = os.Rename(fmt.Sprintf("%s/%s", vulnPath, destFilename), fmt.Sprintf("%s/%s", vulnPath, filename))
-		if err != nil {
-			panic(fmt.Sprintf("failed to move file from %s/%s to %s/%s: %v", vulnPath, destFilename, vulnPath, filename, err))
+			panic(fmt.Errorf("verifying goval dictionary db for platform %s in %s: %w", p, vulnPath, err))
 		}
 	}
 }

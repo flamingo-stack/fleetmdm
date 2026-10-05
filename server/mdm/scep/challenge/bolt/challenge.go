@@ -58,7 +58,8 @@ func (db *Depot) HasChallenge(pw string) (bool, error) {
 	}
 	bkt := tx.Bucket([]byte(challengeBucket))
 	if bkt == nil {
-		return false, fmt.Errorf("bucket %q not found!", challengeBucket)
+		tx.Rollback()
+		return false, fmt.Errorf("bucket %q not found", challengeBucket)
 	}
 
 	key := []byte(pw)

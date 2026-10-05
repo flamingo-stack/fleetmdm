@@ -95,7 +95,7 @@ func (svc *service) GetNextCACert(ctx context.Context) ([]byte, error) {
 func NewSCEPService(ds fleet.MDMAssetRetriever, signer scepserver.CSRSignerContext, logger *slog.Logger) scepserver.Service {
 	return &service{
 		signer:      signer,
-		debugLogger: slog.New(slog.DiscardHandler),
+		debugLogger: logger,
 		ds:          ds,
 	}
 }
