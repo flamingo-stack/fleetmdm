@@ -35,7 +35,7 @@ func Up_20210819131107(tx *sql.Tx) error {
 	// configurations (GTID replication). See https://github.com/fleetdm/fleet/issues/2462.
 	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS temp_host_software LIKE host_software`)
 	if err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "create temp_host_software table")
 	}
 	if !fkExists(tx, "temp_host_software", "host_software_hosts_fk") {
 		if _, err := tx.Exec(`

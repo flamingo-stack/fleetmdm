@@ -34,11 +34,11 @@ const platform = (() => {
     case "Darwin":
       return "macos";
     default:
-      throw new Error(`platform ${type} unrecognized`);
+      throw new Error(`platform ${type()} unrecognized`);
   }
 })();
 
-const binName = platform === "windows" ? "fleetctl.exe" : "fleetctl";
+const binName = platform.startsWith("windows") ? "fleetctl.exe" : "fleetctl";
 const binPath = join(installDir, binName);
 
 const install = async () => {
@@ -121,3 +121,4 @@ const run = async () => {
 };
 
 run();
+

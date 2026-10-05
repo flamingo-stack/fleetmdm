@@ -103,7 +103,7 @@ func (c *CACert) SelfSign(rand io.Reader, pub crypto.PublicKey, priv interface{}
 		SerialNumber: big.NewInt(1),
 
 		// NotBefore is set to be 10min earlier to fix gap on time difference in cluster
-		NotBefore: time.Now().Add(-600).UTC(),
+		NotBefore: time.Now().Add(-600 * time.Second).UTC(),
 		NotAfter:  time.Now().AddDate(c.years, 0, 0).UTC(),
 
 		// Used for certificate signing only

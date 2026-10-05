@@ -83,7 +83,7 @@ func TestIsWLANXML(t *testing.T) {
 	simpleBroadcastingProfile := GenerateSingleSSIDTestWLANXMLProfiles(t, false, false, false)
 	simpleNonBroadcastingProfile := GenerateSingleSSIDTestWLANXMLProfiles(t, false, false, true)
 	singleNonBroadcastingProfileHexOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, false, true, true)
-	singleNonBroadcastingProfileNameOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, false, true, true)
+	singleNonBroadcastingProfileNameOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, true, false, true)
 
 	baseMultiSSIDBroadcastingProfile := GenerateMultipleSSIDTestWLANXMLProfileVariants(t, "MySSIDPrefix", false, false, false, false)
 	onlyHexSSIDsBroadcastingMultiSSIDProfile := GenerateMultipleSSIDTestWLANXMLProfileVariants(t, "MySSIDPrefix", true, false, false, false)
@@ -131,7 +131,7 @@ func TestEqual(t *testing.T) {
 	// Each newline separted group below should be equivalent to others in the group
 	simpleBroadcastingProfile := GenerateSingleSSIDTestWLANXMLProfiles(t, false, false, false)
 	simpleBroadcastingProfileHexOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, false, true, false)
-	simpleBroadcastingProfileNameOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, false, true, false)
+	simpleBroadcastingProfileNameOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, true, false, false)
 
 	simpleNonBroadcastingProfile := GenerateSingleSSIDTestWLANXMLProfiles(t, false, false, true)
 	simpleNonBroadcastingProfileHexOnly := GenerateSingleSSIDTestWLANXMLProfiles(t, false, true, true)

@@ -20,7 +20,7 @@ module.exports = {
       // Default to 'it-major-mdm' for users with an mdm primaryBuyingSituation.
       let newPrimaryBuyingSituationForThisUser = 'it-major-mdm';
       // If this user has filled out the get started questionnaire, check their answers to determine if they were interested in Linux MDM.
-      if(thisUser.getStartedQuestionnaireAnswers !== {}){
+      if(thisUser.getStartedQuestionnaireAnswers && Object.keys(thisUser.getStartedQuestionnaireAnswers).length > 0){
         if(thisUser.getStartedQuestionnaireAnswers['what-do-you-manage-mdm']) {
           // If they previosuly selected linux as a response to the "What do you manage?" question, set their new primaryBuyingSituation to be 'it-gap-filler-mdm'
           if(thisUser.getStartedQuestionnaireAnswers['what-do-you-manage-mdm'].mdmUseCase === 'linux') {
@@ -87,4 +87,5 @@ module.exports = {
 
 
 };
+
 
