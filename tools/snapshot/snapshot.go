@@ -99,6 +99,10 @@ func restore(homedir string) error {
 
 	// Walk the ~/.fleet/snapshots directory if it exists.
 	dirEntries, err := os.ReadDir(snapshotsDir)
+	if err != nil {
+		fmt.Printf("Error reading snapshots directory (%s): %v\n", snapshotsDir, err)
+		return err
+	}
 	var snapshots []Snapshot
 	// var lastSnapshotName []byte
 	for _, entry := range dirEntries {

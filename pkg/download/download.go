@@ -39,6 +39,20 @@ func DownloadAndExtract(client *http.Client, u *url.URL, path string) error {
 
 var NotFound = errors.New("resource not found")
 
+// redactedURL returns a copy of the URL with the query string and any
+// userinfo removed, suitable for logging without leaking credentials or
+// signed URL tokens.
+func redactedURL(u *url.URL) string {
+	redacted := *u
+	if redacted.User != nil {
+		redacted.User = url.User(redacted.User.Username())
+	}
+	if redacted.RawQuery != "" {
+		redacted.RawQuery = "REDACTED"
+	}
+	return redacted.String()
+}
+
 func download(client *http.Client, u *url.URL, path string, extract bool) error {
 	// atomically write to file
 	dir, file := filepath.Split(path)
@@ -131,7 +145,7 @@ func download(client *http.Client, u *url.URL, path string, extract bool) error 
 	expBackOff := backoff.NewExponentialBackOff()
 	expBackOff.MaxElapsedTime = backoffMaxElapsedTime
 	if err := backoff.RetryNotify(operation, expBackOff, func(err error, d time.Duration) {
-		fmt.Printf("Download failed on %s: %v. Retrying in %v\n", u.String(), err, d)
+		fmt.Printf("Download failed on %s: %v. Retrying in %v\n", redactedURL(u), err, d)
 	}); err != nil {
 		return fmt.Errorf("download and write file: %w", err)
 	}
