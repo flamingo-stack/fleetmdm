@@ -102,7 +102,7 @@ func (t *Task) StartCollectors(ctx context.Context, logger *slog.Logger) {
 	}
 }
 
-func storePurgeActiveHostID(pool fleet.RedisPool, zsetKey string, hid uint, reportedAt, purgeOlder time.Time) (int, error) {
+func storePurgeActiveHostID(ctx context.Context, pool fleet.RedisPool, zsetKey string, hid uint, reportedAt, purgeOlder time.Time) (int, error) {
 	// KEYS[1]: the zsetKey
 	// ARGV[1]: the host ID to add
 	// ARGV[2]: the added host's reported-at timestamp
@@ -118,12 +118,12 @@ func storePurgeActiveHostID(pool fleet.RedisPool, zsetKey string, hid uint, repo
 	defer conn.Close()
 
 	if err := redis.BindConn(pool, conn, zsetKey); err != nil {
-		return 0, fmt.Errorf("bind redis connection: %w", err)
+		return 0, ctxerr.Wrap(ctx, err, "bind redis connection")
 	}
 
 	count, err := redigo.Int(script.Do(conn, zsetKey, hid, reportedAt.Unix(), purgeOlder.Unix()))
 	if err != nil {
-		return 0, fmt.Errorf("run redis script: %w", err)
+		return 0, ctxerr.Wrap(ctx, err, "run redis script")
 	}
 	return count, nil
 }
@@ -133,7 +133,7 @@ type hostIDLastReported struct {
 	LastReported int64 // timestamp in unix epoch
 }
 
-func loadActiveHostIDs(pool fleet.RedisPool, zsetKey string, scanCount int) ([]hostIDLastReported, error) {
+func loadActiveHostIDs(ctx context.Context, pool fleet.RedisPool, zsetKey string, scanCount int) ([]hostIDLastReported, error) {
 	conn := redis.ConfigureDoer(pool, pool.Get())
 	defer conn.Close()
 
@@ -144,11 +144,11 @@ func loadActiveHostIDs(pool fleet.RedisPool, zsetKey string, scanCount int) ([]h
 	for {
 		res, err := redigo.Values(conn.Do("ZSCAN", zsetKey, cursor, "COUNT", scanCount))
 		if err != nil {
-			return nil, fmt.Errorf("scan active host ids: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "scan active host ids")
 		}
 		var hostVals []uint
 		if _, err := redigo.Scan(res, &cursor, &hostVals); err != nil {
-			return nil, fmt.Errorf("convert scan results: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "convert scan results")
 		}
 		for i := 0; i < len(hostVals); i += 2 {
 			hosts = append(hosts,
@@ -162,7 +162,7 @@ func loadActiveHostIDs(pool fleet.RedisPool, zsetKey string, scanCount int) ([]h
 	}
 }
 
-func removeProcessedHostIDs(pool fleet.RedisPool, zsetKey string, batch []hostIDLastReported) (int, error) {
+func removeProcessedHostIDs(ctx context.Context, pool fleet.RedisPool, zsetKey string, batch []hostIDLastReported) (int, error) {
 	// This script removes from the set of active hosts all those that still have
 	// the same score as when the batch was read (via loadActiveHostIDs). This is
 	// so that any host that would've reported new data since the call to
@@ -203,7 +203,7 @@ func removeProcessedHostIDs(pool fleet.RedisPool, zsetKey string, batch []hostID
 	defer conn.Close()
 
 	if err := redis.BindConn(pool, conn, zsetKey); err != nil {
-		return 0, fmt.Errorf("bind redis connection: %w", err)
+		return 0, ctxerr.Wrap(ctx, err, "bind redis connection")
 	}
 
 	args := redigo.Args{zsetKey}
@@ -212,7 +212,7 @@ func removeProcessedHostIDs(pool fleet.RedisPool, zsetKey string, batch []hostID
 	}
 	count, err := redigo.Int(script.Do(conn, args...))
 	if err != nil {
-		return 0, fmt.Errorf("run redis script: %w", err)
+		return 0, ctxerr.Wrap(ctx, err, "run redis script")
 	}
 	return count, nil
 }

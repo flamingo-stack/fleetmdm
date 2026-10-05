@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	"github.com/fleetdm/fleet/v4/server/authz"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
@@ -206,7 +205,7 @@ func (svc *Service) ConditionalAccessMicrosoftDelete(ctx context.Context) error 
 			return ctxerr.Wrap(ctx, err, "failed to delete the integration on the proxy")
 		}
 	} else if deleteResponse.Error != "" {
-		return ctxerr.Wrap(ctx, errors.New(deleteResponse.Error), "delete on the proxy failed")
+		return ctxerr.New(ctx, "delete on the proxy failed: "+deleteResponse.Error)
 	}
 
 	// Delete integration in datastore.

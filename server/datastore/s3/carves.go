@@ -98,7 +98,7 @@ func (c *CarveStore) UpdateCarve(ctx context.Context, metadata *fleet.CarveMetad
 // of keys has been reached; keys are returned in a set-like map
 func (c *CarveStore) listS3Carves(ctx context.Context, lastPrefix string, maxKeys int) (map[string]bool, error) {
 	var err error
-	var continuationToken string
+	var continuationToken *string
 	result := make(map[string]bool)
 	if maxKeys <= 0 {
 		maxKeys = defaultMaxS3Keys
@@ -110,10 +110,10 @@ func (c *CarveStore) listS3Carves(ctx context.Context, lastPrefix string, maxKey
 		carveFilesPage, err := c.s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket:            &c.bucket,
 			Prefix:            &c.prefix,
-			ContinuationToken: &continuationToken,
+			ContinuationToken: continuationToken,
 		})
 		if err != nil {
-			return nil, err
+			return nil, ctxerr.Wrap(ctx, err, "listing s3 carve objects")
 		}
 		for _, carveObject := range carveFilesPage.Contents {
 			result[*carveObject.Key] = true
@@ -124,7 +124,7 @@ func (c *CarveStore) listS3Carves(ctx context.Context, lastPrefix string, maxKey
 		if !*carveFilesPage.IsTruncated {
 			break
 		}
-		continuationToken = *carveFilesPage.ContinuationToken
+		continuationToken = carveFilesPage.NextContinuationToken
 	}
 	return result, err
 }
@@ -317,3 +317,4 @@ func (c *CarveStore) GetBlock(ctx context.Context, metadata *fleet.CarveMetadata
 	}
 	return carveData, nil
 }
+

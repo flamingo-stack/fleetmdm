@@ -12,6 +12,7 @@ import (
 	"math/big"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/assets"
 	"github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
@@ -46,7 +47,7 @@ func (d *SCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(context.Background(), "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -104,3 +105,4 @@ VALUES
 	)
 	return err
 }
+
