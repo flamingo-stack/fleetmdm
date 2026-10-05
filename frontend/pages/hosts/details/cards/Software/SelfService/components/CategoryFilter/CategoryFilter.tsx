@@ -13,6 +13,7 @@ import { ISelfServiceCategory } from "interfaces/self_service_category";
 
 import Button from "components/buttons/Button";
 import Icon from "components/Icon";
+import InputField from "components/forms/fields/InputField";
 
 declare module "react-select-5/dist/declarations/src/Select" {
   export interface Props<
@@ -93,12 +94,11 @@ const CustomMenuList = (props: MenuListProps<ICategoryOption, false>) => {
       }}
     >
       <div className={`${baseClass}__search-field`}>
-        <input
-          className={`${baseClass}__search-input`}
-          ref={inputRef}
+        <InputField
+          inputWrapperClass={`${baseClass}__search-input`}
+          inputRef={inputRef}
           value={searchQuery}
           name="category-search-input"
-          type="text"
           placeholder="Search categories"
           onKeyDown={handleKeyDown}
           onChange={onChangeSearchQuery}
@@ -107,7 +107,7 @@ const CustomMenuList = (props: MenuListProps<ICategoryOption, false>) => {
           // preventDefault + focusInput on its own hidden input — stealing
           // focus from anything you click inside the menu. Stopping the
           // synthetic event here keeps focus on our search input.
-          onMouseDown={(event) => event.stopPropagation()}
+          onMouseDown={(event: React.MouseEvent) => event.stopPropagation()}
         />
         <Icon name="search" />
       </div>
