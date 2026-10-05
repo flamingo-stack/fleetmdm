@@ -254,10 +254,14 @@ func loadKey(keyPem, password []byte) (*rsa.PrivateKey, error) {
 
 	b, err := x509.DecryptPEMBlock(pemBlock, password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt pem block: %w", err)
 	}
 
-	return x509.ParsePKCS1PrivateKey(b)
+	key, err := x509.ParsePKCS1PrivateKey(b)
+	if err != nil {
+		return nil, fmt.Errorf("parse pkcs1 private key: %w", err)
+	}
+	return key, nil
 }
 
 func signPushCSR(csrData []byte, key *rsa.PrivateKey) ([]byte, error) {

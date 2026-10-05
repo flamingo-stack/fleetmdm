@@ -26,7 +26,7 @@ func Refresh(
 		logger.DebugContext(ctx, "goval_dictionary-sync-downloading")
 		err := Sync(vulnPath, toDownload)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("sync goval-dictionary databases: %w", err)
 		}
 	}
 
@@ -38,12 +38,12 @@ func Sync(dstDir string, platforms []oval.Platform) error {
 	dwn := downloadDecompressed(client)
 	basePath, err := nvd.GetGitHubCVEAssetPath()
 	if err != nil {
-		return err
+		return fmt.Errorf("get github cve asset path: %w", err)
 	}
 
 	for _, platform := range platforms {
 		if err := downloadDatabase(platform, dwn, basePath, dstDir); err != nil {
-			return err
+			return fmt.Errorf("download database for platform %s: %w", platform, err)
 		}
 	}
 	return nil
@@ -57,7 +57,7 @@ func downloadDatabase(
 ) error {
 	dstPath := filepath.Join(vulnDir, platform.ToGovalDictionaryFilename())
 	if err := downloader(basePath+string(platform)+".sqlite3.xz", dstPath); err != nil {
-		return err
+		return fmt.Errorf("download goval-dictionary database for platform %s: %w", platform, err)
 	}
 
 	return nil
