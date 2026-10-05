@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -283,7 +282,7 @@ func getOrbitNodeKey(ctx context.Context, r interface{}) (string, error) {
 	if onk, ok := r.(interface{ OrbitHostNodeKey() string }); ok {
 		return onk.OrbitHostNodeKey(), nil
 	}
-	return "", errors.New("error getting orbit node key")
+	return "", ctxerr.New(ctx, "error getting orbit node key")
 }
 
 func authHeaderValue(prefix string) func(ctx context.Context, r interface{}) (string, error) {
