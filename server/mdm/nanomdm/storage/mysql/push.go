@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/server/mdm/nanomdm/mdm"
@@ -28,7 +29,7 @@ func (s *MySQLStorage) RetrievePushInfo(ctx context.Context, ids []string) (map[
 		args...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query push info: %w", err)
 	}
 	defer rows.Close()
 	pushInfos := make(map[string]*mdm.Push)
@@ -36,11 +37,11 @@ func (s *MySQLStorage) RetrievePushInfo(ctx context.Context, ids []string) (map[
 		push := new(mdm.Push)
 		var id, token string
 		if err := rows.Scan(&id, &push.Topic, &push.PushMagic, &token); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan push info: %w", err)
 		}
 		// convert from hex
 		if err := push.SetTokenString(token); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("set push token: %w", err)
 		}
 		pushInfos[id] = push
 	}
