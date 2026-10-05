@@ -102,6 +102,23 @@ func (d *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnro
 	return host, nil
 }
 
+// EnrollOsquery invalidates for the returned host on successful enrollment, mirroring EnrollOrbit.
+// mysql.EnrollOsquery performs a final SELECT that hydrates host.NodeKey (and host.OrbitNodeKey, if set)
+// on the returned struct, so invalidateAfterHostEnroll can use those fields directly to plug the same
+// pre-enrollment-negative-cache race described on invalidateAfterHostEnroll: a poll or auth attempt
+// arriving with the newly-issued node_key before this INSERT/UPDATE committed would otherwise leave an
+// nk_miss:<new_key> entry that hostCacheDeleteByID's reverse-index walk cannot find.
+func (d *Datastore) EnrollOsquery(
+	ctx context.Context, osqueryHostID string, nodeKeySize int, teamID *uint, enrollSecretName string,
+) (*fleet.Host, error) {
+	host, err := d.Datastore.EnrollOsquery(ctx, osqueryHostID, nodeKeySize, teamID, enrollSecretName)
+	if err != nil {
+		return nil, err
+	}
+	d.invalidateAfterHostEnroll(ctx, host, "enroll")
+	return host, nil
+}
+
 // AddHostsToTeam invalidates every host in the batch after a successful team
 // reassignment. Uses the pipelined batch invalidator (one MGET + one DEL per
 // Redis slot, chunked) rather than calling hostCacheDeleteByID in a loop —
