@@ -1,5 +1,7 @@
 package microsoft_mdm
 
+// >>> OPENFRAME(windows-mdm-reconcile): shared reconciliation dispatcher for Windows MDM profiles — openframe/docs/mdm-reconcile.md
+
 import (
 	"bytes"
 
@@ -141,3 +143,5 @@ func isTerminalRemoveStatus(status *fleet.MDMDeliveryStatus) bool {
 	}
 	return *status == fleet.MDMDeliveryVerifying || *status == fleet.MDMDeliveryVerified
 }
+
+// <<< OPENFRAME(windows-mdm-reconcile)

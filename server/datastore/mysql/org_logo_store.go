@@ -1,3 +1,4 @@
+// >>> OPENFRAME(org-logo-store): new fleet.OrgLogoStore MySQL implementation, not present upstream — openframe/docs/org-logo-store.md
 package mysql
 
 import (
@@ -64,3 +65,5 @@ func (s *orgLogoStore) Exists(ctx context.Context, mode fleet.OrgLogoMode) (bool
 	}
 	return exists, nil
 }
+
+// <<< OPENFRAME(org-logo-store)
