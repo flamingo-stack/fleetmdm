@@ -11,6 +11,7 @@ import (
 // ErrNotFound is returned by AllStorage when a requested resource is not found.
 var ErrNotFound = errors.New("resource not found")
 
+// >>> OPENFRAME(nanodep-allstorage-rename): avoid name collision with nanomdm.AllStorage so internal mockimpl tooling can resolve both interfaces — openframe/docs/nanodep-storage-rename.md
 // AllDEPStorage represents all possible required storage used by NanoDEP.
 // Renamed from AllStorage to avoid ambiguity with the nanomdm AllStorage
 // interface, which our mockimpl tool cannot resolve correctly.
@@ -25,3 +26,5 @@ type AllDEPStorage interface {
 	api.TokenPKIRetriever
 	api.AssignerProfileStorer
 }
+// <<< OPENFRAME(nanodep-allstorage-rename)
+
