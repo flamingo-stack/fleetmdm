@@ -51,9 +51,9 @@ const AddAbmModal = ({ onCancel, onAdded }: IAddAbmModalProps) => {
   }, [tokenFile, renderFlash, onAdded, onCancel]);
 
   return (
-    <Modal className={baseClass} title="Add AB" onExit={onCancel} width="large">
+    <Modal className={baseClass} title="Add ABM" onExit={onCancel} width="large">
       <p>
-        Follow the step-by-step guide to connect Fleet to Apple Business.{" "}
+        Follow the step-by-step guide to connect Fleet to Apple Business Manager.{" "}
         <CustomLink
           url="https://fleetdm.com/learn-more-about/setup-abm"
           text="Learn how"
@@ -87,3 +87,4 @@ const AddAbmModal = ({ onCancel, onAdded }: IAddAbmModalProps) => {
 };
 
 export default AddAbmModal;
+
