@@ -183,11 +183,15 @@ func fetchOpenBugs(limit int) ([]BugIssue, error) {
 		limit = 1000 // Default high limit to get all bugs
 	}
 
+	// Fetch one extra beyond the requested limit so we can distinguish
+	// "exactly limit bugs are open" from "there are more than limit open bugs".
+	fetchLimit := limit + 1
+
 	// Use gh CLI to fetch open issues with bug label
 	// The gh CLI handles pagination internally with --limit
 	command := fmt.Sprintf(
 		"gh issue list --repo fleetdm/fleet --state open --label bug --json number,title,createdAt,milestone,labels --limit %d",
-		limit,
+		fetchLimit,
 	)
 
 	output, err := ghapi.RunCommandAndReturnOutput(command)
@@ -200,7 +204,7 @@ func fetchOpenBugs(limit int) ([]BugIssue, error) {
 		return nil, fmt.Errorf("failed to parse JSON response: %v", err)
 	}
 
-	if len(bugs) == limit {
+	if len(bugs) > limit {
 		return nil, fmt.Errorf("there are at least %d open bugs; choose a larger limit", limit)
 	}
 

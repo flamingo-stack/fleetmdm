@@ -92,6 +92,9 @@ func main() {
 }
 
 func runLastMinorReleases(releaseVersions []string, n int) []string {
+	if len(releaseVersions) == 0 {
+		return nil
+	}
 	lastMinor := releaseVersions[0]
 	outputReleases := []string{lastMinor}
 	for _, version := range releaseVersions {

@@ -6,10 +6,10 @@ import (
 )
 
 func init() {
-	MigrationClient.AddMigration(Up_20220518124708, Down_20220518124708)
+	MigrationClient.AddMigration(Up_20220526123329, Down_20220526123329)
 }
 
-func Up_20220518124708(tx *sql.Tx) error {
+func Up_20220526123329(tx *sql.Tx) error {
 	// Idempotent migration.
 	if !columnExists(tx, "software_cve", "source") {
 		if _, err := tx.Exec(
@@ -21,6 +21,7 @@ func Up_20220518124708(tx *sql.Tx) error {
 	return nil
 }
 
-func Down_20220518124708(tx *sql.Tx) error {
+func Down_20220526123329(tx *sql.Tx) error {
 	return nil
 }
+
