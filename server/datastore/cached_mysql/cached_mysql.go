@@ -39,6 +39,7 @@ import (
 const (
 	appConfigKey                       = "AppConfig:%s"
 	openframeAppConfigKeyPrefix        = "AppConfig:openframe_team:" // OPENFRAME(mysql-multitenancy)
+	openframeAppConfigDefaultKey       = "AppConfig:default"         // OPENFRAME(mysql-multitenancy)
 	defaultAppConfigExpiration         = 1 * time.Second
 	packsHostKey                       = "Packs:host:%d"
 	defaultPacksExpiration             = 1 * time.Minute
@@ -239,7 +240,7 @@ func openframeAppConfigKey(ctx context.Context) string {
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
 		return openframeAppConfigKeyPrefix + strconv.FormatUint(uint64(teamID), 10)
 	}
-	return appConfigKey
+	return openframeAppConfigDefaultKey
 }
 
 // <<< OPENFRAME(mysql-multitenancy)

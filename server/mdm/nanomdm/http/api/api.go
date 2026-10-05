@@ -214,9 +214,9 @@ func RawCommandEnqueueHandler(enqueuer storage.CommandEnqueuer, pusher push.Push
 		var pushErr error
 		if !nopush && pusher != nil {
 			pushResp, pushErr = pusher.Push(ctx, ids)
-			if err != nil {
-				logger.Info("msg", "push", "err", err)
-				output.PushError = err.Error()
+			if pushErr != nil {
+				logger.Info("msg", "push", "err", pushErr)
+				output.PushError = pushErr.Error()
 			}
 		} else if !nopush && pusher == nil {
 			pushErr = errors.New("nil pusher")
@@ -290,8 +290,7 @@ func readPEMCertAndKey(input []byte) (cert []byte, key []byte, err error) {
 			cert = pem.EncodeToMemory(block)
 		case block.Type == "PRIVATE KEY" || strings.HasSuffix(block.Type, " PRIVATE KEY"):
 			if x509.IsEncryptedPEMBlock(block) {
-				err = errors.New("private key PEM appears to be encrypted")
-				break
+				return nil, nil, errors.New("private key PEM appears to be encrypted")
 			}
 			key = pem.EncodeToMemory(block)
 		default:

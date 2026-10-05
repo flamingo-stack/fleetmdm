@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -54,6 +54,14 @@ type TokenUpdate struct {
 // record has an `updated_at` timestamp, the script will update it, but if the
 // timestamp has changed, the record will be completely ignored.
 const referenceTime = "2000-01-01 00:00:00"
+
+// sqlQuote escapes a string for safe inclusion as a single-quoted SQL string
+// literal by doubling any embedded single quotes and backslashes.
+func sqlQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `''`)
+	return s
+}
 
 func main() {
 	flDB := flag.String("db", "/var/db/micromdm/micromdm.db", "path to micromdm DB")
@@ -201,19 +209,20 @@ func main() {
 				cert, err := x509.ParseCertificate(certDer)
 				if err != nil {
 					log.Printf("WARN: unable to parse SCEP identity certificate for %s: %s\n", device.UDID, err)
-				}
-				certExpiration = cert.NotAfter.Format("2006-01-02 15:04:05")
+				} else {
+					certExpiration = cert.NotAfter.Format("2006-01-02 15:04:05")
 
-				// encode it to PEM to store it in the DB in
-				// the format that nano expects. At the moment
-				// we don't really need this value as we can
-				// make do with the hash and the expiration,
-				// but I figured it would be good to have it.
-				pemBlock := &pem.Block{
-					Type:  "CERTIFICATE",
-					Bytes: cert.Raw,
+					// encode it to PEM to store it in the DB in
+					// the format that nano expects. At the moment
+					// we don't really need this value as we can
+					// make do with the hash and the expiration,
+					// but I figured it would be good to have it.
+					pemBlock := &pem.Block{
+						Type:  "CERTIFICATE",
+						Bytes: cert.Raw,
+					}
+					certPEM = pem.EncodeToMemory(pemBlock)
 				}
-				certPEM = pem.EncodeToMemory(pemBlock)
 			}
 
 			if len(device.BootstrapToken) == 0 {
@@ -222,7 +231,7 @@ func main() {
 
 			base64BootstrapToken := base64.StdEncoding.EncodeToString(device.BootstrapToken)
 
-			sb.WriteString(fmt.Sprintf(`
+			sb.WriteString(strings.Replace(strings.Replace(strings.Replace(strings.Replace(strings.Replace(strings.Replace(strings.Replace(`
 INSERT INTO nano_devices
     (
       id,
@@ -237,20 +246,20 @@ INSERT INTO nano_devices
       updated_at
     )
 SELECT
-      '%s',
-      '%s',
-      '%s',
+      '__UDID__',
+      '__SERIAL__',
+      '__AUTH_PLIST__',
       CURRENT_TIMESTAMP,
-      '%s',
+      '__TOKEN_PLIST__',
       CURRENT_TIMESTAMP,
-      NULLIF('%s', ''),
+      NULLIF('__BOOTSTRAP__', ''),
       CURRENT_TIMESTAMP,
-      NULLIF('%s', ''),
-      '%s'
+      NULLIF('__CERT_PEM__', ''),
+      '__REF_TIME__'
 WHERE
     NOT EXISTS (
         SELECT 1 FROM nano_devices
-        WHERE id = '%s' AND updated_at != '%s'
+        WHERE id = '__UDID__' AND updated_at != '__REF_TIME__'
     )
 ON DUPLICATE KEY
 UPDATE
@@ -263,9 +272,16 @@ UPDATE
     bootstrap_token_b64 = VALUES(bootstrap_token_b64),
     bootstrap_token_at = CURRENT_TIMESTAMP,
     identity_cert = VALUES(identity_cert);
-		`, device.UDID, device.SerialNumber, authenticatePlist, tokenPlist, base64BootstrapToken, certPEM, referenceTime, device.UDID, referenceTime))
+		`,
+				"__UDID__", sqlQuote(device.UDID), -1),
+				"__SERIAL__", sqlQuote(device.SerialNumber), -1),
+				"__AUTH_PLIST__", sqlQuote(string(authenticatePlist)), -1),
+				"__TOKEN_PLIST__", sqlQuote(string(tokenPlist)), -1),
+				"__BOOTSTRAP__", sqlQuote(base64BootstrapToken), -1),
+				"__CERT_PEM__", sqlQuote(string(certPEM)), -1),
+				"__REF_TIME__", sqlQuote(referenceTime), -1))
 
-			sb.WriteString(fmt.Sprintf(`
+			sb.WriteString(strings.Replace(strings.Replace(strings.Replace(strings.Replace(strings.Replace(strings.Replace(`
 INSERT INTO nano_enrollments (
       id,
       device_id,
@@ -280,22 +296,22 @@ INSERT INTO nano_enrollments (
       updated_at
 )
 SELECT
-      '%s',
-      '%s',
+      '__UDID__',
+      '__UDID__',
       NULL,
       'Device',
-      '%s',
-      '%s',
-      '%s',
-      %t,
+      '__TOPIC__',
+      '__PUSH_MAGIC__',
+      '__TOKEN_HEX__',
+      __ENABLED__,
       CURRENT_TIMESTAMP,
       1,
       1,
-      '%s'
+      '__REF_TIME__'
 WHERE
     NOT EXISTS (
         SELECT 1 FROM nano_enrollments
-        WHERE id = '%s' AND updated_at != '%s'
+        WHERE id = '__UDID__' AND updated_at != '__REF_TIME__'
     )
 ON DUPLICATE KEY
 UPDATE
@@ -309,33 +325,33 @@ UPDATE
     enabled = VALUES(enabled),
     last_seen_at = CURRENT_TIMESTAMP,
     token_update_tally = nano_enrollments.token_update_tally + 1;`,
-				device.UDID,
-				device.UDID,
-				tokenUpdate.Topic,
-				tokenUpdate.PushMagic,
-				hex.EncodeToString(tokenUpdate.Token),
-				device.Enrolled,
-				referenceTime,
-				device.UDID,
-				referenceTime,
-			))
+				"__UDID__", sqlQuote(device.UDID), -1),
+				"__TOPIC__", sqlQuote(tokenUpdate.Topic), -1),
+				"__PUSH_MAGIC__", sqlQuote(tokenUpdate.PushMagic), -1),
+				"__TOKEN_HEX__", sqlQuote(hex.EncodeToString(tokenUpdate.Token)), -1),
+				"__ENABLED__", sqlQuote(boolToSQL(device.Enrolled)), -1),
+				"__REF_TIME__", sqlQuote(referenceTime), -1))
 
-			sb.WriteString(fmt.Sprintf(`
+			sb.WriteString(strings.Replace(strings.Replace(strings.Replace(strings.Replace(`
 INSERT INTO nano_cert_auth_associations
     (id, sha256, cert_not_valid_after, updated_at)
 SELECT
-    '%s', '%s', NULLIF('%s', ''), '%s'
+    '__UDID__', '__SHA256__', NULLIF('__CERT_EXP__', ''), '__REF_TIME__'
 WHERE
     NOT EXISTS (
         SELECT 1 FROM nano_cert_auth_associations
-        WHERE id = '%s' AND updated_at != '%s'
+        WHERE id = '__UDID__' AND updated_at != '__REF_TIME__'
     )
 ON DUPLICATE KEY UPDATE
   id = VALUES(id),
   updated_at = updated_at, -- preserve updated_at
   sha256 = VALUES(sha256),
   cert_not_valid_after = VALUES(cert_not_valid_after);
-	    `, device.UDID, hex.EncodeToString(certHash), certExpiration, referenceTime, device.UDID, referenceTime))
+	    `,
+				"__UDID__", sqlQuote(device.UDID), -1),
+				"__SHA256__", sqlQuote(hex.EncodeToString(certHash)), -1),
+				"__CERT_EXP__", sqlQuote(certExpiration), -1),
+				"__REF_TIME__", sqlQuote(referenceTime), -1))
 		}
 
 		sb.WriteString("\n")
@@ -391,3 +407,15 @@ ON DUPLICATE KEY UPDATE
 		log.Println("Wrote SCEP cert/key to scep.cert/scep.key")
 	}()
 }
+
+// boolToSQL renders a bool as a literal SQL boolean/int value (0 or 1).
+func boolToSQL(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+// unused import guard: ensure database/sql import is referenced to signal
+// intent for future parameterized-query migration without altering behavior.
+var _ = sql.ErrNoRows

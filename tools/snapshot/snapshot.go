@@ -52,6 +52,7 @@ func main() {
 		command = CMD_RESTORE
 	default:
 		fmt.Println("Please specify whether to (s)snapshot or (r)estore.")
+		os.Exit(1)
 	}
 
 	// Determine the path to the top-level directory (where the Makefile resides).
@@ -99,6 +100,9 @@ func restore(homedir string) error {
 
 	// Walk the ~/.fleet/snapshots directory if it exists.
 	dirEntries, err := os.ReadDir(snapshotsDir)
+	if err != nil {
+		return fmt.Errorf("reading snapshots directory: %w", err)
+	}
 	var snapshots []Snapshot
 	// var lastSnapshotName []byte
 	for _, entry := range dirEntries {
@@ -161,8 +165,6 @@ func restore(homedir string) error {
 
 	// Run the command.
 	err = cmd.Run()
-	output, _ := cmd.CombinedOutput()
-	fmt.Println(string(output))
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return err
@@ -250,8 +252,6 @@ func snapshot(homedir string) error {
 
 	// Run the command.
 	err = cmd.Run()
-	output, _ := cmd.CombinedOutput()
-	fmt.Println(string(output))
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return err
