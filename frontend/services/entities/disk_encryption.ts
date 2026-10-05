@@ -22,7 +22,7 @@ const diskEncryptionService = {
   getDiskEncryptionSummary: (teamId?: number) => {
     let { DISK_ENCRYPTION: path } = endpoints;
 
-    if (teamId) {
+    if (teamId !== undefined) {
       path = `${path}?${buildQueryStringFromParams({ fleet_id: teamId })}`;
     }
     return sendRequest("GET", path);
