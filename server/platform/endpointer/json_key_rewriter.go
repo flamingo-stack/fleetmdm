@@ -50,6 +50,12 @@ type AliasRule struct {
 //
 // It uses jsontext.Decoder/Encoder for token-level processing, delegating all
 // JSON lexing (string escaping, unicode, whitespace) to the library.
+//
+// The transform is performed synchronously and entirely up front: the
+// constructor reads all of src, rewrites it into an in-memory buffer, and
+// Read/UsedDeprecatedKeys simply operate on that already-populated state.
+// There is no background goroutine and no concurrent access to reader or
+// initErr, so no synchronization is required.
 type JSONKeyRewriteReader struct {
 	reader  *bytes.Reader
 	initErr error
@@ -91,9 +97,9 @@ func NewJSONKeyRewriteReader(src io.Reader, rules []AliasRule) *JSONKeyRewriteRe
 }
 
 // UsedDeprecatedKeys returns the list of deprecated key names that were
-// encountered during reading. This should be called after the reader has been
-// fully consumed (i.e., after json.Decoder.Decode or similar has returned),
-// which guarantees the background goroutine has finished.
+// encountered during reading. The rewrite happens synchronously inside
+// NewJSONKeyRewriteReader, so by the time this (or any other) method is
+// called usedDeprecated is already fully populated and immutable.
 func (r *JSONKeyRewriteReader) UsedDeprecatedKeys() []string {
 	keys := make([]string, 0, len(r.usedDeprecated))
 	for k := range r.usedDeprecated {
@@ -102,8 +108,9 @@ func (r *JSONKeyRewriteReader) UsedDeprecatedKeys() []string {
 	return keys
 }
 
-// Close closes the reader end of the pipe to unblock the transform goroutine
-// if the consumer stops reading early.
+// Close is a no-op. The rewrite is performed synchronously and completely in
+// NewJSONKeyRewriteReader before this type is returned, so there is no
+// background goroutine, pipe, or other resource to unblock or release.
 func (r *JSONKeyRewriteReader) Close() error {
 	return nil
 }
