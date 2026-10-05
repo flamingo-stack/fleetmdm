@@ -114,6 +114,13 @@ func main() {
 	}
 	printf("Got scripts windows=%d, macOS=%d\n", len(windowsScripts), len(macOSScripts))
 
+	if len(macOSHosts) > 0 && (len(macOSSoftware) == 0 || len(macOSScripts) == 0) {
+		log.Fatal("macOS hosts present but no eligible macOS software titles or scripts (.sh) found; cannot proceed")
+	}
+	if len(windowsHosts) > 0 && (len(windowsSoftware) == 0 || len(windowsScripts) == 0) {
+		log.Fatal("Windows hosts present but no eligible Windows software titles or scripts (.ps1) found; cannot proceed")
+	}
+
 	var queuedScripts, queuedInstalls, hostsTargeted, errors int
 	targetedHosts := append(macOSHosts, windowsHosts...) // nolint:gocritic
 	rand.Shuffle(len(targetedHosts), func(i, j int) {

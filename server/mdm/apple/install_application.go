@@ -115,7 +115,7 @@ func SubstituteFleetVarsInAppConfig(
 					Detail:   fmt.Sprintf("There is no IdP email for this host. Fleet couldn't populate $FLEET_VAR_%s.", name),
 				}
 			}
-			contents = profiles.ReplaceFleetVariableInXML(fleetVarHostEndUserEmailIDPRegexp, contents, emails[0])
+			contents = profiles.ReplaceFleetVariableInXML(fleet.FleetVarHostEndUserEmailIDPRegexp, contents, emails[0])
 		case fleet.FleetVarHostEndUserIDPUsername,
 			fleet.FleetVarHostEndUserIDPUsernameLocalPart,
 			fleet.FleetVarHostEndUserIDPGroups,

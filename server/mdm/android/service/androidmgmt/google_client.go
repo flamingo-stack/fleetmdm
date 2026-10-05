@@ -268,8 +268,7 @@ func (g *GoogleClient) EnterpriseDelete(ctx context.Context, enterpriseName stri
 	// We can also pull the topic from the DB, but this way is more reliable.
 	enterprise, err := g.mgmt.Enterprises.Get(enterpriseName).Context(ctx).Do()
 	if err != nil {
-		g.logger.ErrorContext(ctx, "getting enterprise; perhaps it was already deleted?", "err", err, "enterprise_name", enterpriseName)
-		return nil
+		return fmt.Errorf("getting enterprise %s: %w", enterpriseName, err)
 	}
 
 	_, err = g.mgmt.Enterprises.Delete(enterpriseName).Do()
