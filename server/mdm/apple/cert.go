@@ -50,12 +50,12 @@ func GenerateAPNSCSRKey(email, org string) (*x509.CertificateRequest, *rsa.Priva
 
 	b, err := x509.CreateCertificateRequest(rand.Reader, template, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create certificate request: %w", err)
 	}
 
 	certReq, err := x509.ParseCertificateRequest(b)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("parse certificate request: %w", err)
 	}
 
 	return certReq, key, nil
@@ -76,12 +76,12 @@ func GenerateAPNSCSR(org, email string, key crypto.PrivateKey) (*x509.Certificat
 
 	b, err := x509.CreateCertificateRequest(rand.Reader, template, key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create certificate request: %w", err)
 	}
 
 	certReq, err := x509.ParseCertificateRequest(b)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse certificate request: %w", err)
 	}
 
 	return certReq, nil
@@ -132,12 +132,12 @@ func GetSignedAPNSCSR(client *http.Client, csr *x509.CertificateRequest) error {
 
 	req, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(b))
 	if err != nil {
-		return err
+		return fmt.Errorf("creating csr signing request for fleetdm api: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("sending csr signing request to fleetdm api: %w", err)
 	}
 	defer resp.Body.Close()
 
