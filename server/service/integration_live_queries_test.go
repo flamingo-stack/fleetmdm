@@ -380,8 +380,27 @@ func (s *liveQueriesTestSuite) TestLiveQueriesRestOneHostMultipleQuery() {
 		s.DoJSON("GET", "/api/latest/fleet/queries/run", liveQueryRequest, http.StatusOK, &liveQueryResp)
 	}()
 
-	// Give the above call a couple of seconds to create the campaign
-	time.Sleep(2 * time.Second)
+	// Wait for both campaigns to be created, polling instead of a fixed sleep.
+	waitForCampaign := func(q *fleet.Query) {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				campaigns, err := s.ds.DistributedQueryCampaignsForQuery(context.Background(), q.ID)
+				require.NoError(t, err)
+				if len(campaigns) == 1 {
+					return
+				}
+			case <-deadline:
+				t.Error("Timeout: campaign not created for TestLiveQueriesRestOneHostMultipleQuery")
+				return
+			}
+		}
+	}
+	waitForCampaign(q1)
+	waitForCampaign(q2)
 
 	cid1 := getCIDForQ(s, q1)
 	cid2 := getCIDForQ(s, q2)
@@ -1173,3 +1192,4 @@ func (s *liveQueriesTestSuite) TestCreateDistributedQueryCampaignBadRequest() {
 	appCfg = fleet.AppConfig{ServerSettings: fleet.ServerSettings{LiveQueryDisabled: false, ServerURL: acResp.ServerSettings.ServerURL}, OrgInfo: fleet.OrgInfo{OrgName: acResp.OrgInfo.OrgName}}
 	s.DoRaw("PATCH", "/api/latest/fleet/config", jsonMustMarshal(t, appCfg), http.StatusOK)
 }
+
