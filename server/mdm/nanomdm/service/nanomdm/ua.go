@@ -25,7 +25,6 @@ type UAService struct {
 	// check-in message. See the Discussion section of
 	// https://developer.apple.com/documentation/devicemanagement/userauthenticate
 	sendEmptyDigestChallenge bool
-	storeRejectedUserAuth    bool
 }
 
 // NewUAService creates a new UserAuthenticate check-in message handler.
@@ -53,7 +52,7 @@ var emptyDigestChallengeBytes = []byte(emptyDigestChallenge)
 // It implements the NanoMDM service method for UserAuthenticate check-in messages.
 func (s *UAService) UserAuthenticate(r *mdm.Request, message *mdm.UserAuthenticate) ([]byte, error) {
 	logger := ctxlog.Logger(r.Context, s.logger)
-	if s.sendEmptyDigestChallenge || s.storeRejectedUserAuth {
+	if s.sendEmptyDigestChallenge {
 		if err := s.store.StoreUserAuthenticate(r, message); err != nil {
 			return nil, err
 		}
