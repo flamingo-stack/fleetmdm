@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/fleetdm/fleet/v4/server/worker/jobnames"
 )
 
 // HistoricalDataActivityEmitter is the activity-emit dependency of
@@ -89,19 +91,10 @@ func OnHistoricalDataChanged(
 	return errors.Join(errs...)
 }
 
-// Worker job names mirrored here to avoid an import cycle between fleet
-// and server/worker. If these strings drift from the worker constants,
-// jobs will be enqueued under one name and never picked up. The worker
-// package's chart_scrub.go is the source of truth.
-const (
-	chartScrubDatasetGlobalJobName = "chart_scrub_dataset_global"
-	chartScrubDatasetFleetJobName  = "chart_scrub_dataset_fleet"
-)
-
 // chartScrubGlobalArgs and chartScrubFleetArgs mirror the payload structs in
-// server/worker/chart_scrub.go. Declared locally for the same import-cycle
-// reason as the job-name constants above. The JSON shape is the contract;
-// keep field names and tags in sync.
+// server/worker/chart_scrub.go. Declared locally to avoid pulling
+// worker-package types into the fleet package. The JSON shape is the
+// contract; keep field names and tags in sync.
 type chartScrubGlobalArgs struct {
 	Dataset string `json:"dataset"`
 }
@@ -130,10 +123,10 @@ func enqueueHistoricalDataScrub(
 	var argsJSON []byte
 	var err error
 	if fleetID == nil {
-		jobName = chartScrubDatasetGlobalJobName
+		jobName = jobnames.ChartScrubDatasetGlobalJobName
 		argsJSON, err = json.Marshal(chartScrubGlobalArgs{Dataset: scrubDataset})
 	} else {
-		jobName = chartScrubDatasetFleetJobName
+		jobName = jobnames.ChartScrubDatasetFleetJobName
 		argsJSON, err = json.Marshal(chartScrubFleetArgs{
 			Dataset:  scrubDataset,
 			FleetIDs: []uint{*fleetID},

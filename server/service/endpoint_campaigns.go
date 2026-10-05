@@ -132,6 +132,30 @@ func makeStreamDistributedQueryCampaignResultsHandler(config config.ServerConfig
 				return
 			}
 
+			// >>> OPENFRAME(mysql-multitenancy): info.CampaignID is client-supplied and not
+			// derived from the tenant-scoped session, so pinning ctx above is not sufficient by
+			// itself — StreamCampaignResults must re-validate that this campaign actually belongs
+			// to the tenant team pinned in ctx before streaming any results, otherwise a caller
+			// authenticated in one tenant could stream another tenant's campaign by guessing IDs.
+			// We cannot see/modify the datastore layer from this file, so fence explicitly here:
+			// look up the campaign's owning team via the service and compare it against the pinned
+			// tenant before calling StreamCampaignResults.
+			// — openframe/docs/mysql-multitenancy-feature.md
+			if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+				campaign, err := svc.GetCampaignReader(ctx, info.CampaignID)
+				if err != nil {
+					logger.ErrorContext(ctx, "looking up campaign for tenant validation", "err", err)
+					conn.WriteJSONError("error looking up campaign") //nolint:errcheck
+					return
+				}
+				if campaign == nil || campaign.OpenframeTeamID() != teamID {
+					logger.ErrorContext(ctx, "campaign does not belong to pinned tenant", "campaign-id", info.CampaignID)
+					conn.WriteJSONError("campaign not found") //nolint:errcheck
+					return
+				}
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
+
 			svc.StreamCampaignResults(ctx, conn, info.CampaignID)
 		}
 

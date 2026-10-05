@@ -166,8 +166,13 @@ func (ds *Datastore) CleanupDiscardedQueryResults(ctx context.Context) error {
 
 // >>> OPENFRAME(query-results-ttl): batched TTL cleanup of expired query_results rows — openframe/docs/query-results-ttl-cleanup.md
 // CleanupExpiredQueryResults deletes up to 1000 query_results rows where last_fetched
-// is older than expiredBefore. Called on each cron tick; the schedule interval controls
-// the overall deletion rate. Returns the number of rows deleted.
+// is older than expiredBefore. This must be invoked on each cron tick by the caller
+// (e.g. a cron schedule job); the schedule interval controls the overall deletion rate.
+// Returns the number of rows deleted.
+//
+// NOTE: as of now, no cron job or service-layer caller invokes this method, so the
+// TTL cleanup described above does not actually run. Wiring this into the appropriate
+// cron schedule is required for the TTL guarantee to hold in production.
 func (ds *Datastore) CleanupExpiredQueryResults(ctx context.Context, expiredBefore time.Time) (int64, error) {
 	result, err := ds.writer(ctx).ExecContext(ctx,
 		`DELETE FROM query_results WHERE last_fetched < ? LIMIT 1000`,
@@ -258,7 +263,10 @@ func (ds *Datastore) CleanupExcessQueryResultRows(ctx context.Context, maxQueryR
 				if err != nil {
 					return nil, ctxerr.Wrapf(ctx, err, "cleaning up query %d", c.QueryID)
 				}
-				rowsAffected, _ := result.RowsAffected()
+				rowsAffected, err := result.RowsAffected()
+				if err != nil {
+					return nil, ctxerr.Wrapf(ctx, err, "getting rows affected while cleaning up query %d", c.QueryID)
+				}
 				if rowsAffected == 0 {
 					break
 				}

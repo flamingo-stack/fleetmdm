@@ -169,7 +169,7 @@ func runLiveQueryOnHost(svc fleet.Service, ctx context.Context, host *fleet.Host
 		res.Status = fleet.StatusOffline
 		return res, nil
 	default:
-		return nil, fmt.Errorf("unknown host status: %s", status)
+		return nil, ctxerr.Wrap(ctx, fmt.Errorf("unknown host status: %s", status))
 	}
 
 	queryResults, _, err := runLiveQuery(ctx, svc, []uint{0}, query, []uint{host.ID})

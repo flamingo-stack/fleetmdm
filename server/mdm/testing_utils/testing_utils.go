@@ -13,21 +13,9 @@ import (
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server/dev_mode"
+	"github.com/fleetdm/fleet/v4/server/test"
 	"github.com/stretchr/testify/require"
 )
-
-// TestingT is the subset of *testing.T that this package needs. It combines
-// what testify's require functions require (Errorf, FailNow) with t.Cleanup
-// and t.Setenv used by dev_mode.SetOverride. *testing.T satisfies it without
-// an explicit conversion, so callers continue to pass `t` as-is. Defining
-// this interface locally keeps the "testing" package out of this package's
-// production import graph.
-type TestingT interface {
-	Errorf(format string, args ...any)
-	FailNow()
-	Cleanup(f func())
-	Setenv(key, value string)
-}
 
 func NewTestMDMAppleCertTemplate() *x509.Certificate {
 	return &x509.Certificate{
@@ -52,7 +40,7 @@ func NewTestMDMAppleCertTemplate() *x509.Certificate {
 // StartNewAppleGDMFTestServer creates a new test server that serves the GDMF data from the testdata
 // file. It also sets the necessary dev mode overrides to point to the test server and disable
 // caching. It closes the server and clears the underlying overrides when the test finishes.
-func StartNewAppleGDMFTestServer(t TestingT) {
+func StartNewAppleGDMFTestServer(t test.TestingT) {
 	_, thisFile, _, _ := runtime.Caller(0)
 	gdmfTestDataPath := filepath.Join(filepath.Dir(thisFile), "../apple/gdmf/testdata/gdmf.json")
 

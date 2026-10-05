@@ -173,7 +173,7 @@ func (s *FileStorage) StoreTokenPKI(_ context.Context, name string, pemCert []by
 	if err := os.WriteFile(s.tokenpkiFilename(name, "cert"), pemCert, 0664); err != nil { //nolint:gosec
 		return err
 	}
-	if err := os.WriteFile(s.tokenpkiFilename(name, "key"), pemKey, 0664); err != nil { //nolint:gosec
+	if err := os.WriteFile(s.tokenpkiFilename(name, "key"), pemKey, 0600); err != nil { //nolint:gosec
 		return err
 	}
 	return nil
@@ -198,3 +198,4 @@ func (s *FileStorage) RetrieveTokenPKI(_ context.Context, name string) ([]byte, 
 	}
 	return certBytes, keyBytes, err
 }
+

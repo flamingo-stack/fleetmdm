@@ -65,6 +65,7 @@ func (svc *Service) NewLabel(ctx context.Context, p fleet.LabelPayload) (*fleet.
 	}
 	label.Name = p.Name
 
+	// >>> OPENFRAME(host-vitals-labels): Host vitals label criteria support — openframe/docs/host-vitals-labels.md
 	if p.Criteria != nil {
 		if p.Query != "" || (len(p.Hosts) > 0 || len(p.HostIDs) > 0) {
 			return nil, nil, fleet.NewInvalidArgumentError("criteria", `Only one of "criteria", "query" or "hosts/host_ids" can be included in the request.`)
@@ -81,6 +82,7 @@ func (svc *Service) NewLabel(ctx context.Context, p fleet.LabelPayload) (*fleet.
 			return nil, nil, fleet.NewInvalidArgumentError("criteria", fmt.Sprintf("invalid criteria: %s", err.Error()))
 		}
 	} else {
+		// <<< OPENFRAME(host-vitals-labels)
 		if p.Query != "" && (len(p.Hosts) > 0 || len(p.HostIDs) > 0) {
 			return nil, nil, fleet.NewInvalidArgumentError("query", `Only one of "criteria", "query" or "hosts/host_ids" can be included in the request.`)
 		}
@@ -93,6 +95,7 @@ func (svc *Service) NewLabel(ctx context.Context, p fleet.LabelPayload) (*fleet.
 	label.Platform = p.Platform
 	label.Description = p.Description
 
+	// >>> OPENFRAME(host-vitals-labels): validate membership field combinations for host vitals criteria — openframe/docs/host-vitals-labels.md
 	// Validate field combinations for the inferred membership type
 	if err := fleet.ValidateLabelMembershipFields(&fleet.LabelSpec{
 		Name:                label.Name,
@@ -103,6 +106,7 @@ func (svc *Service) NewLabel(ctx context.Context, p fleet.LabelPayload) (*fleet.
 	}); err != nil {
 		return nil, nil, err
 	}
+	// <<< OPENFRAME(host-vitals-labels)
 
 	for name := range fleet.ReservedLabelNames() {
 		if label.Name == name {
@@ -623,10 +627,12 @@ func (svc *Service) ApplyLabelSpecs(ctx context.Context, specs []*fleet.LabelSpe
 	var specLabelNamesNeedingMoving []string // should match namesToMove once specs have been checked
 
 	for _, spec := range specs {
+		// >>> OPENFRAME(host-vitals-labels): validate membership field combinations for host vitals criteria — openframe/docs/host-vitals-labels.md
 		// Validate mutually exclusive field combinations per label membership type
 		if err := fleet.ValidateLabelMembershipFields(spec); err != nil {
 			return err.WithStatus(http.StatusUnprocessableEntity)
 		}
+		// <<< OPENFRAME(host-vitals-labels)
 		if spec.LabelType == fleet.LabelTypeBuiltIn {
 			// We allow specs to contain built-in labels as long as they are not being modified.
 			// This allows the user to do the following workflow without manually removing built-in labels:
@@ -810,6 +816,7 @@ func labelMatchesTeamScope(l *fleet.Label, teamID *uint) bool {
 // description, query, label_membership_type, and host vitals criteria. Host
 // membership for manual labels is compared separately by snapshotting host
 // IDs around the apply.
+// >>> OPENFRAME(host-vitals-labels): compare host vitals criteria for spec/label match detection — openframe/docs/host-vitals-labels.md
 func labelSpecMatchesLabel(spec *fleet.LabelSpec, label *fleet.Label) bool {
 	if spec.Description != label.Description {
 		return false
@@ -853,6 +860,8 @@ func rawJSONBytes(m *json.RawMessage) []byte {
 	}
 	return *m
 }
+
+// <<< OPENFRAME(host-vitals-labels)
 
 func uintSetsEqual(a, b []uint) bool {
 	if len(a) != len(b) {

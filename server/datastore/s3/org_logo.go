@@ -62,3 +62,15 @@ func (s *OrgLogoStore) Delete(ctx context.Context, mode fleet.OrgLogoMode) error
 	}
 	return nil
 }
+
+// Cleanup is intentionally overridden as a no-op. OrgLogoStore reuses the
+// software-installers S3 bucket/prefix config but stores files under distinct
+// fileIDs ("light"/"dark") that are never part of any usedFileIDs set passed
+// by generic cleanup jobs (e.g. software installer cleanup). Inheriting
+// commonFileStore.Cleanup would delete org logos whenever such a job is
+// pointed at this store, since "light"/"dark" would never appear in the
+// caller's usedFileIDs. Org logos are managed explicitly via Put/Delete above
+// and must not be subject to generic cleanup.
+func (s *OrgLogoStore) Cleanup(ctx context.Context, usedFileIDs []string, removeCreatedBefore time.Time) (int, error) {
+	return 0, nil
+}
