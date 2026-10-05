@@ -29,6 +29,7 @@ import (
 // LEGACY VARIABLE
 var fleetVarHostEndUserEmailIDPRegexp = regexp.MustCompile(fmt.Sprintf(`(\$FLEET_VAR_%s)|(\${FLEET_VAR_%[1]s})`, fleet.FleetVarHostEndUserEmailIDP))
 
+// >>> OPENFRAME(profile-processor-enqueue-result): Custom SCEP/Smallstep/DigiCert/HostUUID variable handling and concurrent enqueue result tracking — openframe/docs/profile-processor.md
 // EnqueueResult holds the results of profile enqueue operations.
 type EnqueueResult struct {
 	// FailedCmdUUIDs maps command UUIDs that failed to enqueue to their errors.
@@ -36,6 +37,7 @@ type EnqueueResult struct {
 	// SucceededCmdUUIDs contains the command UUIDs that were enqueued successfully.
 	SucceededCmdUUIDs []string
 }
+// <<< OPENFRAME(profile-processor-enqueue-result)
 
 func ProcessAndEnqueueProfiles(ctx context.Context,
 	ds fleet.Datastore,
@@ -86,6 +88,7 @@ func ProcessAndEnqueueProfiles(ctx context.Context,
 		CmdUUID string
 	}
 
+	// >>> OPENFRAME(profile-processor-enqueue-result): concurrent enqueue with per-command result tracking — openframe/docs/profile-processor.md
 	// Send the install/remove commands for each profile.
 	var wgProd, wgCons sync.WaitGroup
 	ch := make(chan remoteResult)
@@ -113,7 +116,7 @@ func ProcessAndEnqueueProfiles(ctx context.Context,
 			ch <- remoteResult{nil, target.CmdUUID}
 			// this is fine to pass as success here, since we have sent the command but just didn't notify the client, but when the client checks back in it will process this profile.
 		case err != nil:
-			logger.ErrorContext(ctx, fmt.Sprintf("enqueue command to %s profiles", op), "details", err)
+			logger.ErrorContext(ctx, "enqueue command to profiles", "operation", op, "details", err)
 			ch <- remoteResult{err, target.CmdUUID}
 		default:
 			ch <- remoteResult{nil, target.CmdUUID}
@@ -148,6 +151,7 @@ func ProcessAndEnqueueProfiles(ctx context.Context,
 	close(ch) // done sending at this point, this triggers end of for loop in consumer
 	wgCons.Wait()
 	return result, nil
+	// <<< OPENFRAME(profile-processor-enqueue-result)
 }
 
 func preprocessProfileContents(
@@ -167,6 +171,7 @@ func preprocessProfileContents(
 	// contents, generating a unique profile for each host. For a 2KB profile and
 	// 30K hosts, this method may generate ~60MB of profile data in memory.
 
+	// >>> OPENFRAME(profile-processor-ca-vars): Custom SCEP, Smallstep SCEP, and DigiCert CA state used during variable substitution — openframe/docs/profile-processor.md
 	var (
 		// Copy of NDES SCEP config which will contain unencrypted password, if needed
 		ndesConfig    *fleet.NDESSCEPProxyCA
@@ -174,6 +179,7 @@ func preprocessProfileContents(
 		customSCEPCAs map[string]*fleet.CustomSCEPProxyCA
 		smallstepCAs  map[string]*fleet.SmallstepSCEPProxyCA
 	)
+	// <<< OPENFRAME(profile-processor-ca-vars)
 
 	// this is used to cache the host ID corresponding to the UUID, so we don't
 	// need to look it up more than once per host.
@@ -203,6 +209,7 @@ func preprocessProfileContents(
 		// validation works as expected
 		// In the future we should expand variablesUpdatedAt logic to include non-CA variables as
 		// well
+		// >>> OPENFRAME(profile-processor-ca-vars): Custom SCEP, Smallstep SCEP, DigiCert, and HostUUID variables added to recognized CA-related variables — openframe/docs/profile-processor.md
 		for _, fleetVar := range fleetVars {
 			if fleetVar == string(fleet.FleetVarSCEPRenewalID) || fleetVar == string(fleet.FleetVarCertificateRenewalID) ||
 				fleetVar == string(fleet.FleetVarNDESSCEPChallenge) || fleetVar == string(fleet.FleetVarNDESSCEPProxyURL) || fleetVar == string(fleet.FleetVarHostUUID) ||
@@ -214,6 +221,7 @@ func preprocessProfileContents(
 				break
 			}
 		}
+		// <<< OPENFRAME(profile-processor-ca-vars)
 
 	initialFleetVarLoop:
 		for _, fleetVar := range fleetVars {
@@ -235,6 +243,7 @@ func preprocessProfileContents(
 				fleetVar == string(fleet.FleetVarHostEndUserIDPFullname) || fleetVar == string(fleet.FleetVarHostUUID):
 				// No extra validation needed for these variables
 
+			// >>> OPENFRAME(profile-processor-ca-vars): DigiCert CA validation branch — openframe/docs/profile-processor.md
 			case strings.HasPrefix(fleetVar, string(fleet.FleetVarDigiCertPasswordPrefix)) || strings.HasPrefix(fleetVar, string(fleet.FleetVarDigiCertDataPrefix)):
 				caName, found := strings.CutPrefix(fleetVar, string(fleet.FleetVarDigiCertPasswordPrefix))
 				if !found {
@@ -252,7 +261,9 @@ func preprocessProfileContents(
 					valid = false
 					break initialFleetVarLoop
 				}
+			// <<< OPENFRAME(profile-processor-ca-vars)
 
+			// >>> OPENFRAME(profile-processor-ca-vars): Custom SCEP CA validation branch — openframe/docs/profile-processor.md
 			case strings.HasPrefix(fleetVar, string(fleet.FleetVarCustomSCEPChallengePrefix)) || strings.HasPrefix(fleetVar, string(fleet.FleetVarCustomSCEPProxyURLPrefix)):
 				caName, found := strings.CutPrefix(fleetVar, string(fleet.FleetVarCustomSCEPChallengePrefix))
 				if !found {
@@ -275,7 +286,9 @@ func preprocessProfileContents(
 					valid = false
 					break initialFleetVarLoop
 				}
+			// <<< OPENFRAME(profile-processor-ca-vars)
 
+			// >>> OPENFRAME(profile-processor-ca-vars): Smallstep SCEP CA validation branch — openframe/docs/profile-processor.md
 			case strings.HasPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPChallengePrefix)) || strings.HasPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPProxyURLPrefix)):
 				if smallstepCAs == nil {
 					smallstepCAs = make(map[string]*fleet.SmallstepSCEPProxyCA)
@@ -294,6 +307,7 @@ func preprocessProfileContents(
 					valid = false
 					break initialFleetVarLoop
 				}
+			// <<< OPENFRAME(profile-processor-ca-vars)
 
 			default:
 				// Otherwise, error out since this variable is unknown
@@ -406,6 +420,7 @@ func preprocessProfileContents(
 					fleetRenewalID := "fleet-" + profUUID
 					hostContents = profiles.ReplaceFleetVariableInXML(fleet.FleetVarRenewalIDRegexp, hostContents, fleetRenewalID)
 
+				// >>> OPENFRAME(profile-processor-ca-vars): Custom SCEP challenge/proxy URL substitution — openframe/docs/profile-processor.md
 				case strings.HasPrefix(fleetVar, string(fleet.FleetVarCustomSCEPChallengePrefix)):
 					replacedContents, replacedVariable, err := profiles.ReplaceCustomSCEPChallengeVariable(ctx, logger, fleetVar, customSCEPCAs, hostContents)
 					if err != nil {
@@ -426,7 +441,9 @@ func preprocessProfileContents(
 					}
 					hostContents = replacedContents
 					managedCertificatePayloads = append(managedCertificatePayloads, managedCertificate)
+				// <<< OPENFRAME(profile-processor-ca-vars)
 
+				// >>> OPENFRAME(profile-processor-ca-vars): Smallstep SCEP challenge/proxy URL substitution — openframe/docs/profile-processor.md
 				case strings.HasPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPChallengePrefix)):
 					caName := strings.TrimPrefix(fleetVar, string(fleet.FleetVarSmallstepSCEPChallengePrefix))
 					ca, ok := smallstepCAs[caName]
@@ -477,6 +494,7 @@ func preprocessProfileContents(
 					if err != nil {
 						return ctxerr.Wrap(ctx, err, "replacing Smallstep SCEP URL variable")
 					}
+				// <<< OPENFRAME(profile-processor-ca-vars)
 
 				case fleetVar == string(fleet.FleetVarHostEndUserEmailIDP):
 					// FIXME: if this is used together with a CA, and fail inside getFirstIDPEmail, the profile will fail, but not get the correct variablesUpdatedAt var.
@@ -539,6 +557,7 @@ func preprocessProfileContents(
 
 					hostContents = replacedContents
 
+				// >>> OPENFRAME(profile-processor-ca-vars): DigiCert password/data substitution and HostUUID variable — openframe/docs/profile-processor.md
 				case strings.HasPrefix(fleetVar, string(fleet.FleetVarDigiCertPasswordPrefix)):
 					// We will replace the password when we populate the certificate data
 
@@ -626,6 +645,7 @@ func preprocessProfileContents(
 						CAName:         caName,
 						Serial:         &cert.SerialNumber,
 					})
+				// <<< OPENFRAME(profile-processor-ca-vars)
 
 				default:
 					// This was handled in the above switch statement, so we should never reach this case
@@ -751,6 +771,7 @@ func replaceFleetVarInItem(ctx context.Context, ds fleet.Datastore, target *flee
 	return true, nil
 }
 
+// >>> OPENFRAME(profile-processor-ca-vars): DigiCert CA configuration check — openframe/docs/profile-processor.md
 func isDigiCertConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *fleet.GroupedCertificateAuthorities, ds fleet.Datastore,
 	hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload,
 	userEnrollmentsToHostUUIDsMap map[string]string,
@@ -781,6 +802,7 @@ func isDigiCertConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *
 	existingDigiCertCAs[caName] = digiCertCA
 	return true, nil
 }
+// <<< OPENFRAME(profile-processor-ca-vars)
 
 func isNDESSCEPConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *fleet.GroupedCertificateAuthorities, ds fleet.Datastore,
 	hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload, userEnrollmentsToHostUUIDsMap map[string]string, profUUID string, target *fleet.CmdTarget,
@@ -795,6 +817,7 @@ func isNDESSCEPConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *
 	return true, nil
 }
 
+// >>> OPENFRAME(profile-processor-ca-vars): Smallstep SCEP CA configuration check — openframe/docs/profile-processor.md
 func isSmallstepSCEPConfigured(ctx context.Context, logger *slog.Logger, groupedCAs *fleet.GroupedCertificateAuthorities, ds fleet.Datastore,
 	hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload,
 	userEnrollmentsToHostUUIDsMap map[string]string,
@@ -825,6 +848,7 @@ func isSmallstepSCEPConfigured(ctx context.Context, logger *slog.Logger, grouped
 	existingSmallstepSCEPCAs[caName] = scepCA
 	return true, nil
 }
+// <<< OPENFRAME(profile-processor-ca-vars)
 
 func getHostProfileToInstallByEnrollmentID(hostProfilesToInstallMap map[fleet.HostProfileUUID]*fleet.MDMAppleBulkUpsertHostProfilePayload,
 	userEnrollmentsToHostUUIDsMap map[string]string,
