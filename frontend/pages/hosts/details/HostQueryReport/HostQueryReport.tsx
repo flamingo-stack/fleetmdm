@@ -103,8 +103,7 @@ const HostQueryReport = ({
   // Updates title that shows up on browser tabs
   if (queryName && hostName) {
     // e.g., Discover TLS certificates (Rachel's MacBook Pro) | Hosts | Fleet
-    document.title = `${queryName} (${hostName}) |
-   Hosts | ${DOCUMENT_TITLE_SUFFIX}`;
+    document.title = `${queryName} (${hostName}) | Hosts | ${DOCUMENT_TITLE_SUFFIX}`;
   } else {
     document.title = `Hosts | ${DOCUMENT_TITLE_SUFFIX}`;
   }
