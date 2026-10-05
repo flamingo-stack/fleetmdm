@@ -110,12 +110,15 @@ WHERE fla.token IN (?)
 		lines := strings.Split(sc.ScriptContents, "\n")
 		// Find the line where we copy the new .app file into the Applications folder. We want to
 		// add our changes right before that line.
-		var copyLineNumber int
+		copyLineNumber := -1
 		for i, l := range lines {
 			if strings.Contains(l, `sudo cp -R "$TMPDIR/`) {
 				copyLineNumber = i
 				break
 			}
+		}
+		if copyLineNumber == -1 {
+			return fmt.Errorf("could not find copy line in fma install script for token %q", sc.Token)
 		}
 
 		for i, l := range lines {
