@@ -107,6 +107,7 @@ func HashCert(cert *x509.Certificate) string {
 	return hex.EncodeToString(b)
 }
 
+// >>> OPENFRAME(certauth-http-status): wrap cert auth sentinel errors with HTTP status codes so clients get correct status mapping — openframe/docs/certauth.md
 // wrapCertAuthError wraps certificate authentication errors with appropriate HTTP status codes
 func wrapCertAuthError(err error) error {
 	if err == nil {
@@ -128,10 +129,13 @@ func wrapCertAuthError(err error) error {
 		return err
 	}
 }
+// <<< OPENFRAME(certauth-http-status)
 
 func (s *CertAuth) associateNewEnrollment(r *mdm.Request) error {
 	if r.Certificate == nil {
+		// >>> OPENFRAME(certauth-http-status): map ErrMissingCert to HTTP status error — openframe/docs/certauth.md
 		return wrapCertAuthError(ErrMissingCert)
+		// <<< OPENFRAME(certauth-http-status)
 	}
 	if err := r.EnrollID.Validate(); err != nil {
 		return err
@@ -162,7 +166,9 @@ func (s *CertAuth) associateNewEnrollment(r *mdm.Request) error {
 				"hash", hash,
 			)
 			if !s.warnOnly {
+				// >>> OPENFRAME(certauth-http-status): map ErrNoCertReuse to HTTP status error — openframe/docs/certauth.md
 				return wrapCertAuthError(ErrNoCertReuse)
+				// <<< OPENFRAME(certauth-http-status)
 			}
 		}
 	}
@@ -180,7 +186,9 @@ func (s *CertAuth) associateNewEnrollment(r *mdm.Request) error {
 
 func (s *CertAuth) validateAssociateExistingEnrollment(r *mdm.Request) error {
 	if r.Certificate == nil {
+		// >>> OPENFRAME(certauth-http-status): map ErrMissingCert to HTTP status error — openframe/docs/certauth.md
 		return wrapCertAuthError(ErrMissingCert)
+		// <<< OPENFRAME(certauth-http-status)
 	}
 	if err := r.EnrollID.Validate(); err != nil {
 		return err
@@ -200,7 +208,9 @@ func (s *CertAuth) validateAssociateExistingEnrollment(r *mdm.Request) error {
 			"hash", hash,
 		)
 		if !s.warnOnly {
+			// >>> OPENFRAME(certauth-http-status): map ErrNoCertAssoc to HTTP status error — openframe/docs/certauth.md
 			return wrapCertAuthError(ErrNoCertAssoc)
+			// <<< OPENFRAME(certauth-http-status)
 		}
 	}
 	// even if allowRetroactive is true we don't want to allow arbitrary
@@ -216,7 +226,9 @@ func (s *CertAuth) validateAssociateExistingEnrollment(r *mdm.Request) error {
 			"id", r.ID,
 		)
 		if !s.warnOnly {
+			// >>> OPENFRAME(certauth-http-status): map ErrNoCertReuse to HTTP status error — openframe/docs/certauth.md
 			return wrapCertAuthError(ErrNoCertReuse)
+			// <<< OPENFRAME(certauth-http-status)
 		}
 	}
 	// even if allowDup were true we don't want to allow arbitrary
@@ -234,7 +246,9 @@ func (s *CertAuth) validateAssociateExistingEnrollment(r *mdm.Request) error {
 			"hash", hash,
 		)
 		if !s.warnOnly {
+			// >>> OPENFRAME(certauth-http-status): map ErrNoCertReuse to HTTP status error — openframe/docs/certauth.md
 			return wrapCertAuthError(ErrNoCertReuse)
+			// <<< OPENFRAME(certauth-http-status)
 		}
 	}
 	if s.warnOnly {

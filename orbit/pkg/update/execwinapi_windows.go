@@ -198,6 +198,7 @@ func IsRunningOnWindowsServer() (bool, error) {
 	return false, nil
 }
 
+// >>> OPENFRAME(win-mdm-sync-trigger): on-demand OMA-DM sync trigger via deviceenroller, not present upstream — openframe/docs/windows-mdm-sync.md
 // windowsMDMSyncTriggerTimeout bounds the deviceenroller invocation. attemptSync runs it in a background goroutine that holds the receiver's
 // lock, so this caps how long that goroutine (and the single-flight lock) stays tied up if deviceenroller ever hangs. `deviceenroller /o /c`
 // returns within seconds in practice; the timeout is a generous backstop, not the expected duration.
@@ -286,3 +287,5 @@ func fleetMDMEnrollmentGUID() (string, error) {
 	}
 	return "", errors.New("no active Fleet MDM enrollment found in registry")
 }
+
+// <<< OPENFRAME(win-mdm-sync-trigger)

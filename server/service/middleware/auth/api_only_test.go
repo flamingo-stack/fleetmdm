@@ -1,3 +1,4 @@
+// >>> OPENFRAME(api-only): Fork-specific api_only endpoint restriction tests — openframe/docs/api-only.md
 package auth
 
 import (
@@ -350,3 +351,5 @@ func TestRouteTemplateRequestFunc(t *testing.T) {
 		require.False(t, ok, "no route template should be stored when no route is matched")
 	})
 }
+
+// <<< OPENFRAME(api-only)

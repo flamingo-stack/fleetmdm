@@ -14,11 +14,19 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// >>> OPENFRAME(windows-fresh-enrollment-guard): Fork-specific workaround for a race between Orbit
+// enrollment and last_enrolled_at updates on Windows re-enrollment, so setup-experience isn't
+// incorrectly skipped. See upstream issue https://github.com/fleetdm/fleet/issues/35717 and the
+// residual race documented in https://github.com/fleetdm/fleet/issues/45380 —
+// openframe/docs/FLEETMDM-001.md
+//
 // windowsFreshEnrollmentWindow is how recently the most recent mdm_windows_enrollments row must have
 // been created for a Windows host whose last_enrolled_at is >24h old to still be treated as freshly
 // re-enrolling. Sized to cover the gap between orbit/enroll and osquery's directIngestMDMDeviceIDWindows
 // linking host_uuid, plus typical jitter.
 const windowsFreshEnrollmentWindow = 5 * time.Minute
+
+// <<< OPENFRAME(windows-fresh-enrollment-guard)
 
 func (ds *Datastore) EnqueueSetupExperienceItems(ctx context.Context, hostPlatform, hostPlatformLike, hostUUID string, teamID uint) (bool, error) {
 	return ds.enqueueSetupExperienceItems(ctx, hostPlatform, hostPlatformLike, hostUUID, teamID, false)
@@ -87,6 +95,7 @@ func (ds *Datastore) enqueueSetupExperienceItems(ctx context.Context, hostPlatfo
 		// If the host was enrolled more than 24 hours ago, don't enqueue any items.
 		// Note: if the last enroll date is our "zero date" (1/1/2000), treat it as if it's never enrolled.
 		if lastEnrolledAt.Valid && lastEnrolledAt.Time.Before(time.Now().Add(-24*time.Hour)) && lastEnrolledAt.Time.After(time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)) {
+			// >>> OPENFRAME(windows-fresh-enrollment-guard): Fork-specific Windows re-enrollment guard.
 			// On Windows, the 24h-old-host guard races with last_enrolled_at when a previously-enrolled
 			// device re-enrolls (Autopilot wipe, Entra OOBE on a recycled VM, BYOD reconnect, etc.). Orbit
 			// calls SetupExperienceInit shortly after orbit/enroll, before EnrollOrbit's last_enrolled_at
@@ -107,6 +116,9 @@ func (ds *Datastore) enqueueSetupExperienceItems(ctx context.Context, hostPlatfo
 			// hostUUID here comes from fleet.HostUUIDForSetupExperience, which on Windows resolves to
 			// OsqueryHostID. Match either identifier on the hosts side so the lookup works regardless of
 			// the osquery host_identifier mode.
+			//
+			// See https://github.com/fleetdm/fleet/issues/35717 and the residual race documented in
+			// https://github.com/fleetdm/fleet/issues/45380 — openframe/docs/FLEETMDM-001.md
 			if hostPlatform == "windows" {
 				var mdmState struct {
 					AwaitingConfiguration fleet.WindowsMDMAwaitingConfiguration `db:"awaiting_configuration"`
@@ -163,6 +175,7 @@ func (ds *Datastore) enqueueSetupExperienceItems(ctx context.Context, hostPlatfo
 					ds.logger.DebugContext(ctx, "Host enrolled more than 24 hours ago, skipping enqueueing setup experience items", "host_uuid", hostUUID, "platform_like", hostPlatformLike, "last_enrolled_at", lastEnrolledAt.Time)
 					return false, nil
 				}
+				// <<< OPENFRAME(windows-fresh-enrollment-guard)
 			} else {
 				ds.logger.DebugContext(ctx, "Host enrolled more than 24 hours ago, skipping enqueueing setup experience items", "host_uuid", hostUUID, "platform_like", hostPlatformLike, "last_enrolled_at", lastEnrolledAt.Time)
 				return false, nil
@@ -1120,3 +1133,4 @@ func (ds *Datastore) CancelPendingSetupExperienceSteps(ctx context.Context, host
 	}
 	return nil
 }
+

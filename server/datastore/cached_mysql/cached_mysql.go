@@ -234,7 +234,7 @@ func New(ds fleet.Datastore, opts ...Option) fleet.Datastore {
 }
 
 // >>> OPENFRAME(mysql-multitenancy): key the AppConfig cache by the request's team so a shared
-// process never serves one tenant's config to another; unpinned keeps the constant key.
+// process never serves one tenant's config to another; unpinned keeps the constant key. — openframe/docs/mysql-multitenancy.md
 func openframeAppConfigKey(ctx context.Context) string {
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
 		return openframeAppConfigKeyPrefix + strconv.FormatUint(uint64(teamID), 10)

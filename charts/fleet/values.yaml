@@ -124,7 +124,9 @@ fleet:
   # Fleet initial setup configuration
   setup:
     adminEmail: ""
-    openframeMode: "0"  # OPENFRAME(helm): fork-added OpenFrame mode toggle — openframe/docs/helm-chart.md
+    # >>> OPENFRAME(helm): fork-added OpenFrame mode toggle — openframe/docs/helm-chart.md
+    openframeMode: "0"
+    # <<< OPENFRAME(helm)
     adminPassword:
       existingSecret: ""  # Name of a K8s Secret. If set, secretKeyValue is ignored.
       secretKeyKey: "FLEET_SETUP_ADMIN_PASSWORD"  # Key name within the secret to read the value from.
@@ -473,3 +475,4 @@ mysql:
 
 redis:
   enabled: false
+

@@ -29,6 +29,8 @@ var (
 	errMalformedPlist  = errors.New("malformed binary plist")
 )
 
+// >>> OPENFRAME(plist-bounds): bounds-checked plist decoding to prevent
+// resource-exhaustion attacks via crafted binary plists — openframe/docs/mdm-plist-bounds.md
 // BoundedPlistUnmarshal decodes a plist into v. Binary plists are first checked
 // against the depth, object-count, and object-size limits above; XML plists are
 // decoded directly (their size is bounded by the caller's body limit).
@@ -40,6 +42,8 @@ func BoundedPlistUnmarshal(data []byte, v any) error {
 	}
 	return plist.Unmarshal(data, v)
 }
+
+// <<< OPENFRAME(plist-bounds)
 
 // checkBinaryPlistBounds walks a binary plist's object references, rejecting
 // input that exceeds the limits or points outside the data region.

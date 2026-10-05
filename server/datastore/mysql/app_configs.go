@@ -221,7 +221,17 @@ func (ds *Datastore) VerifyEnrollSecret(ctx context.Context, secret string) (*fl
 
 func (ds *Datastore) IsEnrollSecretAvailable(ctx context.Context, secret string, isNew bool, teamID *uint) (bool, error) {
 	secretTeamID := sql.NullInt64{}
-	err := sqlx.GetContext(ctx, ds.reader(ctx), &secretTeamID, "SELECT team_id FROM enroll_secrets WHERE secret = ?", secret)
+	// >>> OPENFRAME(mysql-multitenancy): mirror VerifyEnrollSecret's scoping — a per-tenant process
+	// must only observe/validate secrets belonging to its own pinned team on a shared DB. No-op when
+	// unpinned.
+	stmt := "SELECT team_id FROM enroll_secrets WHERE secret = ?"
+	args := []interface{}{secret}
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += " AND team_id = ?"
+		args = append(args, pinned)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	err := sqlx.GetContext(ctx, ds.reader(ctx), &secretTeamID, stmt, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil
@@ -354,6 +364,14 @@ func getEnrollSecretsDB(ctx context.Context, q sqlx.QueryerContext, teamID *uint
 	return secrets, nil
 }
 
+// >>> OPENFRAME(mysql-multitenancy): AggregateEnrollSecretPerTeam is an intentional cross-tenant
+// exception. It backs instance-wide/admin-only reporting (aggregating one secret per team, across
+// ALL teams) and has no per-team caller-scoped equivalent to fall back to — unlike VerifyEnrollSecret,
+// IsEnrollSecretAvailable, ApplyEnrollSecrets and GetEnrollSecrets, which serve a single pinned
+// tenant's request and were scoped with fleet.OpenframeTeamID(ctx). This function must only be
+// invoked from trusted, instance-level code paths (e.g. scheduled aggregation jobs), never from a
+// per-tenant request path, under multitenancy.
+// <<< OPENFRAME(mysql-multitenancy)
 func (ds *Datastore) AggregateEnrollSecretPerTeam(ctx context.Context) ([]*fleet.EnrollSecret, error) {
 	query := `
           SELECT
@@ -387,6 +405,12 @@ func (ds *Datastore) AggregateEnrollSecretPerTeam(ctx context.Context) ([]*fleet
 	return secrets, nil
 }
 
+// >>> OPENFRAME(mysql-multitenancy): GetConfigEnableDiskEncryption already scopes by the explicit
+// teamID argument passed by the caller (ds.TeamMDMConfig(ctx, *teamID) reads exactly that team's
+// row), and falls back to ds.AppConfig(ctx) — which is itself pinned-tenant scoped via
+// openframeAppConfigSelect — only when no teamID is given. No additional guard is needed here: the
+// tenant boundary is enforced by the caller-supplied teamID and by AppConfig's own scoping.
+// <<< OPENFRAME(mysql-multitenancy)
 func (ds *Datastore) GetConfigEnableDiskEncryption(ctx context.Context, teamID *uint) (fleet.DiskEncryptionConfig, error) {
 	if teamID != nil && *teamID > 0 {
 		tc, err := ds.TeamMDMConfig(ctx, *teamID)
