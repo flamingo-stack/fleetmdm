@@ -2255,7 +2255,10 @@ func getHostInfo(osqueryPath string, osqueryDBPath string) (*osqueryHostInfo, er
 		}
 	}
 	if len(info) != 1 {
-		return nil, fmt.Errorf("invalid number of rows from system info query: %d", len(info))
+		// >>> OPENFRAME(agent-host-info-diagnostics): carry osqueryd's stderr and name WMI, upstream reports only the row count — openframe/docs/agent-host-info-diagnostics.md
+		osquerydExitedOK := cmd.ProcessState != nil && cmd.ProcessState.Success()
+		return nil, hostInfoRowsError(len(info), osquerydStderr.String(), osquerydExitedOK, runtime.GOOS)
+		// <<< OPENFRAME(agent-host-info-diagnostics)
 	}
 	return &info[0], nil
 }
