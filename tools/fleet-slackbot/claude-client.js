@@ -280,6 +280,33 @@ class ClaudeClient {
       return { type: "info", text: data.summary || text };
     }
 
+    // Validate each change entry has a well-formed, contained file_path
+    // before it flows downstream into PR file generation. Reject absolute
+    // paths, empty paths, and any path that escapes its starting directory
+    // via ".." traversal.
+    for (const c of data.changes) {
+      if (typeof c.file_path !== "string" || c.file_path.trim() === "") {
+        throw new Error("Invalid change entry: missing or empty file_path");
+      }
+      const filePath = c.file_path;
+      if (filePath.startsWith("/") || filePath.startsWith("\\")) {
+        throw new Error(`Invalid file_path (absolute path not allowed): ${filePath}`);
+      }
+      const normalizedParts = filePath.split(/[\\/]+/);
+      let depth = 0;
+      for (const part of normalizedParts) {
+        if (part === "" || part === ".") continue;
+        if (part === "..") {
+          depth -= 1;
+          if (depth < 0) {
+            throw new Error(`Invalid file_path (escapes base directory): ${filePath}`);
+          }
+        } else {
+          depth += 1;
+        }
+      }
+    }
+
     return {
       type: "changes",
       summary: data.summary,
@@ -312,14 +339,69 @@ class ClaudeClient {
       }
     }
 
-    // Try 3: find the outermost JSON object
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      return JSON.parse(text.slice(start, end + 1));
+    // Try 3: find the outermost JSON object. Rather than trusting the
+    // first "{" and last "}" in the whole text (which can straddle
+    // multiple unrelated JSON-looking blocks, e.g. example JSON inside a
+    // code fence followed by the real object), scan every candidate
+    // start position and use brace-depth tracking (respecting strings and
+    // escapes) to find the actual matching close brace for that start.
+    // Prefer the first start position that yields a balanced, parseable
+    // object — this matches the common case of the real JSON object
+    // appearing before any illustrative examples.
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== "{") continue;
+      const end = this._findMatchingBrace(text, i);
+      if (end === -1) continue;
+      const candidate = text.slice(i, end + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        // Not valid JSON at this start position — keep scanning.
+        continue;
+      }
     }
 
     throw new Error("No JSON found");
+  }
+
+  /**
+   * Given text and the index of an opening "{", find the index of its
+   * matching closing "}" using depth tracking that is aware of string
+   * literals (so braces inside strings don't affect depth). Returns -1
+   * if no match is found.
+   */
+  _findMatchingBrace(text, startIndex) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = startIndex; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === "\\") {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+      } else if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          return i;
+        }
+      }
+    }
+
+    return -1;
   }
 }
 

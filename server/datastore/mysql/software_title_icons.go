@@ -252,7 +252,7 @@ func (ds *Datastore) ActivityDetailsForSoftwareTitleIcon(ctx context.Context, te
 
 		default:
 			// should never happen, we don't support ExcludeAll currently
-			ds.logger.ErrorContext(ctx, "unsupported label condition 'exclude-all' encountered for software", "title_id", titleID, "label_id", l.ID)
+			return fleet.DetailsForSoftwareIconActivity{}, ctxerr.New(ctx, "unsupported label condition 'exclude-all' encountered for software title icon activity")
 		}
 	}
 

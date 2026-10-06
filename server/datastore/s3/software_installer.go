@@ -27,14 +27,11 @@ func NewSoftwareInstallerStore(config config.S3Config) (*SoftwareInstallerStore,
 
 // NewTestSoftwareInstallerStore is used in tests.
 func NewTestSoftwareInstallerStore(conf config.S3Config) (*SoftwareInstallerStore, error) {
-	store := &s3store{
-		bucket: "test-bucket",
-		cloudFrontConfig: &config.S3CloudFrontConfig{
-			BaseURL:            conf.SoftwareInstallersCloudFrontURL,
-			SigningPublicKeyID: conf.SoftwareInstallersCloudFrontURLSigningPublicKeyID,
-			Signer:             conf.SoftwareInstallersCloudFrontSigner,
-		},
-		gcs: isGCS(conf.EndpointURL),
+	internalCfg := conf.SoftwareInstallersToInternalCfg()
+	internalCfg.Bucket = "test-bucket"
+	store, err := newS3Store(internalCfg)
+	if err != nil {
+		return nil, err
 	}
 	return &SoftwareInstallerStore{
 		&commonFileStore{
