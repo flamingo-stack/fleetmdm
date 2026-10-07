@@ -1,7 +1,7 @@
 package externalrefs
 
 import (
-	"fmt"
+	"log"
 
 	maintained_apps "github.com/fleetdm/fleet/v4/ee/maintained-apps"
 )
@@ -14,15 +14,18 @@ var Funcs = map[string][]func(*maintained_apps.FMAManifestApp) (*maintained_apps
 
 // EnrichManifest applies all registered enrichment functions for the given app.
 // Enrichers are looked up by app.Slug and run sequentially.
-// Errors are logged but do not stop the enrichment pipeline.
+// Errors are logged and stop the enrichment pipeline for that app, preserving
+// the last known-good app value.
 func EnrichManifest(app *maintained_apps.FMAManifestApp) {
 	if enrichers, ok := Funcs[app.Slug]; ok {
 		for _, enricher := range enrichers {
-			var err error
-			app, err = enricher(app)
+			enriched, err := enricher(app)
 			if err != nil {
-				fmt.Printf("Error enriching app %s: %v\n", app.UniqueIdentifier, err)
+				log.Printf("Error enriching app %s: %v\n", app.UniqueIdentifier, err)
+				break
 			}
+			app = enriched
 		}
 	}
 }
+

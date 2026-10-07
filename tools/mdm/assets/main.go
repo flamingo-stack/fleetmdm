@@ -72,15 +72,6 @@ func setupSharedFlags() {
 }
 
 func setupDS(privateKey, userName, password, address, name string) *mysql.Datastore {
-	db, err := sql.Open(
-		"mysql",
-		fmt.Sprintf("%s:%s@tcp(%s)/?multiStatements=true&tls=skip-verify", testUsername, testPassword, testAddress),
-	)
-	if err != nil {
-		log.Fatal("opening MySQL connection:", err)
-	}
-	defer db.Close()
-
 	mysqlCfg := config.MysqlConfig{
 		Username:  userName,
 		Password:  password,

@@ -120,7 +120,7 @@ func GetSecret() (string, error) {
 	C.CFDictionaryAddValue(query, unsafe.Pointer(C.kSecClass), unsafe.Pointer(C.kSecClassGenericPassword))
 	C.CFDictionaryAddValue(query, unsafe.Pointer(C.kSecReturnData), unsafe.Pointer(C.kCFBooleanTrue))
 	C.CFDictionaryAddValue(query, unsafe.Pointer(C.kSecMatchLimit), unsafe.Pointer(C.kSecMatchLimitOne))
-	C.CFDictionaryAddValue(query, unsafe.Pointer(C.kSecAttrLabel), unsafe.Pointer(serviceStringRef))
+	C.CFDictionaryAddValue(query, unsafe.Pointer(C.kSecAttrService), unsafe.Pointer(serviceStringRef))
 
 	var data C.CFTypeRef
 	status := C.SecItemCopyMatching(C.CFDictionaryRef(query), &data) //nolint:gocritic // dubSubExpr false positive
@@ -171,3 +171,4 @@ func stringToCFString(s string) C.CFStringRef {
 func releaseCFString(s C.CFStringRef) {
 	C.CFRelease(C.CFTypeRef(s))
 }
+

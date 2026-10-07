@@ -30,5 +30,7 @@ CREATE TABLE IF NOT EXISTS query_hosts (
 }
 
 func Down_20260301000002(tx *sql.Tx) error {
-	return nil
+	_, err := tx.Exec("DROP TABLE IF EXISTS query_hosts;")
+	return err
 }
+

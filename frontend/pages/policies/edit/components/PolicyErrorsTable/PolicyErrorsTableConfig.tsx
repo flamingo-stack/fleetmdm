@@ -72,10 +72,9 @@ const generateTableHeaders = (): IDataColumn[] => {
 
 const generateDataSet = memoize(
   (policyHostsErrorsList: ICampaignError[] = []): ICampaignError[] => {
-    policyHostsErrorsList = policyHostsErrorsList.sort((a, b) =>
+    return [...policyHostsErrorsList].sort((a, b) =>
       sortUtils.caseInsensitiveAsc(a.host_display_name, b.host_display_name)
     );
-    return policyHostsErrorsList;
   }
 );
 

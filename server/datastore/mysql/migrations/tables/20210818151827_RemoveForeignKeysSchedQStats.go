@@ -41,6 +41,7 @@ func constraintsForTable(tx *sql.Tx, table string, referencedTables map[string]s
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting fk for %s", table)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var constraintName string
 		var referencedTable sql.NullString
@@ -56,6 +57,9 @@ func constraintsForTable(tx *sql.Tx, table string, referencedTables map[string]s
 		if _, ok := referencedTables[referencedTable.String]; ok {
 			constraints = append(constraints, constraintName)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrapf(err, "iterating fk rows for %s", table)
 	}
 	return constraints, nil
 }

@@ -88,10 +88,6 @@ export default class TableOSVersion extends Table {
         column: "codename",
         error_message: err.message.toString(),
       });
-      warningsArray.push({
-        column: "platform_like",
-        error_message: err.message.toString(),
-      });
     }
 
     let arch;
