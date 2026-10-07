@@ -3,10 +3,13 @@ const path = require("path");
 const { validateProposedChanges, validateResolvedChanges } = require("./yaml-handler");
 
 /**
- * Validate that a normalized path falls within the allowed GitOps structure.
+ * Validate that a path falls within the allowed GitOps structure.
+ * Normalizes the path internally before validation, so callers do not need
+ * to pre-normalize — this function is safe to call directly with raw paths.
  * Returns null if valid, or an error message string if invalid.
  */
-function validateGitopsPath(normalizedPath) {
+function validateGitopsPath(rawPath) {
+  const normalizedPath = path.posix.normalize(rawPath);
   if (normalizedPath.includes("..") || path.posix.isAbsolute(normalizedPath)) {
     return `Path traversal not allowed: ${normalizedPath}`;
   }
@@ -164,7 +167,7 @@ async function handleRequest({ userText, userId, channelId, threadTs, messageTs,
         const normalized = path.posix.normalize(c.filePath);
         const pathError = validateGitopsPath(normalized);
         if (pathError) {
-          throw new Error(`Invalid file path in response: ${pathError}`);
+          throw new Error(`Invalid file path in response`);
         }
         if (!c.content) {
           throw new Error(`Change for "${c.filePath}" is missing content`);
@@ -244,8 +247,12 @@ async function handleRequest({ userText, userId, channelId, threadTs, messageTs,
     // Swap hourglass → red X
     await setReaction("x");
 
-    // Sanitize error message — don't leak internal details to Slack
-    const SAFE_PREFIXES = ["Refusing to commit", "Invalid file path"];
+    // Sanitize error message — don't leak internal details to Slack.
+    // Only forward a small, fixed set of known-safe messages verbatim;
+    // never forward arbitrary suffixes appended by the thrower, since
+    // those may embed untrusted or sensitive data (e.g. file paths,
+    // API error bodies).
+    const SAFE_MESSAGES = ["Refusing to commit", "Invalid file path in response"];
     let userMessage;
     const msg = err.message || "";
     if (err.status === 429 || msg.includes("rate_limit")) {
@@ -254,8 +261,8 @@ async function handleRequest({ userText, userId, channelId, threadTs, messageTs,
       userMessage = "The AI service is temporarily overloaded. Please try again in a minute.";
     } else if (msg.includes("Claude returned")) {
       userMessage = "I had trouble processing that request. Please try rephrasing.";
-    } else if (SAFE_PREFIXES.some((p) => msg.startsWith(p))) {
-      userMessage = msg;
+    } else if (SAFE_MESSAGES.some((safe) => msg === safe || msg.startsWith(`${safe}: `))) {
+      userMessage = SAFE_MESSAGES.find((safe) => msg === safe || msg.startsWith(`${safe}: `));
     } else {
       userMessage = "An unexpected error occurred. Please try again.";
     }

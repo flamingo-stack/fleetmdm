@@ -26,6 +26,16 @@ export interface ILoginResponse {
   token_expires_at?: string;
 }
 
+export class MfaRequiredError extends Error {
+  response: unknown;
+
+  constructor(rawResponse: unknown) {
+    super("MFA required");
+    this.name = "MfaRequiredError";
+    this.response = rawResponse;
+  }
+}
+
 export default {
   login: ({ email, password }: ILoginProps): Promise<ILoginResponse> => {
     const { LOGIN } = endpoints;
@@ -45,7 +55,7 @@ export default {
     ).then((rawResponse) => {
       if (rawResponse.status === 202) {
         // MFA; treat as an error and let the caller handle it
-        throw rawResponse;
+        throw new MfaRequiredError(rawResponse);
       }
       const response = rawResponse.data;
       const { user } = response;

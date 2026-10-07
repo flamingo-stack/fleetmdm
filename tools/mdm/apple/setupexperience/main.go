@@ -24,6 +24,9 @@ import (
 
 func main() {
 	mysqlAddr := flag.String("mysql", "localhost:3306", "mysql address")
+	flagDBUser := flag.String("mysql-user", "fleet", "mysql username")
+	flagDBPass := flag.String("mysql-pass", "insecure", "mysql password")
+	flagDBName := flag.String("mysql-db", "fleet", "mysql database name")
 	serverPrivateKey := flag.String("server-private-key", "", "fleet server's private key (to decrypt MDM assets)")
 	hostUUID := flag.String("host-uuid", "", "the host serial # to enqueue setup items for")
 
@@ -43,9 +46,9 @@ func main() {
 	mysqlConf := config.MysqlConfig{
 		Protocol:        "tcp",
 		Address:         *mysqlAddr,
-		Database:        "fleet",
-		Username:        "fleet",
-		Password:        "insecure",
+		Database:        *flagDBName,
+		Username:        *flagDBUser,
+		Password:        *flagDBPass,
 		MaxOpenConns:    50,
 		MaxIdleConns:    50,
 		ConnMaxLifetime: 0,

@@ -18,6 +18,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/contexts/authz"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/smallstep/pkcs7"
 )
 
@@ -144,13 +145,13 @@ func (svc *Service) RequestCertificate(ctx context.Context, p fleet.RequestCerti
 			svc.logger.ErrorContext(ctx, "Failed to convert PKCS7 envelope to PEM certificate", "ca_id", ca.ID, "err", err)
 			return nil, ctxerr.Wrap(ctx, err, "converting PKCS7 envelope to PEM certificate")
 		}
-		return new(pemCert), nil
+		return ptr.String(pemCert), nil
 	}
 
 	// Wrap the certificate in a PEM block for easier consumption by the client. TODO: If we ever
 	// support CAs other than Hydrant/EST in this API, this may need to be modified to be aware of
 	// their formats.
-	return new("-----BEGIN PKCS7-----\n" + string(certificate.Certificate) + "\n-----END PKCS7-----\n"), nil
+	return ptr.String("-----BEGIN PKCS7-----\n" + string(certificate.Certificate) + "\n-----END PKCS7-----\n"), nil
 }
 
 // pkcs7EnvelopeToPEM converts a base64-encoded PKCS7 envelope (as returned by an EST

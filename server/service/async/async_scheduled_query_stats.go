@@ -158,7 +158,9 @@ func (t *Task) collectScheduledQueryStats(ctx context.Context, ds fleet.Datastor
 			}
 			if cursor == 0 {
 				// iteration completed, clear the hash but do not fail on error
-				_, _ = conn.Do("DEL", keyHash)
+				if _, err := conn.Do("DEL", keyHash); err != nil {
+					ctxerr.Handle(ctx, ctxerr.Wrap(ctx, err, "delete scheduled query stats hash"))
+				}
 
 				return sqStats, schedQueryNames, nil
 			}
@@ -172,7 +174,7 @@ func (t *Task) collectScheduledQueryStats(ctx context.Context, ds fleet.Datastor
 
 	// get all hosts' stats and index the scheduled query names
 	hostsStats := make(map[uint][]fleet.ScheduledQueryStats, len(hosts)) // key is host ID
-	uniqueSchedQueries := make(map[[2]string]uint)                       // key is pack+scheduled query names, value is scheduled query id
+	uniqueSchedQueries := make(map[[2]string]uint)                      // key is pack+scheduled query names, value is scheduled query id
 	for _, host := range hosts {
 		sqStats, names, err := getHostStats(host.HostID)
 		if err != nil {
@@ -192,6 +194,9 @@ func (t *Task) collectScheduledQueryStats(ctx context.Context, ds fleet.Datastor
 	schedIDs, err := ds.ScheduledQueryIDsByName(ctx, fleet.DefaultScheduledQueryIDsByNameBatchSize, schedNames...)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "batch-load scheduled query ids from names")
+	}
+	if len(schedIDs) != len(schedNames) {
+		return ctxerr.Errorf(ctx, "mismatched scheduled query ids and names: got %d ids for %d names", len(schedIDs), len(schedNames))
 	}
 	// store the IDs along with the names
 	for i, nm := range schedNames {
