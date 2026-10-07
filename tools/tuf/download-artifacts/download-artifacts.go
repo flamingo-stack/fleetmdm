@@ -265,11 +265,11 @@ func downloadComponents(workflowName string, headBranch string, artifactNames ma
 	for {
 		workflow, _, err := gc.Actions.GetWorkflowByFileName(ctx, "fleetdm", "fleet", workflowName)
 		if err != nil {
-			return err
+			return fmt.Errorf("get workflow %s: %w", workflowName, err)
 		}
 		workflowRuns, _, err := gc.Actions.ListWorkflowRunsByID(ctx, "fleetdm", "fleet", *workflow.ID, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("list workflow runs for %s: %w", workflowName, err)
 		}
 		for _, wr := range workflowRuns.WorkflowRuns {
 			if headBranch == *wr.HeadBranch {
@@ -306,7 +306,7 @@ func downloadComponents(workflowName string, headBranch string, artifactNames ma
 	for {
 		artifactList, _, err := gc.Actions.ListWorkflowRunArtifacts(ctx, "fleetdm", "fleet", *workflowRun.ID, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("list workflow run artifacts for run %d: %w", *workflowRun.ID, err)
 		}
 		urls = make(map[string]string)
 		for _, artifact := range artifactList.Artifacts {
