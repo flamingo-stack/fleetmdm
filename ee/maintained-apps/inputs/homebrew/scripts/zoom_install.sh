@@ -33,10 +33,16 @@ quit_application() {
 
 restart_zoom() {
   local console_user="$1"
-  
+
   if [[ -n "$console_user" && "$console_user" != "root" ]]; then
     echo "Restarting Zoom for user: $console_user"
-    sudo -u "$console_user" open -a "zoom.us"
+    local console_uid
+    console_uid=$(id -u "$console_user" 2>/dev/null || echo "")
+    if [[ -n "$console_uid" ]]; then
+      launchctl asuser "$console_uid" sudo -u "$console_user" open -a "zoom.us"
+    else
+      sudo -u "$console_user" open -a "zoom.us"
+    fi
   else
     echo "No console user found, attempting direct Zoom start..."
     open -a "zoom.us"

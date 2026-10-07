@@ -132,23 +132,30 @@ func (m *mdmProxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request) {
+// authorize checks the request's Authorization header against the configured
+// bearer token. It returns nil if the request is authorized, or an error
+// containing a message suitable for returning to the client along with an
+// appropriate HTTP status code otherwise.
+func (m *mdmProxy) authorize(r *http.Request) (int, error) {
 	if m.token == "" {
-		http.Error(w, "Set auth token to enable remote updates", http.StatusUnauthorized)
-		return
+		return http.StatusUnauthorized, errors.New("Set auth token to enable remote updates")
 	}
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		http.Error(w, "Authorization header must be provided", http.StatusUnauthorized)
-		return
-
+		return http.StatusUnauthorized, errors.New("Authorization header must be provided")
 	}
 	if !strings.HasPrefix(authHeader, "Bearer ") {
-		http.Error(w, "Authorization header must start with \"Bearer \"", http.StatusUnauthorized)
-		return
+		return http.StatusUnauthorized, errors.New("Authorization header must start with \"Bearer \"")
 	}
 	if authHeader != "Bearer "+m.token {
-		http.Error(w, "Authorization header does not match", http.StatusUnauthorized)
+		return http.StatusUnauthorized, errors.New("Authorization header does not match")
+	}
+	return http.StatusOK, nil
+}
+
+func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request) {
+	if status, err := m.authorize(r); err != nil {
+		http.Error(w, err.Error(), status)
 		return
 	}
 
@@ -178,22 +185,8 @@ func (m *mdmProxy) handleUpdatePercentage(w http.ResponseWriter, r *http.Request
 }
 
 func (m *mdmProxy) handleUpdateMigrateUDIDs(w http.ResponseWriter, r *http.Request) {
-	if m.token == "" {
-		http.Error(w, "Set auth token to enable remote updates", http.StatusUnauthorized)
-		return
-	}
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "Authorization header must be provided", http.StatusUnauthorized)
-		return
-
-	}
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		http.Error(w, "Authorization header must start with \"Bearer \"", http.StatusUnauthorized)
-		return
-	}
-	if authHeader != "Bearer "+m.token {
-		http.Error(w, "Authorization header does not match", http.StatusUnauthorized)
+	if status, err := m.authorize(r); err != nil {
+		http.Error(w, err.Error(), status)
 		return
 	}
 

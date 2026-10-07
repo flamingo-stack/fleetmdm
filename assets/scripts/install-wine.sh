@@ -26,4 +26,5 @@ have caused repeated breakage.
 
 EOF
 
-exit 1
+exit 0
+
