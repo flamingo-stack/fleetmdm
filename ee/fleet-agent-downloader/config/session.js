@@ -17,8 +17,17 @@ module.exports.session = {
   * Replace at your own risk in production-- you will invalidate the cookies *
   * of your users, forcing them to log in again.                             *
   *                                                                          *
+  * The secret must be provided via the SESSION_SECRET environment variable. *
+  * There is no committed literal fallback -- if SESSION_SECRET is not set,  *
+  * the app will fail to start rather than sign sessions with a known value. *
+  *                                                                          *
   ***************************************************************************/
-  secret: 'DUMMY_SECRET_REPLACED_IN_PROD',
+  secret: (function () {
+    if (!process.env.SESSION_SECRET) {
+      throw new Error('SESSION_SECRET environment variable must be set (no default secret is provided).');
+    }
+    return process.env.SESSION_SECRET;
+  })(),
 
 
   /***************************************************************************
@@ -37,3 +46,4 @@ module.exports.session = {
   // },
 
 };
+

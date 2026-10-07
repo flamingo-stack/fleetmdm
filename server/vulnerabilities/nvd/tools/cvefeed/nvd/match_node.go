@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/facebookincubator/flog"
 	"github.com/fleetdm/fleet/v4/server/vulnerabilities/nvd/tools/cvefeed/nvd/schema"
 	"github.com/fleetdm/fleet/v4/server/vulnerabilities/nvd/tools/wfn"
 )
@@ -53,8 +52,7 @@ func nodeMatcher(id string, node *schema.NVDCVEFeedJSON10DefNode) (wfn.Matcher, 
 
 	switch strings.ToUpper(node.Operator) {
 	default:
-		flog.Warningf("%s: unknown operator, defaulting to OR: got %q", id, node.Operator)
-		fallthrough
+		return nil, fmt.Errorf("%s: unknown operator: got %q", id, node.Operator)
 	case "OR":
 		m = wfn.MatchAny(ms...)
 	case "AND":

@@ -93,7 +93,7 @@ module.exports = {
         contactSource: 'Website - Sign up',
         trialInstanceUsageDetails: trialInstanceUsageDetails
       }).tolerate((err)=>{
-        sails.log.warn(`When reporting usage information about a Render trial instance (slug: ${renderTrial.slug}), an error occured when updating/creating a Salesforce contact/account. Full error: ${require('util').inspect(err)}`);
+        sails.log.warn(`When reporting usage information about a Render trial instance (slug: ${renderTrial.slug}), an error occured when updating/creating a Salesforce contact/account. Error message: ${err && err.message}`);
       });
 
     });// After each Render trial Instance

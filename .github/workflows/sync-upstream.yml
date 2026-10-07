@@ -15,6 +15,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH: sync/upstream-main
+      MAX_CHANGED_FILES: 500
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +36,13 @@ jobs:
           if git merge-base --is-ancestor upstream/main origin/main; then
             echo "::notice::main already contains upstream/main"
             exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only origin/main...upstream/main | wc -l)
+          echo "::notice::upstream/main differs from origin/main by $CHANGED_FILES file(s)"
+          if [ "$CHANGED_FILES" -gt "$MAX_CHANGED_FILES" ]; then
+            echo "::error::refusing to sync — $CHANGED_FILES changed files exceeds MAX_CHANGED_FILES ($MAX_CHANGED_FILES); manual review required"
+            exit 1
           fi
 
           git checkout -B "$BRANCH" origin/main

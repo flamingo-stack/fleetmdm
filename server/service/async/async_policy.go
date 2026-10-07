@@ -31,8 +31,11 @@ var maxRedisPolicyResultsPerHost = 1000
 func (t *Task) RecordPolicyQueryExecutions(ctx context.Context, host *fleet.Host, results map[uint]*bool, ts time.Time, deferred bool, newlyPassingPolicyIDs []uint) error {
 	cfg := t.taskConfigs[config.AsyncTaskPolicyMembership]
 	if !cfg.Enabled {
+		if err := t.datastore.RecordPolicyQueryExecutions(ctx, host, results, ts, deferred, newlyPassingPolicyIDs); err != nil {
+			return err
+		}
 		host.PolicyUpdatedAt = ts
-		return t.datastore.RecordPolicyQueryExecutions(ctx, host, results, ts, deferred, newlyPassingPolicyIDs)
+		return nil
 	}
 
 	keyList := fmt.Sprintf(policyPassHostKey, host.ID)
@@ -275,3 +278,4 @@ func (t *Task) GetHostPolicyReportedAt(ctx context.Context, host *fleet.Host) ti
 	}
 	return host.PolicyUpdatedAt
 }
+

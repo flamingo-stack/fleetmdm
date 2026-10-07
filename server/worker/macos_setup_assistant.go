@@ -84,6 +84,66 @@ func (m *MacosSetupAssistant) Run(ctx context.Context, argsJSON json.RawMessage)
 	}
 }
 
+// assignProfileForSerialsFn resolves the setup assistant profile uuid to use
+// for a given team/org name, as part of the shared list-serials/screen-cooldowns/
+// assign-per-org sequence used by runProfileChanged and runProfileDeleted.
+type assignProfileForSerialsFn func(ctx context.Context, team *fleet.Team, orgName string) (profUUID string, err error)
+
+// runAssignProfileToTeamSerials implements the shared logic used by
+// runProfileChanged and runProfileDeleted: list the team's DEP-enrolled host
+// serials, screen them for cooldowns, and assign the resolved profile per
+// ABM organization. logPrefix is used to keep the existing per-caller log
+// wording (e.g. "run profile changed" vs "run profile deleted").
+func (m *MacosSetupAssistant) runAssignProfileToTeamSerials(
+	ctx context.Context,
+	team *fleet.Team,
+	teamID *uint,
+	logPrefix string,
+	resolveProfile assignProfileForSerialsFn,
+) error {
+	serials, err := m.Datastore.ListMDMAppleDEPSerialsInTeam(ctx, teamID)
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "list mdm dep serials in team")
+	}
+	if len(serials) > 0 {
+		skipSerials, assignSerials, err := m.Datastore.ScreenDEPAssignProfileSerialsForCooldown(ctx, serials)
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, logPrefix)
+		}
+		if len(skipSerials) > 0 {
+			// NOTE: the `dep_cooldown` job of the `integrations`` cron picks up the assignments
+			// after the cooldown period is over
+			m.Log.InfoContext(ctx, logPrefix+": skipping assign profile for devices on cooldown", "serials", fmt.Sprintf("%s", skipSerials))
+		}
+		if len(assignSerials) == 0 {
+			m.Log.InfoContext(ctx, logPrefix+": no devices to assign profile")
+			return nil
+		}
+
+		for orgName, serials := range assignSerials {
+			profUUID, err := resolveProfile(ctx, team, orgName)
+			if err != nil {
+				return err
+			}
+			if profUUID == "" {
+				// the caller has already decided this is a no-op case for this org
+				// (e.g. the custom setup assistant profile may have been deleted
+				// since the job was enqueued), so skip assigning for this org.
+				continue
+			}
+
+			resp, err := m.DEPClient.AssignProfile(ctx, orgName, profUUID, serials...)
+			if err != nil {
+				return ctxerr.Wrap(ctx, err, "assign profile")
+			}
+			if err := m.Datastore.UpdateHostDEPAssignProfileResponsesSameABM(ctx, resp); err != nil {
+				return ctxerr.Wrap(ctx, err, "worker: "+logPrefix)
+			}
+		}
+	}
+	return nil
+}
+
 func (m *MacosSetupAssistant) runProfileChanged(ctx context.Context, args macosSetupAssistantArgs) error {
 	team, err := m.getTeamNoTeam(ctx, args.TeamID)
 	if err != nil {
@@ -97,47 +157,21 @@ func (m *MacosSetupAssistant) runProfileChanged(ctx context.Context, args macosS
 
 	// get the team's mdm-enrolled hosts, assign the profile to all of that
 	// team's hosts serials.
-	serials, err := m.Datastore.ListMDMAppleDEPSerialsInTeam(ctx, args.TeamID)
-	if err != nil {
-		return ctxerr.Wrap(ctx, err, "list mdm dep serials in team")
-	}
-	if len(serials) > 0 {
-		skipSerials, assignSerials, err := m.Datastore.ScreenDEPAssignProfileSerialsForCooldown(ctx, serials)
-		if err != nil {
-			return ctxerr.Wrap(ctx, err, "run profile changed")
-		}
-		if len(skipSerials) > 0 {
-			// NOTE: the `dep_cooldown` job of the `integrations`` cron picks up the assignments
-			// after the cooldown period is over
-			m.Log.InfoContext(ctx, "run profile changed: skipping assign profile for devices on cooldown", "serials", fmt.Sprintf("%s", skipSerials))
-		}
-		if len(assignSerials) == 0 {
-			m.Log.InfoContext(ctx, "run profile changed: no devices to assign profile")
-			return nil
-		}
-
-		for orgName, serials := range assignSerials {
+	return m.runAssignProfileToTeamSerials(ctx, team, args.TeamID, "run profile changed",
+		func(ctx context.Context, team *fleet.Team, orgName string) (string, error) {
 			profUUID, _, err := m.DEPService.EnsureCustomSetupAssistantIfExists(ctx, team, orgName)
 			if err != nil {
-				return ctxerr.Wrapf(ctx, err, "ensure custom setup assistant for ABM org name %q", orgName)
+				return "", ctxerr.Wrapf(ctx, err, "ensure custom setup assistant for ABM org name %q", orgName)
 			}
 			if profUUID == "" {
 				// the custom setup assistant profile may have been deleted since the job
 				// was enqueued, if so another job will take care of assigning the default
 				// profile to the hosts, nothing to do.
-				continue
+				return "", nil
 			}
-
-			resp, err := m.DEPClient.AssignProfile(ctx, orgName, profUUID, serials...)
-			if err != nil {
-				return ctxerr.Wrap(ctx, err, "assign profile")
-			}
-			if err := m.Datastore.UpdateHostDEPAssignProfileResponsesSameABM(ctx, resp); err != nil {
-				return ctxerr.Wrap(ctx, err, "worker: run profile changed")
-			}
-		}
-	}
-	return nil
+			return profUUID, nil
+		},
+	)
 }
 
 func (m *MacosSetupAssistant) runProfileDeleted(ctx context.Context, args macosSetupAssistantArgs) error {
@@ -170,45 +204,19 @@ func (m *MacosSetupAssistant) runProfileDeleted(ctx context.Context, args macosS
 
 	// get the team's mdm-enrolled hosts, assign the profile to all of that
 	// team's hosts serials.
-	serials, err := m.Datastore.ListMDMAppleDEPSerialsInTeam(ctx, args.TeamID)
-	if err != nil {
-		return ctxerr.Wrap(ctx, err, "list mdm dep serials in team")
-	}
-	if len(serials) > 0 {
-		skipSerials, assignSerials, err := m.Datastore.ScreenDEPAssignProfileSerialsForCooldown(ctx, serials)
-		if err != nil {
-			return ctxerr.Wrap(ctx, err, "run profile deleted")
-		}
-		if len(skipSerials) > 0 {
-			// NOTE: the `dep_cooldown` job of the `integrations`` cron picks up the assignments
-			// after the cooldown period is over
-			m.Log.InfoContext(ctx, "run profile deleted: skipping assign profile for devices on cooldown", "serials", fmt.Sprintf("%s", skipSerials))
-		}
-		if len(assignSerials) == 0 {
-			m.Log.InfoContext(ctx, "run profile deleted: no devices to assign profile")
-			return nil
-		}
-
-		for orgName, serials := range assignSerials {
+	return m.runAssignProfileToTeamSerials(ctx, team, args.TeamID, "run profile deleted",
+		func(ctx context.Context, team *fleet.Team, orgName string) (string, error) {
 			profUUID, _, err := m.DEPService.EnsureDefaultSetupAssistant(ctx, team, orgName)
 			if err != nil {
-				return ctxerr.Wrapf(ctx, err, "ensure default setup assistant for ABM organization %q", orgName)
+				return "", ctxerr.Wrapf(ctx, err, "ensure default setup assistant for ABM organization %q", orgName)
 			}
 			if profUUID == "" {
 				// this should not happen, return an error
-				return ctxerr.Errorf(ctx, "default setup assistant profile uuid is empty for ABM organization %q", orgName)
+				return "", ctxerr.Errorf(ctx, "default setup assistant profile uuid is empty for ABM organization %q", orgName)
 			}
-
-			resp, err := m.DEPClient.AssignProfile(ctx, orgName, profUUID, serials...)
-			if err != nil {
-				return ctxerr.Wrap(ctx, err, "assign profile")
-			}
-			if err := m.Datastore.UpdateHostDEPAssignProfileResponsesSameABM(ctx, resp); err != nil {
-				return ctxerr.Wrap(ctx, err, "worker: run profile deleted")
-			}
-		}
-	}
-	return nil
+			return profUUID, nil
+		},
+	)
 }
 
 func (m *MacosSetupAssistant) runTeamDeleted(ctx context.Context, args macosSetupAssistantArgs) error {

@@ -8,11 +8,20 @@
  *   https://sailsjs.com/docs/concepts/policies
  *   https://sailsjs.com/docs/concepts/policies/access-control-and-permissions
  */
+const crypto = require('crypto');
+
 module.exports = async function (req, res, proceed) {
 
   // If an MS API KEY header was provided, check to see if it matches the entraSharedSecret.
   if (req.get('MS-API-KEY')) {
-    if([sails.config.custom.cloudCustomerCompliancePartnerSharedSecret, sails.config.custom.alternateCompliancePartnerSharedSecret].includes(req.get('MS-API-KEY'))){
+    let providedKey = Buffer.from(req.get('MS-API-KEY'));
+    let matchesSecret = [sails.config.custom.cloudCustomerCompliancePartnerSharedSecret, sails.config.custom.alternateCompliancePartnerSharedSecret].some((configuredSecret) => {
+      if (!configuredSecret) { return false; }
+      let configuredKey = Buffer.from(configuredSecret);
+      if (configuredKey.length !== providedKey.length) { return false; }
+      return crypto.timingSafeEqual(providedKey, configuredKey);
+    });
+    if (matchesSecret) {
       return proceed();
     }
   }
