@@ -72,6 +72,7 @@ func (e *Forbidden) LogFields() []interface{} {
 	}
 }
 
+// >>> OPENFRAME(authz-platform-http-migration): re-export platform_http error types for backward compatibility during the authz->platform_http migration — openframe/docs/authz-platform-http-migration.md
 // CheckMissing is the error to return when no authorization check was performed
 // by the service.
 //
@@ -86,3 +87,4 @@ type CheckMissing = platform_http.CheckMissing
 // Deprecated: Use platform_http.CheckMissingWithResponse instead. This alias is
 // kept for backward compatibility.
 var CheckMissingWithResponse = platform_http.CheckMissingWithResponse
+// <<< OPENFRAME(authz-platform-http-migration)
