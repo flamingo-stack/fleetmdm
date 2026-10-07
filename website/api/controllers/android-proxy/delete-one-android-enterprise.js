@@ -90,8 +90,9 @@ module.exports = {
       }).intercept((err)=>{
         return new Error(`When attempting to delete android enterprise from Google (${androidEnterpriseId}), an error occurred. Error: ${require('util').inspect(err)}`);
       });
-    } catch (unusedErr) {
+    } catch (err) {
       // If Google API deletion fails (e.g., enterprise already deleted), continue with proxy cleanup
+      sails.log.warn(`Ignoring error while deleting Android enterprise from Google (${androidEnterpriseId}): ${require('util').inspect(err)}`);
     }
 
     // Delete the database record for this Android enterprise

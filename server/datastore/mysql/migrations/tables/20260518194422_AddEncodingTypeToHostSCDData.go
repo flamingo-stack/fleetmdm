@@ -9,7 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20260518194422, Down_20260518194422)
 }
 
-// Up_20260514220719 adds the encoding_type column that discriminates between
+// Up_20260518194422 adds the encoding_type column that discriminates between
 // the legacy dense bitmap format (encoding_type = 0) and the new roaring
 // bitmap format (encoding_type = 1). ALGORITHM=INSTANT is a metadata-only
 // change on MySQL 8.0+; existing rows are not rewritten and read back with
@@ -32,3 +32,4 @@ func Up_20260518194422(tx *sql.Tx) error {
 func Down_20260518194422(tx *sql.Tx) error {
 	return nil
 }
+

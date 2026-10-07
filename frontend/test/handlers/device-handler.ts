@@ -93,7 +93,7 @@ export const emptySetupExperienceHandler = deviceSetupExperienceHandler({
 });
 
 export const getDeviceVppCommandResultHandler = http.get(
-  `/device/:token/software/commands/:uuid/results`,
+  baseUrl(`/device/:token/software/commands/:uuid/results`),
   ({ params }) => {
     const { uuid } = params;
 
@@ -119,3 +119,4 @@ export const getDeviceVppCommandResultHandler = http.get(
     });
   }
 );
+

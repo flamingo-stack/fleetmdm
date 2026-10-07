@@ -63,6 +63,9 @@ class SelectTargetsDropdown extends Component {
 
   componentWillUnmount() {
     this.mounted = false;
+    if (this.lookForOuterMenu) {
+      clearInterval(this.lookForOuterMenu);
+    }
   }
 
   onInputClose = () => {
@@ -86,10 +89,19 @@ class SelectTargetsDropdown extends Component {
     const { document } = global;
     const { wrapperHeight } = this;
 
-    const lookForOuterMenu = setInterval(() => {
+    this.lookForOuterMenu = setInterval(() => {
+      if (!this.mounted) {
+        clearInterval(this.lookForOuterMenu);
+        return;
+      }
+
       if (document.querySelectorAll(".Select-menu-outer")) {
-        clearInterval(lookForOuterMenu);
+        clearInterval(this.lookForOuterMenu);
         const coreWrapper = document.querySelector(".core-wrapper");
+
+        if (!coreWrapper) {
+          return;
+        }
 
         const currentWrapperHeight = coreWrapper.scrollHeight;
         if (wrapperHeight < currentWrapperHeight) {
