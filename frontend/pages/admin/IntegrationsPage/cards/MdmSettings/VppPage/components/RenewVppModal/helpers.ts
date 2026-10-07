@@ -5,11 +5,11 @@ const DEFAULT_ERROR_MESSAGE = "Couldn’t renew. Please try again.";
 // eslint-disable-next-line import/prefer-default-export
 export const getErrorMessage = (err: unknown) => {
   const invalidTokenReason = getErrorReason(err, {
-    reasonIncludes: "invalid",
+    reasonIncludes: "Invalid token",
   });
 
   if (invalidTokenReason) {
-    return "Invalid token. Please provide a valid token from Apple Business.";
+    return `Invalid token. ${invalidTokenReason}`;
   }
 
   return DEFAULT_ERROR_MESSAGE;

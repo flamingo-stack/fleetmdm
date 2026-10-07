@@ -90,7 +90,7 @@ describe("List", () => {
       { customId: "beta", name: "Beta" },
     ];
 
-    const { container } = render(
+    const { container, rerender } = render(
       <List<ICustomItem, "customId">
         data={data}
         idKey="customId"
@@ -107,7 +107,31 @@ describe("List", () => {
       li.textContent?.includes("Beta")
     );
 
-    expect(alphaLi?.getAttribute("key")).toBeNull(); // React doesn't expose "key" to the DOM
+    expect(alphaLi).toBeInTheDocument();
     expect(betaLi).toBeInTheDocument();
+
+    // Reordering data by customId should reuse the same DOM nodes when idKey
+    // is honored, since React matches elements by their key rather than
+    // position. This verifies idKey drives the keying, not array index.
+    const reorderedData: ICustomItem[] = [data[1], data[0]];
+
+    rerender(
+      <List<ICustomItem, "customId">
+        data={reorderedData}
+        idKey="customId"
+        renderItemRow={(item) => <span>{item.name}</span>}
+      />
+    );
+
+    const reorderedListItems = container.querySelectorAll("li.list__row");
+    const reorderedAlphaLi = Array.from(reorderedListItems).find((li) =>
+      li.textContent?.includes("Alpha")
+    );
+    const reorderedBetaLi = Array.from(reorderedListItems).find((li) =>
+      li.textContent?.includes("Beta")
+    );
+
+    expect(reorderedAlphaLi).toBe(alphaLi);
+    expect(reorderedBetaLi).toBe(betaLi);
   });
 });

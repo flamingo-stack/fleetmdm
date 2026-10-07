@@ -257,15 +257,17 @@ object ApiClient : CertificateApiClient {
         val result = block()
         if (result.isFailure && result.exceptionOrNull() is UnauthorizedException) {
             Log.d(TAG, "Received 401, clearing node key and retrying with re-enrollment")
-            clearApiKey()
+            enrollmentMutex.withLock {
+                clearApiKey()
+            }
             return block()
         }
         return result
     }
 
-    suspend fun enroll(): Result<EnrollResponse> {
+    suspend fun enroll(): Result<EnrollResponse> = enrollmentMutex.withLock {
         val credentials = getEnrollmentCredentials()
-        credentials ?: return Result.failure(Exception("Credentials not set"))
+        credentials ?: return@withLock Result.failure(Exception("Credentials not set"))
         val resp = makeRequest(
             endpoint = "/api/fleet/orbit/enroll",
             method = "POST",
@@ -286,7 +288,7 @@ object ApiClient : CertificateApiClient {
             Log.d(TAG, "Enrollment failed: ${exception.message}")
         }
 
-        return resp
+        resp
     }
 
     suspend fun getOrbitConfig(): Result<OrbitConfig> = withReenrollOnUnauthorized {
@@ -405,30 +407,29 @@ object ApiClient : CertificateApiClient {
     }
 
     private suspend fun getNodeKeyOrEnroll(): Result<String> {
-        enrollmentMutex.withLock {
-            // Check again inside lock in case another coroutine just enrolled
-            val existingKey = getApiKey()
-            if (existingKey != null) {
-                return Result.success(existingKey)
-            }
-
-            // Node key is missing, attempt auto-enrollment
-            Log.d(TAG, "Orbit node key missing, attempting auto-enrollment")
-
-            // Re-enroll
-            val enrollResult = enroll()
-
-            return enrollResult.fold(
-                onSuccess = { response ->
-                    Log.d(TAG, "Auto-enrollment successful")
-                    Result.success(response.orbitNodeKey)
-                },
-                onFailure = { error ->
-                    FleetLog.e(TAG, "Auto-enrollment failed: ${error.message}")
-                    Result.failure(error)
-                },
-            )
+        // Check outside the lock to avoid unnecessary contention when a key already exists.
+        val existingKey = getApiKey()
+        if (existingKey != null) {
+            return Result.success(existingKey)
         }
+
+        // Node key is missing, attempt auto-enrollment
+        Log.d(TAG, "Orbit node key missing, attempting auto-enrollment")
+
+        // enroll() acquires enrollmentMutex internally to guard the enroll/store sequence
+        // against concurrent re-enrollment attempts.
+        val enrollResult = enroll()
+
+        return enrollResult.fold(
+            onSuccess = { response ->
+                Log.d(TAG, "Auto-enrollment successful")
+                Result.success(response.orbitNodeKey)
+            },
+            onFailure = { error ->
+                FleetLog.e(TAG, "Auto-enrollment failed: ${error.message}")
+                Result.failure(error)
+            },
+        )
     }
 
     private data class EnrollmentCredentials(
@@ -633,3 +634,4 @@ data class GetCertificateTemplateResponse(
  */
 fun GetCertificateTemplateResponse.buildScepUrl(serverUrl: String, hostUUID: String): String =
     "$serverUrl/mdm/scep/proxy/$hostUUID,g$id,$certificateAuthorityType,${fleetChallenge ?: ""}"
+
