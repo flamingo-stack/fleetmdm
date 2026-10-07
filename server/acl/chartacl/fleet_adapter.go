@@ -9,9 +9,9 @@ package chartacl
 
 import (
 	"context"
-	"errors"
 
 	"github.com/fleetdm/fleet/v4/server/chart/api"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/contexts/viewer"
 )
 
@@ -38,7 +38,7 @@ var _ api.ViewerProvider = (*FleetViewerAdapter)(nil)
 func (a *FleetViewerAdapter) ViewerScope(ctx context.Context) (bool, []uint, error) {
 	vc, ok := viewer.FromContext(ctx)
 	if !ok || vc.User == nil {
-		return false, nil, errors.New("chart: no authenticated viewer in context")
+		return false, nil, ctxerr.New(ctx, "chart: no authenticated viewer in context")
 	}
 	u := vc.User
 	if u.GlobalRole != nil && *u.GlobalRole != "" {
