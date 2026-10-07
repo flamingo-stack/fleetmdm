@@ -110,7 +110,7 @@ func (gh GitHubClient) MacOfficeReleaseNotes(ctx context.Context) (MetadataFileN
 	}
 
 	// Nothing found ...
-	return MetadataFileName{}, "", nil
+	return MetadataFileName{}, "", errors.New("no MacOffice release notes found")
 }
 
 // list iterates over the latest release in our Github NVD repo
@@ -128,7 +128,7 @@ func (gh GitHubClient) list(ctx context.Context, prefix string, ctor func(fileNa
 		&github.ListOptions{Page: 0, PerPage: 10},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list github releases for prefix %q: %w", prefix, err)
 	}
 
 	if r.StatusCode != http.StatusOK {
@@ -143,7 +143,7 @@ func (gh GitHubClient) list(ctx context.Context, prefix string, ctor func(fileNa
 			if strings.HasPrefix(name, prefix) {
 				metadataFileName, err := ctor(name)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("build metadata file name for asset %q (prefix %q): %w", name, prefix, err)
 				}
 				results[metadataFileName] = e.GetBrowserDownloadURL()
 			}

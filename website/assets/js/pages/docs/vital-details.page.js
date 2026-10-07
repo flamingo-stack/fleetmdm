@@ -85,11 +85,13 @@ parasails.registerPage('vital-details', {
     })();
     $('[purpose="copy-button"]').on('click', async function() {
       let code = $(this).closest('[purpose="codeblock"]').find('pre:visible code').text();
-      $(this).addClass('copied');
-      await setTimeout(()=>{
-        $(this).removeClass('copied');
-      }, 2000);
-      navigator.clipboard.writeText(code);
+      if(code) {
+        $(this).addClass('copied');
+        await setTimeout(()=>{
+          $(this).removeClass('copied');
+        }, 2000);
+        navigator.clipboard.writeText(code);
+      }
     });
     // Add a scroll event listener to shift the platform filters upwards when the header is hidden.
     window.addEventListener('scroll', this.handleScrollingPlatformFilters);
@@ -148,3 +150,4 @@ parasails.registerPage('vital-details', {
     }
   },
 });
+

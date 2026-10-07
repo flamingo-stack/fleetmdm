@@ -5,11 +5,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,6 +21,18 @@ import (
 )
 
 var preInstalled = []string{}
+
+// sqlIdentifierAllowlist restricts identifiers interpolated into SQL LIKE
+// queries to a safe, narrow character set as defense-in-depth on top of
+// validateSqlInput's blocklist-style checks.
+var sqlIdentifierAllowlist = regexp.MustCompile(`^[a-zA-Z0-9 ._:()/\\+-]*$`)
+
+func validateSqlIdentifierStrict(input string) error {
+	if !sqlIdentifierAllowlist.MatchString(input) {
+		return fmt.Errorf("contains disallowed characters")
+	}
+	return nil
+}
 
 func postApplicationInstall(_ context.Context, _ *slog.Logger, _ string) error {
 	return nil
@@ -46,7 +60,13 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueIdentifi
 	if err := validateSqlInput(appName); err != nil {
 		return false, fmt.Errorf("Invalid character found in appName: '%w'. Not executing query...", err)
 	}
+	if err := validateSqlIdentifierStrict(appName); err != nil {
+		return false, fmt.Errorf("Invalid character found in appName: '%w'. Not executing query...", err)
+	}
 	if err := validateSqlInput(appPath); err != nil {
+		return false, fmt.Errorf("Invalid character found in appPath: '%w'. Not executing query...", err)
+	}
+	if err := validateSqlIdentifierStrict(appPath); err != nil {
 		return false, fmt.Errorf("Invalid character found in appPath: '%w'. Not executing query...", err)
 	}
 
@@ -63,6 +83,9 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueIdentifi
 	// on it as well.
 	if uniqueIdentifier != "" && uniqueIdentifier != appName {
 		if err := validateSqlInput(uniqueIdentifier); err != nil {
+			return false, fmt.Errorf("Invalid character found in uniqueIdentifier: '%w'. Not executing query...", err)
+		}
+		if err := validateSqlIdentifierStrict(uniqueIdentifier); err != nil {
 			return false, fmt.Errorf("Invalid character found in uniqueIdentifier: '%w'. Not executing query...", err)
 		}
 		query += `	OR LOWER(name) LIKE LOWER('%` + uniqueIdentifier + `%')`
@@ -294,7 +317,8 @@ func executeScript(cfg *Config, scriptContents string) (string, error) {
 	// (pkgscripts.MaxHostSoftwareInstallExecutionTime); 10 minutes is a
 	// reasonable validator cap that covers large-payload installers without
 	// letting a hung script run indefinitely.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	const scriptTimeout = 10 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), scriptTimeout)
 	defer cancel()
 
 	// Use custom execution with non-interactive flags for Windows
@@ -320,6 +344,9 @@ func executeScript(cfg *Config, scriptContents string) (string, error) {
 --------------------`, string(output))
 
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return result, fmt.Errorf("script execution exceeded the %s validator timeout (this is the validator's own cap, not the script's logic): %w", scriptTimeout, err)
+		}
 		return result, err
 	}
 	if exitCode != 0 {

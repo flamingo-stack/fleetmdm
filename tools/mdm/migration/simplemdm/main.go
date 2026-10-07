@@ -18,7 +18,6 @@ import (
 const DELAY = 10 * time.Second // adjust this to simulate slow webhook response
 
 var (
-	apiTokenFlag = flag.String("api-token", "", "API token")
 	deviceIDFlag = flag.String("device-id", "", "Device ID to unenroll")
 )
 
@@ -48,7 +47,7 @@ func newSimpleClient(apiToken string) *simpleClient {
 // 	if err != nil {
 // 		return 0, err
 // 	}
-// 	req.SetBasicAuth(*apiTokenFlag, "")
+// 	req.SetBasicAuth(c.apiToken, "")
 // 	req.Header.Set("Content-Type", "application/json")
 // 	resp, err := client.Do(req)
 // 	if err != nil {
@@ -75,7 +74,7 @@ func (c *simpleClient) unenroll(deviceID uint) error {
 	if err != nil {
 		return err
 	}
-	req.SetBasicAuth(*apiTokenFlag, "")
+	req.SetBasicAuth(c.apiToken, "")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -98,8 +97,9 @@ func (c *simpleClient) unenroll(deviceID uint) error {
 func main() {
 	flag.Parse()
 
-	if *apiTokenFlag == "" {
-		log.Fatal("--api-token must be provided")
+	apiToken := os.Getenv("SIMPLEMDM_API_TOKEN")
+	if apiToken == "" {
+		log.Fatal("SIMPLEMDM_API_TOKEN environment variable must be set")
 	}
 
 	if *deviceIDFlag == "" {
@@ -109,6 +109,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid device ID %s: %v", *deviceIDFlag, err)
 	}
+
+	client := newSimpleClient(apiToken)
 
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		var detail string
@@ -132,11 +134,15 @@ func main() {
 		// }
 
 		// TODO: Use getDeviceIDBySerial to find the device ID by serial number
-		// For now, we just use the device ID provided via command line flag.
+		// from the parsed request body above, instead of relying on the
+		// device ID provided via command line flag. Until that is
+		// implemented, this handler will always unenroll the device
+		// identified by --device-id, regardless of which host triggered
+		// the webhook.
 
 		time.Sleep(DELAY)
 
-		if err := newSimpleClient(*apiTokenFlag).unenroll(uint(deviceID)); err != nil {
+		if err := client.unenroll(uint(deviceID)); err != nil {
 			log.Printf("error unenrolling device %d: %s", deviceID, err.Error())
 			writer.WriteHeader(http.StatusBadGateway)
 			if _, err := writer.Write([]byte("Error unenrolling device")); err != nil {

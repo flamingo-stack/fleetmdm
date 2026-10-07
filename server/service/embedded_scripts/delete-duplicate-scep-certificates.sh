@@ -59,6 +59,14 @@ trap 'rm -f "$tmpfile" "$tmpfile.raw" "$tmpfile.err"' EXIT
 
 security find-certificate -a -c "$CN" -Z -p "$KEYCHAIN" >"$tmpfile.raw" 2>"$tmpfile.err" || true
 
+begin_count=$(grep -c -- "-----BEGIN CERTIFICATE-----" "$tmpfile.raw" || true)
+end_count=$(grep -c -- "-----END CERTIFICATE-----" "$tmpfile.raw" || true)
+hash_count=$(grep -c "^SHA-1 hash:" "$tmpfile.raw" || true)
+if [ "$begin_count" -ne "$end_count" ] || [ "$begin_count" -ne "$hash_count" ]; then
+    echo "Error: unexpected output from 'security find-certificate' (found $hash_count hash(es), $begin_count BEGIN marker(s), $end_count END marker(s)); refusing to proceed to avoid deleting the wrong identity." >&2
+    exit 1
+fi
+
 # Split the raw output into individual cert blocks and extract hash + date.
 current_hash=""
 current_pem=""
@@ -66,6 +74,10 @@ while IFS= read -r line; do
     case "$line" in
         "SHA-1 hash:"*)
             current_hash=$(echo "$line" | awk '{print $NF}')
+            if ! echo "$current_hash" | grep -Eq '^[0-9A-Fa-f]{40}$'; then
+                echo "Error: malformed SHA-1 hash encountered (\"$current_hash\"); refusing to proceed." >&2
+                exit 1
+            fi
             ;;
         "-----BEGIN CERTIFICATE-----")
             current_pem="$line"$'\n'
@@ -73,7 +85,11 @@ while IFS= read -r line; do
         "-----END CERTIFICATE-----")
             current_pem+="$line"$'\n'
             not_before=$(echo "$current_pem" | openssl x509 -noout -startdate 2>/dev/null | cut -d= -f2)
-            epoch=$(date -j -f "%b %e %T %Y %Z" "$not_before" "+%s" 2>/dev/null || echo "0")
+            epoch=$(date -j -f "%b %e %T %Y %Z" "$not_before" "+%s" 2>/dev/null || echo "")
+            if [ -z "$epoch" ]; then
+                echo "Error: failed to parse Not Before date (\"$not_before\") for certificate $current_hash; refusing to proceed to avoid deleting the wrong identity." >&2
+                exit 1
+            fi
             echo "$epoch $current_hash" >> "$tmpfile"
             current_pem=""
             ;;
