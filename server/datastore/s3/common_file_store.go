@@ -186,7 +186,7 @@ func (s *commonFileStore) Cleanup(ctx context.Context, usedFileIDs []string, rem
 		return int(deleted.Load()), ctxerr.Wrap(ctx, err, "errors occurred during S3 deletion")
 	}
 
-	return int(deleted.Load()), ctxerr.Wrapf(ctx, err, "deleting %s in S3 store", s.fileLabel)
+	return int(deleted.Load()), nil
 }
 
 func (s *commonFileStore) Sign(ctx context.Context, fileID string, expiresIn time.Duration) (string, error) {

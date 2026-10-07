@@ -112,7 +112,8 @@ const ManagePacksPage = ({ router }: IManagePacksPageProps): JSX.Element => {
 
   const onEnableDisablePackSubmit = useCallback(
     (selectedTablePackIds: number[], disablePack: boolean) => {
-      const packOrPacks = selectedPackIds.length === 1 ? "pack" : "packs";
+      const packOrPacks =
+        selectedTablePackIds.length === 1 ? "pack" : "packs";
       const enableOrDisable = disablePack ? "disabled" : "enabled";
 
       const promises = selectedTablePackIds.map((id: number) => {
@@ -136,7 +137,7 @@ const ManagePacksPage = ({ router }: IManagePacksPageProps): JSX.Element => {
           refetchPacks();
         });
     },
-    [refetchPacks, selectedPackIds]
+    [refetchPacks]
   );
 
   const onEnablePackClick = (selectedTablePackIds: number[]) => {

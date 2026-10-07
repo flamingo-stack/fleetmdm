@@ -335,14 +335,12 @@ describe("Software Vulnerabilities table", () => {
         ?.parentElement
     ).toHaveClass("react-select__option--is-disabled");
 
+    await user.hover(screen.getByText("Exploited vulnerabilities"));
     await waitFor(() => {
-      waitFor(() => {
-        user.hover(screen.getByText("Exploited vulnerabilities"));
-      });
-
       expect(
         screen.getByText(/Available in Fleet Premium./i)
       ).toBeInTheDocument();
     });
   });
 });
+

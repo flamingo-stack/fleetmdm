@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { useQuery } from "react-query";
 import { browserHistory, InjectedRouter } from "react-router";
 import { Params } from "react-router/lib/Router";
@@ -38,9 +38,12 @@ const HostQueryReport = ({
   const hostId = Number(host_id);
   const queryId = Number(query_id);
 
-  if (globalReportsDisabled) {
-    router.push(PATHS.HOST_REPORTS(hostId));
-  }
+  useEffect(() => {
+    if (globalReportsDisabled) {
+      router.push(PATHS.HOST_REPORTS(hostId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalReportsDisabled, hostId]);
 
   const [showQuery, setShowQuery] = useState(false);
 
@@ -96,9 +99,12 @@ const HostQueryReport = ({
   } = queryResponse || {};
 
   // previous reroute can be done before API call, not this one, hence 2
-  if (queryDiscardData) {
-    router.push(PATHS.HOST_REPORTS(hostId));
-  }
+  useEffect(() => {
+    if (queryDiscardData) {
+      router.push(PATHS.HOST_REPORTS(hostId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDiscardData, hostId]);
 
   // Updates title that shows up on browser tabs
   if (queryName && hostName) {
@@ -141,6 +147,10 @@ const HostQueryReport = ({
     );
   }, [queryId, hostId, hqrError, hostName]);
 
+  if (globalReportsDisabled || queryDiscardData) {
+    return null;
+  }
+
   return (
     <MainContent className={baseClass}>
       {isLoading ? (
@@ -173,3 +183,4 @@ const HostQueryReport = ({
 };
 
 export default HostQueryReport;
+
