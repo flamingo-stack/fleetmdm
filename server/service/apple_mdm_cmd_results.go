@@ -159,8 +159,11 @@ func NewInstalledApplicationListResultsHandler(
 				// so we will list the full apps for verification only after it finished "installing", until
 				// it gets verified or times out doing so (and possibly once _before_ it starts installing).
 				// This minimizes the number of times we request the (~100KB large) payload of all apps.
-				requireXcodeSpecialCase = expectedInstall.BundleIdentifier == xcodeBundleID &&
-					installedAppResult.HostPlatform() == "darwin" && !appWasReported
+				// Use OR-accumulation (rather than plain assignment) because this closure may be invoked
+				// once per pending install in the same handler invocation, and we must not let a later,
+				// unrelated install's (false) special-case value clear an earlier Xcode install's (true) one.
+				requireXcodeSpecialCase = requireXcodeSpecialCase || (expectedInstall.BundleIdentifier == xcodeBundleID &&
+					installedAppResult.HostPlatform() == "darwin" && !appWasReported)
 				return nil
 			}
 

@@ -28,8 +28,8 @@ type LiveQueryResultsHandler struct {
 
 func NewLiveQueryResultsHandler() *LiveQueryResultsHandler {
 	return &LiveQueryResultsHandler{
-		errors:  make(chan error),
-		results: make(chan fleet.DistributedQueryResult),
+		errors:  make(chan error, 1),
+		results: make(chan fleet.DistributedQueryResult, 1),
 	}
 }
 
@@ -78,7 +78,7 @@ func (c *Client) LiveQueryWithContext(
 	var responseBody createDistributedQueryCampaignResponse
 	err := c.authenticatedRequest(req, verb, path, &responseBody)
 	if err != nil {
-		return nil, ctxerr.Errorf(ctx, "create live query: %v", err)
+		return nil, ctxerr.Errorf(ctx, "create live query: %w", err)
 	}
 
 	// Copy default dialer but skip cert verification if set.
@@ -134,7 +134,11 @@ func (c *Client) LiveQueryWithContext(
 				Data json.RawMessage `json:"data"`
 			}{}
 
-			doneReadingChan := make(chan error)
+			// Buffered so that the reader goroutine below never blocks
+			// sending its result, even if this goroutine has already
+			// returned due to ctx.Done(). This avoids a send-on-closed-channel
+			// panic and avoids leaking the reader goroutine.
+			doneReadingChan := make(chan error, 1)
 
 			go func() {
 				doneReadingChan <- conn.ReadJSON(&msg)
@@ -145,38 +149,61 @@ func (c *Client) LiveQueryWithContext(
 				return
 			case err := <-doneReadingChan:
 				if err != nil {
-					resHandler.errors <- ctxerr.Wrap(ctx, err, "receive ws message")
+					select {
+					case resHandler.errors <- ctxerr.Wrap(ctx, err, "receive ws message"):
+					case <-ctx.Done():
+						return
+					}
 					if errors.Is(err, websocket.ErrCloseSent) {
 						return
 					}
 				}
 			}
-			close(doneReadingChan)
 
 			switch msg.Type {
 			case "result":
 				var res fleet.DistributedQueryResult
 				if err := json.Unmarshal(msg.Data, &res); err != nil {
-					resHandler.errors <- ctxerr.Wrap(ctx, err, "unmarshal results")
+					select {
+					case resHandler.errors <- ctxerr.Wrap(ctx, err, "unmarshal results"):
+					case <-ctx.Done():
+						return
+					}
 				}
-				resHandler.results <- res
+				select {
+				case resHandler.results <- res:
+				case <-ctx.Done():
+					return
+				}
 
 			case "totals":
 				var totals targetTotals
 				if err := json.Unmarshal(msg.Data, &totals); err != nil {
-					resHandler.errors <- ctxerr.Wrap(ctx, err, "unmarshal totals")
+					select {
+					case resHandler.errors <- ctxerr.Wrap(ctx, err, "unmarshal totals"):
+					case <-ctx.Done():
+						return
+					}
 				}
 				resHandler.totals.Store(&totals)
 
 			case "status":
 				var status campaignStatus
 				if err := json.Unmarshal(msg.Data, &status); err != nil {
-					resHandler.errors <- ctxerr.Wrap(ctx, err, "unmarshal status")
+					select {
+					case resHandler.errors <- ctxerr.Wrap(ctx, err, "unmarshal status"):
+					case <-ctx.Done():
+						return
+					}
 				}
 				resHandler.status.Store(&status)
 
 			default:
-				resHandler.errors <- ctxerr.Errorf(ctx, "unknown msg type %s", msg.Type)
+				select {
+				case resHandler.errors <- ctxerr.Errorf(ctx, "unknown msg type %s", msg.Type):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()

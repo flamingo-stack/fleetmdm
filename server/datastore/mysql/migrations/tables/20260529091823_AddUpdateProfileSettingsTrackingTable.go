@@ -2,6 +2,7 @@ package tables
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/server/mdm/microsoft/syncml"
@@ -53,8 +54,16 @@ func Up_20260529091823(tx *sql.Tx) error {
 			continue
 		}
 
-		if _, err := tx.Exec(`INSERT IGNORE INTO mdm_configuration_profile_update_settings (apple_declaration_uuid) VALUES (?)`, decl.DeclarationUUID); err != nil {
+		res, err := tx.Exec(`INSERT IGNORE INTO mdm_configuration_profile_update_settings (apple_declaration_uuid) VALUES (?)`, decl.DeclarationUUID)
+		if err != nil {
 			return err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return fmt.Errorf("failed to backfill mdm_configuration_profile_update_settings for apple declaration_uuid %q: insert was ignored, possible duplicate declaration_uuid", decl.DeclarationUUID)
 		}
 	}
 
@@ -77,8 +86,16 @@ func Up_20260529091823(tx *sql.Tx) error {
 			continue
 		}
 
-		if _, err := tx.Exec(`INSERT IGNORE INTO mdm_configuration_profile_update_settings (windows_profile_uuid) VALUES (?)`, profile.ProfileUUID); err != nil {
+		res, err := tx.Exec(`INSERT IGNORE INTO mdm_configuration_profile_update_settings (windows_profile_uuid) VALUES (?)`, profile.ProfileUUID)
+		if err != nil {
 			return err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return fmt.Errorf("failed to backfill mdm_configuration_profile_update_settings for windows profile_uuid %q: insert was ignored, possible duplicate profile_uuid", profile.ProfileUUID)
 		}
 	}
 

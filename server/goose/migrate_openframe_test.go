@@ -8,6 +8,17 @@
 // goose `panic("unreachable")`s in that case; the fork returns version 0 so the
 // idempotent migrations proceed/retry instead of crash-looping. This test pins
 // that behavior. Pure logic — uses go-sqlmock, no live MySQL.
+//
+// KNOWN OPERATIONAL RISK (tracked, not fully resolved by this test): returning
+// 0 here only mitigates the panic. It does not add a coordination barrier
+// between `fleet prepare db` and `fleet serve`, so any caller of GetDBVersion
+// that assumes a nonzero result implies "migrations have been seeded" can
+// still be fooled during this same race window (version table exists, seed
+// row not yet committed). See openframe/docs/migrations.md for the
+// recommended fix (reinstate a migration-completion barrier, e.g. a Helm hook
+// or init container, before `fleet serve` starts) — until that lands, treat
+// GetDBVersion()==0 as ambiguous between "unmigrated" and "mid-race" in any
+// new code path that depends on it.
 package goose
 
 import (
