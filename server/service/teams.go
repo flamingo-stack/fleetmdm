@@ -75,6 +75,25 @@ type defaultTeamResponse struct {
 
 func (r defaultTeamResponse) Error() error { return r.Err }
 
+// toDefaultTeamResponse builds the DefaultTeam structure used to represent
+// the "No team" pseudo-team (team ID 0), exposing only the limited set of
+// fields that are applicable to it.
+func toDefaultTeamResponse(team *fleet.Team) *fleet.DefaultTeam {
+	return &fleet.DefaultTeam{
+		ID:   team.ID,
+		Name: team.Name,
+		DefaultTeamConfig: fleet.DefaultTeamConfig{
+			WebhookSettings: fleet.DefaultTeamWebhookSettings{
+				FailingPoliciesWebhook: team.Config.WebhookSettings.FailingPoliciesWebhook,
+			},
+			Integrations: fleet.DefaultTeamIntegrations{
+				Jira:    team.Config.Integrations.Jira,
+				Zendesk: team.Config.Integrations.Zendesk,
+			},
+		},
+	}
+}
+
 func getTeamEndpoint(ctx context.Context, request interface{}, svc fleet.Service) (fleet.Errorer, error) {
 	req := request.(*getTeamRequest)
 
@@ -85,20 +104,7 @@ func getTeamEndpoint(ctx context.Context, request interface{}, svc fleet.Service
 
 	// Special handling for team ID 0 - return DefaultTeam structure
 	if team.ID == 0 {
-		defaultTeam := &fleet.DefaultTeam{
-			ID:   team.ID,
-			Name: team.Name,
-			DefaultTeamConfig: fleet.DefaultTeamConfig{
-				WebhookSettings: fleet.DefaultTeamWebhookSettings{
-					FailingPoliciesWebhook: team.Config.WebhookSettings.FailingPoliciesWebhook,
-				},
-				Integrations: fleet.DefaultTeamIntegrations{
-					Jira:    team.Config.Integrations.Jira,
-					Zendesk: team.Config.Integrations.Zendesk,
-				},
-			},
-		}
-		return defaultTeamResponse{Team: defaultTeam}, nil
+		return defaultTeamResponse{Team: toDefaultTeamResponse(team)}, nil
 	}
 
 	return getTeamResponse{Team: team}, nil
@@ -174,21 +180,7 @@ func modifyTeamEndpoint(ctx context.Context, request interface{}, svc fleet.Serv
 
 	// Special handling for team ID 0 - return limited fields
 	if req.ID == 0 {
-		// Convert to DefaultTeam with limited fields
-		defaultTeam := &fleet.DefaultTeam{
-			ID:   team.ID,
-			Name: team.Name,
-			DefaultTeamConfig: fleet.DefaultTeamConfig{
-				WebhookSettings: fleet.DefaultTeamWebhookSettings{
-					FailingPoliciesWebhook: team.Config.WebhookSettings.FailingPoliciesWebhook,
-				},
-				Integrations: fleet.DefaultTeamIntegrations{
-					Jira:    team.Config.Integrations.Jira,
-					Zendesk: team.Config.Integrations.Zendesk,
-				},
-			},
-		}
-		return defaultTeamResponse{Team: defaultTeam}, nil
+		return defaultTeamResponse{Team: toDefaultTeamResponse(team)}, nil
 	}
 
 	return teamResponse{Team: team}, err

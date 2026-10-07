@@ -1,10 +1,10 @@
 import React from "react";
-import { addHours, isPast } from "date-fns";
 
 import InfoBanner from "components/InfoBanner";
 import Button from "components/buttons/Button";
 import { MacDiskEncryptionActionRequired } from "interfaces/host";
 import { IHostBannersBaseProps } from "pages/hosts/details/HostDetailsPage/components/HostDetailsBanners/HostDetailsBanners";
+import { isMdmUnenrolled, isNewMdmEnrollment } from "pages/hosts/details/HostDetailsPage/helpers";
 import CustomLink from "components/CustomLink";
 import { isDiskEncryptionSupportedLinuxPlatform } from "interfaces/platform";
 
@@ -36,27 +36,20 @@ const DeviceUserBanners = ({
   onTriggerEscrowLinuxKey,
   lastMdmEnrolledAt,
 }: IDeviceUserBannersProps) => {
-  const isMdmUnenrolled =
-    mdmEnrollmentStatus === "Off" || mdmEnrollmentStatus === null;
+  const mdmUnenrolled = isMdmUnenrolled(mdmEnrollmentStatus);
 
   const mdmEnabledAndConnected = mdmEnabledAndConfigured && connectedToFleetMdm;
 
   const showTurnOnAppleMdmBanner =
-    hostPlatform === "darwin" && isMdmUnenrolled && mdmEnabledAndConfigured;
+    hostPlatform === "darwin" && mdmUnenrolled && mdmEnabledAndConfigured;
 
-  const isNewMdmEnrollment =
-    !isMdmUnenrolled &&
-    !!lastMdmEnrolledAt &&
-    // if less than an hour has passed since the last MDM enrollment, we consider it a new
-    // enrollment and won't show the disk encryption action required banner, as it's possible the
-    // host just hasn't sent its disk encryption status to Fleet yet
-    !isPast(addHours(lastMdmEnrolledAt, 1));
+  const newMdmEnrollment = isNewMdmEnrollment(mdmUnenrolled, lastMdmEnrolledAt);
 
   const showMacDiskEncryptionKeyResetRequired =
     mdmEnabledAndConnected &&
     macDiskEncryptionStatus === "action_required" &&
     diskEncryptionActionRequired === "rotate_key" &&
-    !isNewMdmEnrollment;
+    !newMdmEnrollment;
 
   const turnOnMdmButton = mdmManualEnrolmentUrl ? (
     <CustomLink
@@ -173,3 +166,4 @@ const DeviceUserBanners = ({
 };
 
 export default DeviceUserBanners;
+

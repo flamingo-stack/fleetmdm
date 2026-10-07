@@ -171,7 +171,7 @@ components:
   schemas:
     APIResult:
       type: object
-      description: foo
+      description: The JSON API response object returned by push and enqueue command endpoints, reporting per-enrollment success or failure details.
       properties:
         no_push:
           type: boolean
@@ -201,3 +201,4 @@ components:
                   description: Push UUID from Apple Push Notification service servers.
                 command_error:
                   type: string
+

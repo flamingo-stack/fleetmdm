@@ -28,7 +28,7 @@ module.exports = {
 
     let informationAboutThisTenant = await MicrosoftComplianceTenant.findOne({id: complianceTenantRecordId});
     if(!informationAboutThisTenant) {
-      return new Error(`No matching tenant record could be found with the specified ID. (${complianceTenantRecordId}`);
+      return new Error(`No matching tenant record could be found with the specified ID. (${complianceTenantRecordId})`);
     }
 
     // Get a graph access token for this tenant

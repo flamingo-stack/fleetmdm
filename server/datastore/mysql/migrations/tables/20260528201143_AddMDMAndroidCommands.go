@@ -9,7 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20260528201143, Down_20260528201143)
 }
 
-// Up_20260522195236 creates the mdm_android_commands table used to track AMAPI commands issued by
+// Up_20260528201143 creates the mdm_android_commands table used to track AMAPI commands issued by
 // Fleet via EnterprisesDevicesService.IssueCommand (Lock, Wipe, Clear passcode for Android hosts; see #41683).
 //
 // host_mdm_actions.{lock_ref, wipe_ref} stores the Fleet-generated command_uuid for Android hosts,

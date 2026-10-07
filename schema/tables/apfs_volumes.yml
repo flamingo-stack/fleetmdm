@@ -6,7 +6,7 @@ columns:
   - name: container_uuid
     type: text
     required: false
-    description: The UUID of the APFS Contianer
+    description: The UUID of the APFS Container
   - name: container_designated_physical_store
     type: text
     required: false
