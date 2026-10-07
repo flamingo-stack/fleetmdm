@@ -30,9 +30,8 @@ func main() {
 
 	flag.Parse()
 	if *sourceMigration == "" {
-		log.Println("The --source-migration flag is required.")
 		flag.Usage()
-		return
+		log.Fatal("The --source-migration flag is required.")
 	}
 
 	sourceFilename := filepath.Base(*sourceMigration)

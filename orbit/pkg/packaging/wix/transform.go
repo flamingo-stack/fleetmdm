@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -64,13 +65,35 @@ func TransformHeat(path string) error {
 		return fmt.Errorf("marshal xml: %w", err)
 	}
 
+	// Write to a temp file in the same directory first, then rename over the
+	// original. This avoids destroying the original file if the write fails,
+	// and the rename is atomic on the same filesystem.
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmp.Write(contents); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+
 	// Remove first as we encounter permission errors on some Linux configurations.
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("remove old file: %w", err)
 	}
 
-	if err := os.WriteFile(path, contents, 0o600); err != nil {
-		return fmt.Errorf("write file: %w", err)
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil

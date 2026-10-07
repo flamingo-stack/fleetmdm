@@ -39,27 +39,15 @@ func (c *Client) translateTransferHostsToIDs(hosts []string, label string, team 
 
 	var translatePayloads []fleet.TranslatePayload
 	for _, host := range hosts {
-		translatedPayload, err := encodeTranslatedPayload(fleet.TranslatorTypeHost, host)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		translatePayloads = append(translatePayloads, translatedPayload)
+		translatePayloads = append(translatePayloads, encodeTranslatedPayload(fleet.TranslatorTypeHost, host))
 	}
 
 	if label != "" {
-		translatedPayload, err := encodeTranslatedPayload(fleet.TranslatorTypeLabel, label)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		translatePayloads = append(translatePayloads, translatedPayload)
+		translatePayloads = append(translatePayloads, encodeTranslatedPayload(fleet.TranslatorTypeLabel, label))
 	}
 
 	if team != "" {
-		translatedPayload, err := encodeTranslatedPayload(fleet.TranslatorTypeTeam, team)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		translatePayloads = append(translatePayloads, translatedPayload)
+		translatePayloads = append(translatePayloads, encodeTranslatedPayload(fleet.TranslatorTypeTeam, team))
 	}
 
 	var hostIDs []uint
@@ -89,12 +77,11 @@ func (c *Client) translateTransferHostsToIDs(hosts []string, label string, team 
 	return hostIDs, labelID, teamID, nil
 }
 
-func encodeTranslatedPayload(translatorType string, identifier string) (fleet.TranslatePayload, error) {
-	translatedPayload := fleet.TranslatePayload{
+func encodeTranslatedPayload(translatorType string, identifier string) fleet.TranslatePayload {
+	return fleet.TranslatePayload{
 		Type:    translatorType,
 		Payload: fleet.StringIdentifierToIDPayload{Identifier: identifier},
 	}
-	return translatedPayload, nil
 }
 
 func (c *Client) TransferHosts(hosts []string, label string, status, searchQuery string, team string) error {

@@ -10,7 +10,7 @@ import (
 func JsonFile(file string, opts ...FlattenOpts) ([]Row, error) {
 	rawdata, err := os.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading json file %s: %w", file, err)
 	}
 	return Json(rawdata, opts...)
 }

@@ -27,9 +27,10 @@ func (c commonFailingStore) Exists(ctx context.Context, iconID string) (bool, er
 }
 
 func (c commonFailingStore) Cleanup(ctx context.Context, usedIconIDs []string, removeCreatedBefore time.Time) (int, error) {
-	return 0, nil
+	return 0, fmt.Errorf("%s store not properly configured", c.Entity)
 }
 
 func (c commonFailingStore) Sign(_ context.Context, _ string, _ time.Duration) (string, error) {
 	return "", fmt.Errorf("%s store not properly configured", c.Entity)
 }
+

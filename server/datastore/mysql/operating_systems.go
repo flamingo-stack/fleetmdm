@@ -18,7 +18,7 @@ func (ds *Datastore) ListOperatingSystems(ctx context.Context) ([]fleet.Operatin
 func listOperatingSystemsDB(ctx context.Context, tx sqlx.QueryerContext) ([]fleet.OperatingSystem, error) {
 	var os []fleet.OperatingSystem
 	if err := sqlx.SelectContext(ctx, tx, &os, `SELECT id, name, version, arch, kernel_version, platform, display_version, installation_type, os_version_id FROM operating_systems`); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "list operating systems")
 	}
 	return os, nil
 }
@@ -146,7 +146,7 @@ func getOperatingSystemDB(ctx context.Context, tx sqlx.ExtContext, hostOS fleet.
 	var os fleet.OperatingSystem
 	stmt := "SELECT id, name, version, arch, kernel_version, platform, display_version, installation_type, os_version_id FROM operating_systems WHERE name = ? AND version = ? AND arch = ? AND kernel_version = ? AND platform = ? AND display_version = ? AND installation_type = ?"
 	if err := sqlx.GetContext(ctx, tx, &os, stmt, hostOS.Name, hostOS.Version, hostOS.Arch, hostOS.KernelVersion, hostOS.Platform, hostOS.DisplayVersion, hostOS.InstallationType); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get operating system")
 	}
 	return &os, nil
 }
