@@ -21,7 +21,7 @@ func updateSoftwareTitleDisplayName(ctx context.Context, tx sqlx.ExtContext, tea
 		ON DUPLICATE KEY UPDATE
 			display_name = VALUES(display_name)`, tmID, titleID, displayName)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "upserting software title display name")
 	}
 
 	return nil
