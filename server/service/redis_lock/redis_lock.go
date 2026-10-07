@@ -86,7 +86,7 @@ func (r *redisLock) RemoveFromSet(ctx context.Context, key string, value string)
 	// Reference: https://redis.io/docs/latest/commands/srem/
 	_, err := conn.Do("SREM", r.testPrefix+key, value)
 	if err != nil {
-		return ctxerr.Wrap(ctx, err, "redis add to set")
+		return ctxerr.Wrap(ctx, err, "redis remove from set")
 	}
 	return nil
 }

@@ -65,18 +65,27 @@ func findUninstallFleetdRegKeyRelPath() (string, error) {
 	// find the Fleetd entry in the existing keys
 	var fleetdKey string
 	for _, key := range keys {
-		keyHandle, err := registry.OpenKey(registry.LOCAL_MACHINE, REG_UNINSTALL_REL_PATH+`\`+key, registry.READ)
-		if err != nil {
-			return "", fmt.Errorf(`couldn't open registry subkey handle for '%v\%v': %w`, REG_UNINSTALL_ABS_PATH, key, err)
-		}
-		defer keyHandle.Close()
-		displayName, _, err := keyHandle.GetStringValue("DisplayName")
-		if err != nil {
-			if errors.Is(err, registry.ErrNotExist) {
-				// this key doesn't have a `DisplayName`, so it's not the entry for Fleetd - keep looking
-				continue
+		displayName, found, err := func() (string, bool, error) {
+			keyHandle, err := registry.OpenKey(registry.LOCAL_MACHINE, REG_UNINSTALL_REL_PATH+`\`+key, registry.READ)
+			if err != nil {
+				return "", false, fmt.Errorf(`couldn't open registry subkey handle for '%v\%v': %w`, REG_UNINSTALL_ABS_PATH, key, err)
 			}
-			return "", fmt.Errorf(`couldn't get registry string value 'DisplayName' for '%v\%v': %w`, REG_UNINSTALL_ABS_PATH, key, err)
+			defer keyHandle.Close()
+			displayName, _, err := keyHandle.GetStringValue("DisplayName")
+			if err != nil {
+				if errors.Is(err, registry.ErrNotExist) {
+					// this key doesn't have a `DisplayName`, so it's not the entry for Fleetd - keep looking
+					return "", false, nil
+				}
+				return "", false, fmt.Errorf(`couldn't get registry string value 'DisplayName' for '%v\%v': %w`, REG_UNINSTALL_ABS_PATH, key, err)
+			}
+			return displayName, true, nil
+		}()
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			continue
 		}
 		if displayName == REG_FLEETD_DISPLAY_NAME {
 			fleetdKey = key
@@ -90,3 +99,4 @@ func findUninstallFleetdRegKeyRelPath() (string, error) {
 
 	return REG_UNINSTALL_REL_PATH + `\` + fleetdKey, nil
 }
+

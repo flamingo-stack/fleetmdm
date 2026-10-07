@@ -183,18 +183,21 @@ func Analyze(
 	logger *slog.Logger,
 	date time.Time,
 ) ([]fleet.SoftwareVulnerability, error) {
-	if strings.ToLower(ver.Platform) != "ubuntu" {
+	switch strings.ToLower(ver.Platform) {
+	case "ubuntu":
+		artifact, err := loadOSVArtifact(ctx, ver, vulnPath, logger, date)
+		if err != nil {
+			return nil, fmt.Errorf("loading OSV artifact: %w", err)
+		}
+
+		return analyzeOSV(ctx, ds, ver, fleet.UbuntuOSVSource, func(sw []fleet.Software) []fleet.SoftwareVulnerability {
+			return matchSoftwareToOSV(sw, artifact)
+		}, collectVulns, logger)
+	case "rhel":
+		return AnalyzeRHEL(ctx, ds, ver, vulnPath, collectVulns, logger, date)
+	default:
 		return nil, ErrUnsupportedPlatform
 	}
-
-	artifact, err := loadOSVArtifact(ctx, ver, vulnPath, logger, date)
-	if err != nil {
-		return nil, fmt.Errorf("loading OSV artifact: %w", err)
-	}
-
-	return analyzeOSV(ctx, ds, ver, fleet.UbuntuOSVSource, func(sw []fleet.Software) []fleet.SoftwareVulnerability {
-		return matchSoftwareToOSV(sw, artifact)
-	}, collectVulns, logger)
 }
 
 // findLatestOSVArtifactForVersion finds the most recent OSV artifact for a specific Ubuntu version

@@ -119,7 +119,7 @@ func IsEnrolledInMDM() (bool, string, error) {
 
 	parts := bytes.SplitN(lines[2], []byte(":"), 2)
 	if len(parts) < 2 {
-		return false, "", fmt.Errorf("splitting profiles output to get MDM server URL: %w", err)
+		return false, "", fmt.Errorf("splitting profiles output to get MDM server URL: unexpected format: %q", string(lines[2]))
 	}
 
 	enrollmentURL := string(bytes.TrimSpace(parts[1]))

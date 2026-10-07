@@ -23,5 +23,5 @@ func (svc *Service) ListVulnerabilities(ctx context.Context, opt fleet.VulnListO
 
 func (svc *Service) Vulnerability(ctx context.Context, cve string, teamID *uint, useCVSScores bool) (vuln *fleet.VulnerabilityWithMetadata,
 	known bool, err error) {
-	return svc.Service.Vulnerability(ctx, cve, teamID, true)
+	return svc.Service.Vulnerability(ctx, cve, teamID, useCVSScores)
 }
