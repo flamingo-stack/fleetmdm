@@ -68,7 +68,7 @@ func Up_20250331042354(tx *sql.Tx) error {
 	`)
 
 	if err != nil {
-		return fmt.Errorf("failed to create scim tables: %s", err)
+		return fmt.Errorf("failed to create scim tables: %w", err)
 	}
 
 	return nil

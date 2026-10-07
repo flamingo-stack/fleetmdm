@@ -106,7 +106,7 @@ func (s *sesSender) sendMail(ctx context.Context, e fleet.Email, msg []byte) err
 		SourceArn:    &s.sourceArn,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("send raw email via ses: %w", err)
 	}
 	return nil
 }

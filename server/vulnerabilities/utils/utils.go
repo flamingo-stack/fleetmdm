@@ -138,7 +138,7 @@ func LatestFile(fileName string, dir string) (string, error) {
 	case errors.Is(err, fs.ErrNotExist):
 		files, err := os.ReadDir(dir)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("read dir %q: %w", dir, err)
 		}
 
 		prefix := strings.Split(fileName, "-")[0]

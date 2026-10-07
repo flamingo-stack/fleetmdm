@@ -88,8 +88,7 @@ func run(cfg runCfg) error {
 
 	csr, err := loadOrMakeCSR(cfg.csrPath, opts)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return fmt.Errorf("load or make CSR: %w", err)
 	}
 
 	var self *x509.Certificate
@@ -256,7 +255,7 @@ func validateFlags(keyPath, serverURL, caFingerprint string, useKeyEnciphermentS
 	}
 	_, err := url.Parse(serverURL)
 	if err != nil {
-		return fmt.Errorf("invalid server-url flag parameter %s", err)
+		return fmt.Errorf("invalid server-url flag parameter: %w", err)
 	}
 	if caFingerprint != "" && useKeyEnciphermentSelector {
 		return errors.New("ca-fingerprint and key-encipherment-selector can't be used at the same time")

@@ -1,6 +1,7 @@
 package commonmdm
 
 import (
+	"fmt"
 	"net/url"
 	"path"
 )
@@ -10,7 +11,7 @@ import (
 func ResolveURL(serverURL, relPath string, cleanQuery bool) (string, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parsing server URL: %w", err)
 	}
 	u.Path = path.Join(u.Path, relPath)
 	if cleanQuery {

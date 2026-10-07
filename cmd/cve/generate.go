@@ -153,7 +153,7 @@ func downloadLatestGitHubAsset(dbDir, fileName string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("get last mod start date: %w", fmt.Errorf("unexpected status code %d", resp.StatusCode))
+		return fmt.Errorf("unexpected status code %d fetching %s", resp.StatusCode, fileName)
 	}
 
 	lastModStartDate, err := io.ReadAll(resp.Body)
@@ -271,10 +271,25 @@ func gunzipFileToDisk(filename, dbpath string) error {
 
 	// Using a maxBytes limit to prevent decompression bombs: gosec G110
 	maxBytes := 200 * 1024 * 1024 // 200MB
-	_, err = io.CopyN(out, gz, int64(maxBytes))
+	written, err := io.CopyN(out, gz, int64(maxBytes))
 	if err != nil && err != io.EOF {
 		msg := fmt.Sprintf("error copying file %s: %v", f.Name(), err)
 		panic(msg)
+	}
+	if written == int64(maxBytes) {
+		// Check if there is more data beyond the limit, which means the file
+		// exceeds maxBytes and was not fully copied; fail rather than silently
+		// truncate.
+		extra := make([]byte, 1)
+		n, peekErr := gz.Read(extra)
+		if n > 0 {
+			msg := fmt.Sprintf("error copying file %s: exceeds maximum allowed size of %d bytes", f.Name(), maxBytes)
+			panic(msg)
+		}
+		if peekErr != nil && peekErr != io.EOF {
+			msg := fmt.Sprintf("error copying file %s: %v", f.Name(), peekErr)
+			panic(msg)
+		}
 	}
 
 	return nil
