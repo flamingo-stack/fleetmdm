@@ -135,6 +135,14 @@ func IDP(ctx context.Context, c Client, log Logger, opt IDPOptions) Result {
 		return res
 	}
 
+	// If some users failed to seed in step 1, len(seeded) < len(users), and
+	// the round-robin below would silently remap host[i] to a different
+	// identity than intended. Warn loudly so this is visible rather than
+	// silently producing non-reproducible assignments.
+	if len(seeded) != len(users) {
+		log.Printf("idp: warning: only %d of %d users were fully seeded (mdm_idp_accounts + scim_users); host round-robin assignment below will use the reduced set of %d identities, so host→user mappings may differ from a full run", len(seeded), len(users), len(seeded))
+	}
+
 	// 2. Assign hosts (round-robin) to both linkage tables using the paired
 	// identities from step 1.
 	if len(hosts) == 0 && opt.HostCount > 0 {

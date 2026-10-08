@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -eu
 
-sudo security authorizationdb read system.preferences > /tmp/system.preferences.plist
-defaults write /tmp/system.preferences.plist shared -bool false
-sudo security authorizationdb write system.preferences < /tmp/system.preferences.plist
+TMP_PLIST=$(mktemp -t system.preferences)
+trap 'rm -f "$TMP_PLIST"' EXIT
+sudo security authorizationdb read system.preferences > "$TMP_PLIST"
+defaults write "$TMP_PLIST" shared -bool false
+sudo security authorizationdb write system.preferences < "$TMP_PLIST"
+

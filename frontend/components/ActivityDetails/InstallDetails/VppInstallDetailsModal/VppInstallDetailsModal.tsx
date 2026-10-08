@@ -107,6 +107,32 @@ export const getStatusMessage = ({
     displayStatus
   );
 
+  // Fleet failed the install BEFORE sending it to the device (e.g. the
+  // managed app configuration references a Fleet variable that can't be
+  // resolved for this host). The backend records this with a failure reason
+  // on the activity — no MDM command was ever enqueued, so there is no
+  // command result to show. This actor-driven pre-flight failure message
+  // must take precedence over the "override with installed" branch below,
+  // since a stale/previously-installed version on the host shouldn't mask a
+  // real configuration error. Render the actor-driven status sentence per
+  // Figma ("<Actor> failed to install <App> on <Host>.") and leave the
+  // reason text to the Details section the modal renders below.
+  if (displayStatus === "failed_install" && failureReason) {
+    let actor = "Fleet";
+    if (selfService) {
+      actor = "End user";
+    } else if (!fleetInitiated && actorFullName) {
+      actor = actorFullName;
+    }
+    return (
+      <>
+        <b>{actor}</b> failed to install <b>{appName}</b>
+        {!isMyDevicePage && <> on {formattedHost}</>}
+        {displayTimestamp && <> {displayTimestamp}</>}.
+      </>
+    );
+  }
+
   // Treat failed_install / failed_uninstall with installed versions as installed
   // as the host still reports installed versions (4.82 #31663)
   const overrideFailureWithInstalled =
@@ -156,29 +182,6 @@ export const getStatusMessage = ({
         {!isMyDevicePage && <> on {formattedHost}</>} was acknowledged but the
         installation has not been verified. To re-check, select <b>Refetch</b>
         {!isMyDevicePage && " for this host"}.
-      </>
-    );
-  }
-
-  // Fleet failed the install BEFORE sending it to the device (e.g. the
-  // managed app configuration references a Fleet variable that can't be
-  // resolved for this host). The backend records this with a failure reason
-  // on the activity — no MDM command was ever enqueued, so there is no
-  // command result to show. Render the actor-driven status sentence per Figma
-  // ("<Actor> failed to install <App> on <Host>.") and leave the reason text
-  // to the Details section the modal renders below.
-  if (displayStatus === "failed_install" && failureReason) {
-    let actor = "Fleet";
-    if (selfService) {
-      actor = "End user";
-    } else if (!fleetInitiated && actorFullName) {
-      actor = actorFullName;
-    }
-    return (
-      <>
-        <b>{actor}</b> failed to install <b>{appName}</b>
-        {!isMyDevicePage && <> on {formattedHost}</>}
-        {displayTimestamp && <> {displayTimestamp}</>}.
       </>
     );
   }
@@ -446,8 +449,12 @@ export const VppInstallDetailsModal = ({
   const displayStatus = fleetInstallStatus ?? "installed";
 
   // Treat failed_install / failed_uninstall with installed versions as installed
+  // Note: this must not apply when failureReason is set, since a pre-flight
+  // Fleet failure must always take precedence over a stale "installed"
+  // override (see getStatusMessage).
   const overrideFailedMessageWithInstalledMessage =
     canOverrideFailureWithInstalled &&
+    !failureReason &&
     ["failed_install", "failed_uninstall"].includes(displayStatus || "");
 
   const commandUpdatedAt = vppCommandResult?.updated_at;

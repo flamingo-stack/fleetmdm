@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useCallback } from "react";
-import { AxiosError, AxiosResponse } from "axios";
+import { AxiosError } from "axios";
 import { useQuery } from "react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { isBefore } from "date-fns";
@@ -274,12 +274,18 @@ const App = ({ children, location }: IAppProps): JSX.Element => {
     // @ts-ignore
     console.error(error);
 
-    const overlayError = error as AxiosResponse;
-    if (overlayError.status === 403 || overlayError.status === 402) {
+    // react-error-boundary can pass either a native Error, a thrown Axios
+    // error object (with the HTTP status nested under `response.status`), or
+    // some other thrown value. Check both shapes, consistent with the
+    // android_enterprise query error handling above.
+    const overlayError = error as AxiosError;
+    const statusCode = overlayError?.response?.status ?? overlayError?.status;
+
+    if (statusCode === 403 || statusCode === 402) {
       return <Fleet403 />;
     }
 
-    if (overlayError.status === 404) {
+    if (statusCode === 404) {
       return <Fleet404 />;
     }
 
