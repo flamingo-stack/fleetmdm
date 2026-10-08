@@ -31,7 +31,8 @@ func Up_20241125150614(tx *sql.Tx) error {
 
 	mdm, ok := config["mdm"]
 	if !ok {
-		return errors.New("missing mdm section")
+		mdm = map[string]interface{}{}
+		config["mdm"] = mdm
 	}
 	mdmMap, ok := mdm.(map[string]interface{})
 	if !ok {

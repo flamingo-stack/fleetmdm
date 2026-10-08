@@ -22,7 +22,7 @@ func Up_20240314085226(tx *sql.Tx) error {
 		event JSON NOT NULL,
 
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP NOT NULL NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
 		UNIQUE KEY idx_one_calendar_event_per_email (email)
 	) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
@@ -30,6 +30,11 @@ func Up_20240314085226(tx *sql.Tx) error {
 		return fmt.Errorf("create calendar_events table: %w", err)
 	}
 
+	// Note: host_id intentionally does not have a foreign key constraint to the
+	// hosts table. Hosts can be deleted and re-enrolled (churn/replacement), and
+	// host_calendar_events rows referencing a deleted host_id are cleaned up by
+	// application logic rather than a DB-level cascade, to avoid tying calendar
+	// event bookkeeping lifecycle directly to host deletion.
 	if _, err := tx.Exec(`
 	CREATE TABLE IF NOT EXISTS host_calendar_events (
 		id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -38,7 +43,7 @@ func Up_20240314085226(tx *sql.Tx) error {
 		webhook_status TINYINT NOT NULL,
 
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP NOT NULL NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
 		UNIQUE KEY idx_one_calendar_event_per_host (host_id),
 		FOREIGN KEY (calendar_event_id) REFERENCES calendar_events(id) ON DELETE CASCADE

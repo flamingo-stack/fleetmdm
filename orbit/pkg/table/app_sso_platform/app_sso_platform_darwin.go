@@ -232,7 +232,7 @@ func parseAppSSOPlatformCommandOutput(output []byte, expectedExtensionIdentifier
 	}
 	realm, ok := realm_.(string)
 	if !ok {
-		return nil, fmt.Errorf("unexpected type for \"realm\" key in \"kerberosStatus\": %T", err)
+		return nil, fmt.Errorf("unexpected type for \"realm\" key in \"kerberosStatus\": %T", realm_)
 	}
 	upn_, ok := userConfig.KerberosStatus[0]["upn"]
 	if !ok {

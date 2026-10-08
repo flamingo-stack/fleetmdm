@@ -38,7 +38,7 @@ export const generateGroupsValues = (endUsers: IHostEndUser[]) => {
     return [];
   }
 
-  return endUser.idp_groups.sort((a, b) => {
+  return [...endUser.idp_groups].sort((a, b) => {
     return a.localeCompare(b);
   });
 };
@@ -106,3 +106,4 @@ export const generateGroupsTipContent = (endUsers: IHostEndUser[]) => {
 
   return null;
 };
+

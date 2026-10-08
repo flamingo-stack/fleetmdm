@@ -60,7 +60,7 @@ func incrementalMigrationStep(count getTotalCountFn, execute executeWithProgress
 
 		// Every five seconds, echo the % progress of the executor
 		// Since we output once the migration step is complete, we need an extra channel to indicate when both the step
-		// and the "step complete" output are com0plete
+		// and the "step complete" output are complete
 		stepComplete := make(chan struct{})
 		outputComplete := make(chan struct{})
 		go func() {
@@ -83,10 +83,12 @@ func incrementalMigrationStep(count getTotalCountFn, execute executeWithProgress
 			}
 		}()
 
-		err = execute(tx, func() {
-			atomicCurrent.Add(1)
-		})
-		close(stepComplete)
+		func() {
+			defer close(stepComplete)
+			err = execute(tx, func() {
+				atomicCurrent.Add(1)
+			})
+		}()
 		<-outputComplete // Wait for the goroutine to complete
 		return err
 	}
@@ -258,3 +260,4 @@ func updateAppConfigJSON(tx *sql.Tx, fn func(config *fleet.AppConfig) error) err
 
 	return nil
 }
+

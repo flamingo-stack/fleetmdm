@@ -178,7 +178,7 @@ const SoftwareVulnerabilities = ({
         };
 
         // Handle 400 response which is an invalid CVE format
-        if (error.status === 400) {
+        if (error.response?.status === 400) {
           if (
             error?.data?.errors &&
             error.data.errors[0].reason.includes(
@@ -198,7 +198,7 @@ const SoftwareVulnerabilities = ({
           }
 
           // Handle 404 response which is BE validated CVE string but not a known CVE
-        } else if (error.status === 404) {
+        } else if (error.response?.status === 404) {
           if (
             error?.data?.errors &&
             (error.data.errors[0].reason.includes("This is not a known CVE.") ||
@@ -234,7 +234,7 @@ const SoftwareVulnerabilities = ({
     if (isExactMatchQuery) {
       refetchExactMatch();
     }
-  }, [queryParams.exploit, isExactMatchQuery]);
+  }, [queryParams.exploit, isExactMatchQuery, refetchExactMatch]);
 
   // !tableData is used to show the Spinner only on the first render.
   // This prevents the Spinner from flashing on every data refresh, noticable
