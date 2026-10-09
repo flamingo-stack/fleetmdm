@@ -1059,3 +1059,49 @@ func TestCachedFMANamesByIdentifier(t *testing.T) {
 	require.Equal(t, "VS Code Updated", names5["com.microsoft.VSCode"])
 	require.True(t, mockedDS.GetFMANamesByIdentifierFuncInvoked)
 }
+
+// OPENFRAME(mysql-multitenancy): the AppConfig cache key must carry the request's tenant team
+// pin, so one tenant's cached config is never served to another in a shared multi-tenant
+// process. Unpinned requests keep the historical constant key (upstream behavior).
+func TestOpenframeCachedAppConfigPerTeam(t *testing.T) {
+	t.Parallel()
+
+	mockedDS := new(mock.Store)
+	ds := New(mockedDS)
+
+	configsByTeam := map[uint]*fleet.AppConfig{
+		1: {OrgInfo: fleet.OrgInfo{OrgName: "tenant-one"}},
+		2: {OrgInfo: fleet.OrgInfo{OrgName: "tenant-two"}},
+	}
+	mockedDS.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) {
+		teamID, ok := fleet.OpenframeTeamID(ctx)
+		require.True(t, ok)
+		return configsByTeam[teamID], nil
+	}
+
+	ctxA := fleet.NewOpenframeTeamContext(context.Background(), 1)
+	ctxB := fleet.NewOpenframeTeamContext(context.Background(), 2)
+
+	// Prime tenant 1's cache, then read tenant 2: the cache must MISS (different key) and
+	// return tenant 2's config, not tenant 1's.
+	acA, err := ds.AppConfig(ctxA)
+	require.NoError(t, err)
+	require.Equal(t, "tenant-one", acA.OrgInfo.OrgName)
+
+	acB, err := ds.AppConfig(ctxB)
+	require.NoError(t, err)
+	require.Equal(t, "tenant-two", acB.OrgInfo.OrgName, "tenant 2 must never see tenant 1's cached config")
+
+	// Both now cached under their own keys: repeat reads don't hit the datastore.
+	mockedDS.AppConfigFuncInvoked = false
+	acA2, err := ds.AppConfig(ctxA)
+	require.NoError(t, err)
+	require.Equal(t, "tenant-one", acA2.OrgInfo.OrgName)
+	acB2, err := ds.AppConfig(ctxB)
+	require.NoError(t, err)
+	require.Equal(t, "tenant-two", acB2.OrgInfo.OrgName)
+	require.False(t, mockedDS.AppConfigFuncInvoked)
+
+	// An unpinned ctx uses the historical constant key.
+	require.Equal(t, appConfigKey, openframeAppConfigKey(context.Background()))
+}

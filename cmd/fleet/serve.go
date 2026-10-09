@@ -157,6 +157,15 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		applyDevFlags(&config)
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): validate the multitenancy configuration — with
+	// FLEET_OPENFRAME_MULTI_TENANCY_ENABLED on, a pinned process (tenant UUID/team id) and an
+	// unpinned shared-mode process are both valid, but a set-yet-unparsable team pin refuses to
+	// boot so a typo cannot silently change the isolation mode.
+	if err := fleet.ValidateOpenframeMultitenancy(); err != nil {
+		initFatal(err, "validating OpenFrame multitenancy configuration")
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	license, err := initLicense(&config, devLicense, devExpiredLicense)
 	if err != nil {
 		initFatal(
@@ -262,6 +271,26 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 	if evalMigrationStatus(migrationStatus, dev_mode.IsEnabled, config.Upgrades.AllowMissingMigrations) {
 		os.Exit(1)
 	}
+
+	// >>> OPENFRAME(mysql-multitenancy): pinned mode — resolve the Flamingo tenant UUID to its
+	// Fleet team id (create-if-absent via the teams.openframe_tenant_uuid bridge) and pin the
+	// process. The pin is then read by fleet.OpenframeTeamID everywhere the datastore fences scope
+	// by team. In shared mode there is no process pin: every request is pinned individually by the
+	// tenant middleware / host auth / enroll secret. Runs only under
+	// FLEET_OPENFRAME_MULTI_TENANCY_ENABLED; requires the openframe migrations to be applied (prepare db).
+	if fleet.IsOpenframeMultitenancy() {
+		if tenantUUID, ok := fleet.OpenframeTenantUUID(); ok {
+			teamID, err := mds.EnsureOpenframeTeamID(cmd.Context(), tenantUUID)
+			if err != nil {
+				initFatal(err, "resolving OpenFrame tenant team from FLEET_OPENFRAME_TENANT_UUID")
+			}
+			fleet.SetOpenframeTeamID(teamID)
+			logger.InfoContext(cmd.Context(), "OpenFrame multitenancy: pinned mode", "tenant_uuid", tenantUUID, "team_id", teamID)
+		} else if fleet.IsOpenframeSharedMode() {
+			logger.InfoContext(cmd.Context(), "OpenFrame multitenancy: shared per-request mode (no process pin)")
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	if initializingDS, ok := ds.(initializer); ok {
 		if err := initializingDS.Initialize(); err != nil {
@@ -730,6 +759,14 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		}
 		apiHandler = service.WithMDMSSOCallbackRedirect(svc, logger, apiHandler)
 
+		// >>> OPENFRAME(mysql-multitenancy): shared mode — pin every control-plane API request
+		// to the tenant team named by the gateway-injected X-Tenant-Id header (fail closed for
+		// non-agent paths without it). Returns apiHandler unchanged unless the process runs in
+		// shared per-request mode. Must come after apiendpoints.Validate, which type-asserts the
+		// raw *mux.Router.
+		apiHandler = service.WithOpenframeTenant(mds, logger, apiHandler)
+		// <<< OPENFRAME(mysql-multitenancy)
+
 		if serveCSP {
 			// Only injecting this if CSP is turned on since the default security headers add some overhead to each request
 			apiHandler = endpointer.BrowserSecurityHeadersHandler(serveCSP, apiHandler)
@@ -752,6 +789,14 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 					logger.DebugContext(ctx, "Skipping starter library application in Primo mode")
 					return nil
 				}
+				// >>> OPENFRAME(setup-no-starter-library): the starter library's declarative gitops
+				// apply erases the agent options POST /setup just wrote — openframe/docs/agent-options.md
+			} else if fleet.IsOpenframeMultitenancy() {
+				applyStarterLibrary = func(ctx context.Context, _, _ string) error {
+					logger.InfoContext(ctx, "Skipping starter library application under OpenFrame multitenancy")
+					return nil
+				}
+				// <<< OPENFRAME(setup-no-starter-library)
 			} else {
 				applyStarterLibrary = func(ctx context.Context, serverURL, token string) error {
 					return service.ApplyStarterLibrary(ctx, serverURL, token, logger, func(args []string) error {

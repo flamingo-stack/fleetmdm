@@ -1584,6 +1584,11 @@ type ListQueryOptions struct {
 	// Return queries that are scheduled to run on this platform. One of "macos",
 	// "windows", or "linux"
 	Platform *string
+	// >>> OPENFRAME(managed-queries): opt-in to include platform-owned queries — openframe/docs/managed-queries.md
+	// IncludeOpenframeManaged, when true, disables the openframe_managed exclusion so the listing
+	// returns platform-owned queries too. Default false keeps them hidden.
+	IncludeOpenframeManaged bool
+	// <<< OPENFRAME(managed-queries)
 }
 
 // ListHostReportsOptions defines options for listing reports (queries) associated with a host.

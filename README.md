@@ -1,58 +1,100 @@
 <div align="center">
   <picture>
-    <!-- Dark theme -->
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/flamingo-stack/openframe-oss-tenant/blob/d82f21ba18735dac29eb0f3be5d3edf661bb0060/docs/assets/logo-openframe-full-dark-bg.png">
-    <!-- Light theme -->
-    <source media="(prefers-color-scheme: light)" srcset="https://github.com/flamingo-stack/openframe-oss-tenant/blob/d82f21ba18735dac29eb0f3be5d3edf661bb0060/docs/assets/logo-openframe-full-light-bg.png">
-    <!-- Default / fallback -->
-    <img alt="OpenFrame Logo" src="docs/assets/logo-openframe-full-light-bg.png" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="https://shdrojejslhgnojzkzak.supabase.co/storage/v1/object/public/public/doc-orchestrator/logos/1771371901777-lc3cse-logo-openframe-full-dark-bg.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://shdrojejslhgnojzkzak.supabase.co/storage/v1/object/public/public/doc-orchestrator/logos/1771372526604-k3y1w-logo-openframe-full-light-bg.png">
+    <img alt="OpenFrame" src="https://shdrojejslhgnojzkzak.supabase.co/storage/v1/object/public/public/doc-orchestrator/logos/1771372526604-k3y1w-logo-openframe-full-light-bg.png" width="400">
   </picture>
-
-  <h1>Fleet</h1>
-
-  <p><b>Device & software fleet management that integrates with OpenFrame — provisioning, updates, inventory, policy, and remote actions across Windows, macOS, and Linux.</b></p>
-
-  <p>
-    <a href="LICENSE.md">
-      <img alt="License"
-           src="https://img.shields.io/badge/LICENSE-FLAMINGO%20AI%20Unified%20v1.0-%23FFC109?style=for-the-badge&labelColor=white">
-    </a>
-    <a href="https://www.flamingo.run/knowledge-base">
-      <img alt="Docs"
-           src="https://img.shields.io/badge/DOCS-flamingo.run-%23FFC109?style=for-the-badge&labelColor=white">
-    </a>
-    <a href="https://www.openmsp.ai/">
-      <img alt="Community"
-           src="https://img.shields.io/badge/COMMUNITY-openmsp.ai-%23FFC109?style=for-the-badge&labelColor=white">
-    </a>
-  </p>
 </div>
 
----
+<p align="center">
+  <a href="LICENSE.md"><img alt="License" src="https://img.shields.io/badge/LICENSE-FLAMINGO%20AI%20Unified%20v1.0-%23FFC109?style=for-the-badge&labelColor=white"></a>
+</p>
 
-## Quick Links
-- [Highlights](#highlights)
-- [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [OpenFrame Integration](#openframe-integration)
-  - [Architecture](#architecture)
-- [Security](#security)
-- [Contributing](#contributing)
-- [License](#license)  
+# FleetMDM
+
+**FleetMDM** is Flamingo's integration of the open-source [Fleet](https://fleetdm.com) device management platform into the [OpenFrame](https://openframe.ai) unified MSP ecosystem. It provides cross-platform device management for Windows, macOS, Linux, ChromeOS, iOS/iPadOS, and Android — powered by osquery agents, MDM protocols, and AI-driven automation from Flamingo.
+
+This repository (`flamingo-stack/fleetmdm`) is the Flamingo fork of Fleet, extending it with OpenFrame multitenancy, streaming analytics (Kafka → Pinot), and Flamingo AI capabilities.
 
 ---
 
-## Highlights
+## Features
 
-- Cross-platform device management (Windows, macOS, Linux)  
-- Zero-touch provisioning (bootstrap scripts / enrollment tokens)  
-- Inventory & health (hardware, OS, software, services)  
-- Policy engine (baseline hardening, schedule, constraints)  
-- Software catalog & updates (install, pin, rollback)  
-- Remote actions (scripts, services, processes, files)  
-- Compliance reporting (drift, remediation, audit)  
-- Integrations: OpenFrame Gateway, Stream (Kafka), Analytics (Pinot), Auth (OIDC/JWT)  
-- API-first (REST/GraphQL gateway), web console (operator UI)
+- **Cross-platform MDM** — Manage macOS, iOS/iPadOS, Windows, Linux, Android, and ChromeOS from a single console
+- **osquery-powered inventory** — Real-time SQL queries against device hardware, software, users, and processes
+- **Policy automation** — Define compliance policies; automatically install software or run scripts on failure
+- **Vulnerability management** — Continuous CVE scanning via NVD, OVAL, MSRC, and OSV with CVSS scoring and exploit probability
+- **Software management** — Install, update, and uninstall packages at scale; Fleet-maintained app catalog (Homebrew, WinGet)
+- **GitOps support** — Manage all Fleet configuration as code with `fleetctl gitops`
+- **Self-service portal** — End users can install approved software without opening IT tickets
+- **OpenFrame streaming** — Publish inventory and compliance events to Kafka → Cassandra → Pinot Analytics
+- **SCIM provisioning** — Sync users and groups from your IdP automatically
+- **OpenTelemetry observability** — Distributed tracing, metrics, and logs via SigNoz/OTLP
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph Endpoints
+        WinAgent["Windows Agent (fleetd/orbit)"]
+        MacAgent["macOS Agent (fleetd/orbit)"]
+        LinuxAgent["Linux Agent (fleetd/orbit)"]
+        ChromeExt["Chrome Extension (fleetd-chrome)"]
+        iOSiPad["iOS / iPadOS (MDM)"]
+        AndroidDev["Android Enterprise"]
+    end
+
+    subgraph OpenFrame
+        GW["OpenFrame Gateway"]
+        FleetAPI["Fleet Server API (Go)"]
+        subgraph Storage
+            MySQL["MySQL 8.0 (inventory, policy, jobs)"]
+            Redis["Redis 6+ (cache, live query, pub/sub)"]
+            S3["S3 / GCS (software installers, carves)"]
+        end
+        subgraph Streaming
+            Stream["OpenFrame Stream"]
+            Kafka["Kafka"]
+            Pinot["Pinot Analytics"]
+        end
+        WebUI["React 18 / TypeScript Web Console"]
+        ArgoCD["ArgoCD GitOps"]
+    end
+
+    WinAgent -- "enroll / inventory / policy" --> GW
+    MacAgent -- "enroll / inventory / policy" --> GW
+    LinuxAgent -- "enroll / inventory / policy" --> GW
+    ChromeExt -- "inventory" --> GW
+    iOSiPad -- "APNs / DEP" --> GW
+    AndroidDev -- "Android Enterprise API" --> GW
+    GW --> FleetAPI
+    FleetAPI --> MySQL
+    FleetAPI --> Redis
+    FleetAPI --> S3
+    FleetAPI --> Stream
+    Stream --> Kafka
+    Kafka --> Pinot
+    WebUI --> FleetAPI
+    ArgoCD --> FleetAPI
+```
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Backend server | Go 1.22+, Cobra, go-kit, sqlx, NanoMDM |
+| Frontend | React 18, TypeScript 6, Webpack 5, react-query |
+| Primary database | MySQL 8.0 |
+| Caching / pub-sub | Redis 6+ |
+| File storage | S3 / GCS |
+| Streaming analytics | Kafka, Apache Pinot |
+| Observability | OpenTelemetry, SigNoz |
+| GitOps | ArgoCD, `fleetctl gitops` |
+| Container orchestration | Docker Compose (dev), Kubernetes (prod) |
 
 ---
 
@@ -60,229 +102,109 @@
 
 ### Prerequisites
 
-**For OpenFrame Integration:**
-- Kubernetes cluster with kubectl
-- Telepresence (for local access to services)
+- [Go](https://go.dev/dl/) 1.22+
+- [Node.js](https://nodejs.org/) 18 LTS and npm 9+
+- [Docker](https://docs.docker.com/get-docker/) 20.10+ and Docker Compose v2
+
+### 5-Minute Setup
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/flamingo-stack/fleetmdm.git
+cd fleetmdm
+
+# 2. Start MySQL and Redis
+docker compose up -d mysql redis
+
+# 3. Install frontend dependencies
+npm install
+
+# 4. Build the web console
+npm run build
+
+# 5. Run database migrations
+go run ./cmd/fleet/... prepare db \
+  --mysql_address=localhost:3306 \
+  --mysql_database=fleet \
+  --mysql_username=fleet \
+  --mysql_password=insecure
+
+# 6. Start the Fleet server
+go run ./cmd/fleet/... serve \
+  --dev \
+  --dev_license \
+  --mysql_address=localhost:3306 \
+  --mysql_database=fleet \
+  --mysql_username=fleet \
+  --mysql_password=insecure \
+  --redis_address=localhost:6379 \
+  --server_tls=false \
+  --logging_debug
+```
+
+Open [http://localhost:8080](http://localhost:8080) and complete the setup wizard to create your admin account.
+
+> **Apple Silicon:** Set `FLEET_MYSQL_IMAGE=arm64v8/mysql:oracle` and `FLEET_MYSQL_PLATFORM=linux/arm64/v8` before starting Docker Compose.
 
 ---
 
-### OpenFrame Integration
+## Core Components
 
-Fleet is integrated into OpenFrame as **FleetMDM** for device management via osquery.
-
----
-
-### Architecture
-
-Fleet runs as a service in OpenFrame and talks to endpoint agents via Gateway. Events flow into Stream and Analytics for compliance and dashboards.
-
-```mermaid
-flowchart LR
-    
-    A[Agent] -- inventory/metrics --> G[OpenFrame Gateway]
-    A <-- actions/policy/enroll --> G
-    
-    subgraph OpenFrame
-      G --> API[(Fleet Service API)]
-      API --> DB[(DB: inventory, policy, jobs)]
-      DB --> S[Stream]
-      S --> K[(Kafka)]
-      K --> C[(Cassandra)]
-      K --> P[(Pinot Analytics)]
-    end
-
-    style A fill:#FFC109,stroke:#1A1A1A,color:#FAFAFA
-    style G fill:#666666,stroke:#1A1A1A,color:#FAFAFA
-    style API fill:#212121,stroke:#1A1A1A,color:#FAFAFA
-```
-
-#### Deployment
-
-FleetMDM is deployed automatically as part of OpenFrame via ArgoCD app-of-apps pattern:
-
-```yaml
-# manifests/apps/values.yaml
-apps:
-  fleetmdm: 
-    enabled: true
-    project: integrated-tools
-    namespace: integrated-tools
-    syncWave: "3"  # Deployed after microservices
-```
-
-**Deploy complete OpenFrame stack:**
-```bash
-# Install with ArgoCD
-helm install openframe ./manifests/app-of-apps
-
-# FleetMDM will be deployed automatically along with:
-# - MySQL and Redis (StatefulSets)
-# - Fleet server with auto-initialization
-# - Tool registration job for OpenFrame integration
-```
-
-**Access Fleet UI:**
-```bash
-# Connect to integrated-tools namespace
-telepresence connect --namespace integrated-tools
-
-# Fleet UI will be available at:
-# http://fleetmdm-server.integrated-tools.svc.cluster.local:8070
-```
-
-**For standalone FleetMDM deployment** (not recommended - registration job will fail):
-```bash
-helm install fleetmdm ./manifests/integrated-tools/fleetmdm
-```
-
-#### Integration Features
-
-**Auto-initialization:**
-- Creates organization "OpenFrame"  
-- Sets up admin and API-only users
-- Persists API token at `/etc/fleet/api_token.txt`
-- Registers as integrated tool in OpenFrame
-
-**Configuration** is managed via Helm chart at `manifests/integrated-tools/fleetmdm/`.
-
-#### Using Fleet Java SDK
-
-```java
-import com.openframe.sdk.fleetmdm.FleetMdmClient;
-import com.openframe.sdk.fleetmdm.model.Host;
-import com.openframe.sdk.fleetmdm.model.HostSearchRequest;
-import com.openframe.sdk.fleetmdm.model.QueryResult;
-
-@Service
-public class DeviceManagementService {
-    
-    private final FleetMdmClient fleetClient;
-    
-    public DeviceManagementService() {
-        this.fleetClient = new FleetMdmClient(
-            "http://fleetmdm-server.integrated-tools.svc.cluster.local:8070",
-            System.getenv("FLEET_API_TOKEN")
-        );
-    }
-    
-    // Get device by ID
-    public Host getDevice(long hostId) throws IOException, InterruptedException {
-        return fleetClient.getHostById(hostId);
-    }
-    
-    // Search devices
-    public List<Host> searchDevices(String query) throws IOException, InterruptedException {
-        return fleetClient.searchHosts(query);
-    }
-    
-    // Search with pagination
-    public List<Host> searchDevicesPaginated(String query, int page, int perPage) 
-            throws IOException, InterruptedException {
-        HostSearchRequest request = new HostSearchRequest(query, page, perPage);
-        return fleetClient.searchHosts(request);
-    }
-    
-    // Execute osquery on specific device
-    public QueryResult executeQuery(long hostId, String sqlQuery) 
-            throws IOException, InterruptedException {
-        return fleetClient.runQuery(hostId, sqlQuery);
-    }
-    
-    // Example: Get Chrome extensions on device
-    public QueryResult getChromeExtensions(long hostId) 
-            throws IOException, InterruptedException {
-        String query = "SELECT * FROM chrome_extensions";
-        return fleetClient.runQuery(hostId, query);
-    }
-    
-    // Get enroll secret for new devices
-    public String getEnrollSecret() throws IOException, InterruptedException {
-        return fleetClient.getEnrollSecret();
-    }
-}
-```
-
-#### Troubleshooting
-
-**Check deployment status:**
-```bash
-kubectl get pods -n integrated-tools -l app=fleetmdm-server
-kubectl logs -f fleetmdm-server-0 -n integrated-tools
-```
-
-**Access Fleet services via Telepresence:**
-```bash
-# Connect to cluster
-telepresence connect --namespace integrated-tools
-
-# Access Fleet UI directly
-open http://fleetmdm-server.integrated-tools.svc.cluster.local:8070
-
-# Access MySQL for debugging
-mysql -h fleetmdm-mysql-0.fleetmdm-mysql.integrated-tools.svc.cluster.local -u fleet -p
-
-# Access Redis for debugging
-redis-cli -h fleetmdm-redis.integrated-tools.svc.cluster.local
-```
-
-**Get API token manually:**
-```bash
-kubectl exec -it fleetmdm-server-0 -n integrated-tools -- \
-  cat /etc/fleet/api_token.txt
-```
-
-**Reinitialize if needed:**
-```bash
-kubectl delete pod fleetmdm-server-0 -n integrated-tools
-# StatefulSet will recreate automatically
-```
-
-For complete documentation:
-- [Fleet Official Docs](https://fleetdm.com/docs)
-- [osquery Tables Reference](https://osquery.io/schema)
-- [OpenFrame Java SDK](https://github.com/flamingo-stack/openframe-oss-lib/tree/main/sdk/fleetmdm)
+| Component | Location | Language | Responsibility |
+|---|---|---|---|
+| Fleet Server | `cmd/fleet/` | Go | Main API server, cron scheduling, MDM orchestration |
+| Web Console | `frontend/` | React 18 / TypeScript | Operator UI for managing devices, policies, and software |
+| `fleetd` / orbit agent | `orbit/` | Go | Device-side agent: enrollment, config polling, script execution |
+| MySQL Datastore | `server/datastore/mysql/` | Go | Primary persistence for inventory, policies, software |
+| Redis Layer | `server/datastore/redis/` | Go | Caching, live query pub/sub, host status tracking |
+| Apple MDM Stack | `server/mdm/apple/` | Go | APNs push, nanoMDM, DEP, SCEP, VPP |
+| Microsoft MDM | `server/mdm/microsoft/` | Go | Windows MDM protocol, Entra/Azure integration |
+| Android MDM | `server/mdm/android/` | Go | Android Enterprise service |
+| Vulnerability Engine | `server/vulnerabilities/` | Go | NVD/CVE/MSRC/OSV/OVAL scanning |
+| OpenFrame Integration | `server/service/openframe/` | Go | Multitenancy auth manager, token rotation |
+| `fleetctl` CLI | `cmd/fleetctl/` | Go | GitOps apply, query runner, package builder |
+| Chrome Extension | `ee/fleetd-chrome/` | TypeScript | Browser-based osquery agent for ChromeOS |
 
 ---
 
-## Security
+## CLI Reference
 
-- All communication is encrypted with TLS 1.2
-- OAuth2/OIDC → JWT for authentication (via Gateway)  
-- Minimal client-side privileges required  
-- Safeguards against unsafe command execution  
+```bash
+# Start the server
+fleet serve --dev --dev_license
 
-Found a vulnerability? Email **security@flamingo.run** instead of opening a public issue.  
+# Run database migrations
+fleet prepare db
+
+# Apply GitOps configuration
+fleetctl gitops --config fleet.yml --fleet-url http://localhost:8080
+
+# Run a live query across hosts
+fleetctl query --hosts hostname --query "SELECT * FROM os_version"
+
+# Build an enrollment package
+fleetctl package --type=pkg --fleet-url=http://localhost:8080 --enroll-secret=<secret>
+```
 
 ---
 
-## Contributing
+## Documentation
 
-We welcome PRs! Please follow these guidelines:  
-- Use branching strategy: `feature/...`, `bugfix/...`  
-- Add descriptions to the **CHANGELOG**  
-- Follow consistent Go code style (`go fmt`, linters)  
-- Keep documentation updated in `docs/`  
+📚 See the [Documentation](./docs/README.md) for comprehensive guides including getting started tutorials, development setup, architecture deep-dives, security guidelines, and testing instructions.
 
 ---
 
-## License
+## Community & Support
 
-This project is licensed under the **Flamingo Unified License v1.0** ([LICENSE.md](LICENSE.md)).
+- **Community Slack:** [openmsp.ai](https://www.openmsp.ai/) — join `#fleetmdm`
+- **Flamingo Platform:** [flamingo.run](https://flamingo.run)
+- **OpenFrame:** [openframe.ai](https://openframe.ai)
+- **Security issues:** security@flamingo.run
+- **Fleet official docs:** [fleetdm.com/docs](https://fleetdm.com/docs)
+- **osquery tables reference:** [osquery.io/schema](https://osquery.io/schema)
 
 ---
 
 <div align="center">
-  <table border="0" cellspacing="0" cellpadding="0">
-    <tr>
-      <td align="center">
-        Built with 💛 by the <a href="https://www.flamingo.run/about"><b>Flamingo</b></a> team
-      </td>
-      <td align="center">
-        <a href="https://www.flamingo.run">Website</a> • 
-        <a href="https://www.flamingo.run/knowledge-base">Knowledge Base</a> • 
-        <a href="https://www.linkedin.com/showcase/openframemsp/about/">LinkedIn</a> • 
-        <a href="https://www.openmsp.ai/">Community</a>
-      </td>
-    </tr>
-  </table>
+  Built with 💛 by the <a href="https://www.flamingo.run/about"><b>Flamingo</b></a> team
 </div>

@@ -99,6 +99,14 @@ func osqueryHeaderPreAuth(svc fleet.Service, logger *slog.Logger) func(http.Hand
 			// authenticatedHost passthrough after kithttp.ServerBefore runs.
 			ctx = hostctx.NewContext(ctx, host)
 			ctx = ctxerr.AddErrorContextProvider(ctx, &hostctx.HostAttributeProvider{Host: host})
+
+			// >>> OPENFRAME(mysql-multitenancy): shared mode — pin to the host's team (fail closed).
+			if ctx, err = openframePinHostTeam(ctx, host); err != nil {
+				encodeError(ctx, err, w)
+				return
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
+
 			ctx = osqueryauth.NewPreAuthedContext(ctx)
 			if debug {
 				ctx = osqueryauth.NewDebugContext(ctx)
@@ -167,6 +175,14 @@ func osqueryCarveBlockHeaderPreAuth(svc fleet.Service, logger *slog.Logger) func
 			// carve-ownership check.
 			ctx = hostctx.NewContext(ctx, host)
 			ctx = ctxerr.AddErrorContextProvider(ctx, &hostctx.HostAttributeProvider{Host: host})
+
+			// >>> OPENFRAME(mysql-multitenancy): shared mode — pin to the host's team (fail closed).
+			if ctx, err = openframePinHostTeam(ctx, host); err != nil {
+				encodeError(ctx, err, w)
+				return
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

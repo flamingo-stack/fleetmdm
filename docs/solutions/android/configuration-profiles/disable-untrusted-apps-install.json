@@ -1,5 +1,0 @@
-{
-  "advancedSecurityOverrides": {
-    "untrustedAppsPolicy": "DISALLOW_INSTALL"
-  }
-}

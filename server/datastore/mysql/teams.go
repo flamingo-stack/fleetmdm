@@ -98,6 +98,14 @@ func teamDB(ctx context.Context, q sqlx.QueryerContext, tid uint, withExtras boo
 		}, nil
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): scope every team-by-id read (TeamLite/Team, and the
+	// service-layer TeamLite guard used by ListTeamPolicies) to the pinned tenant; a foreign team
+	// is NotFound. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok && tid != teamID {
+		return nil, ctxerr.Wrap(ctx, notFound("Fleet").WithID(tid))
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	stmt := `
 		SELECT ` + teamColumns + ` FROM teams
 			WHERE id = ?
@@ -421,6 +429,13 @@ WHERE
 // ListTeams lists all teams with limit, sort and offset passed in with
 // fleet.ListOptions
 func (ds *Datastore) ListTeams(ctx context.Context, filter fleet.TeamFilter, opt fleet.ListOptions) ([]*fleet.Team, error) {
+	whereClause := ds.whereFilterTeams(filter, "t")
+	// >>> OPENFRAME(mysql-multitenancy): a tenant may only list its own team on a shared DB. The
+	// pinned id is a trusted uint (not user input), inlined like the team filter above. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		whereClause = fmt.Sprintf("(%s) AND t.id = %d", whereClause, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	query := fmt.Sprintf(`
 			SELECT `+teamColumns+`,
 				(SELECT count(*) FROM user_teams WHERE team_id = t.id) AS user_count,
@@ -428,7 +443,7 @@ func (ds *Datastore) ListTeams(ctx context.Context, filter fleet.TeamFilter, opt
 			FROM teams t
 			WHERE %s
 		`,
-		ds.whereFilterTeams(filter, "t"),
+		whereClause,
 	)
 	// We must normalize the name for full Unicode support (Unicode equivalence).
 	matchQuery := norm.NFC.String(opt.MatchQuery)

@@ -4,7 +4,7 @@ metadata:
   {{- if or .Values.serviceAccountAnnotations .Values.gke.workloadIdentityEmail }}
   annotations:
   {{- with .Values.serviceAccountAnnotations}}
-  {{ toYaml . | trim | indent 2}}
+  {{- toYaml . | trim | nindent 4 }}
   {{- end }}
   {{- if ne .Values.gke.workloadIdentityEmail "" }}
     iam.gke.io/gcp-service-account: {{ .Values.gke.workloadIdentityEmail }}

@@ -660,6 +660,21 @@ func deleteHosts(ctx context.Context, tx sqlx.ExtContext, hostIDs []uint) error 
 	if len(hostIDs) == 0 {
 		return nil
 	}
+
+	// >>> OPENFRAME(mysql-multitenancy): fence deletion to the pinned team; the child-ref deletes
+	// below are keyed by host_id, so filtering the host set first keeps them in-tenant.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		owned, err := filterHostIDsByTeam(ctx, tx, hostIDs, teamID)
+		if err != nil {
+			return err
+		}
+		if len(owned) == 0 {
+			return nil
+		}
+		hostIDs = owned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	delHostRef := func(tx sqlx.ExtContext, table string) error {
 		stmt, args, err := sqlx.In(fmt.Sprintf("DELETE FROM %s WHERE host_id IN (?)", table), hostIDs)
 		if err != nil {
@@ -868,11 +883,16 @@ FROM
   LEFT JOIN host_issues ON h.id = host_issues.host_id
   ` + hostMDMJoin + `
 WHERE
-  h.id = ?
-LIMIT
-  1
-`
+  h.id = ?`
 	args := []interface{}{id}
+	// >>> OPENFRAME(mysql-multitenancy): scope by-id read to the pinned team; a foreign id matches
+	// no rows → the NotFound path → 404.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sqlStatement += " AND h.team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	sqlStatement += " LIMIT 1"
 
 	var host fleet.Host
 	err := sqlx.GetContext(ctx, ds.reader(ctx), &host, sqlStatement, args...)
@@ -1534,6 +1554,14 @@ func (ds *Datastore) applyHostFilters(
 	sqlStmt, whereParams = filterHostsByVulnerability(sqlStmt, opt, whereParams)
 	sqlStmt, whereParams = filterHostsByProfileStatus(sqlStmt, opt, whereParams)
 	sqlStmt, whereParams = hostSearchLike(sqlStmt, whereParams, opt.MatchQuery, append(hostSearchColumns, "display_name")...)
+
+	// >>> OPENFRAME(mysql-multitenancy): scope host list/count to the pinned team (the caller's
+	// role-based TeamFilter is not a tenant boundary).
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sqlStmt += " AND h.team_id = ?"
+		whereParams = append(whereParams, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	sqlStmt, whereParams, err = appendListOptionsWithCursorToSQLSecure(sqlStmt, whereParams, &opt.ListOptions, hostAllowedOrderKeys)
 	if err != nil {
@@ -2289,14 +2317,27 @@ func matchHostDuringEnrollment(
 		nodeKeyColumn = "orbit_node_key"
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): scope enrollment matching to the pinned team so a host in
+	// another tenant with the same serial/uuid/identifier can't be hijacked.
+	teamFilter := ""
+	var teamArg interface{}
+	if id, ok := fleet.OpenframeTeamID(ctx); ok {
+		teamFilter = " AND team_id = ?"
+		teamArg = id
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	if osqueryID != "" || uuid != "" {
-		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, 1 priority, platform FROM hosts WHERE osquery_host_id = ?)`, nodeKeyColumn))
+		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, 1 priority, platform FROM hosts WHERE osquery_host_id = ?%s)`, nodeKeyColumn, teamFilter))
 		osqueryHostID := osqueryID
 		if osqueryID == "" {
 			// special-case, if there's no osquery identifier, use the uuid
 			osqueryHostID = uuid
 		}
 		args = append(args, osqueryHostID)
+		if teamFilter != "" {
+			args = append(args, teamArg)
+		}
 	}
 
 	// We want to prevent orbit enrolling with an osquery identifier to be matched with the serial number.
@@ -2307,8 +2348,11 @@ func matchHostDuringEnrollment(
 		if query.Len() > 0 {
 			_, _ = query.WriteString(" UNION ")
 		}
-		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, 2 priority, platform FROM hosts WHERE hardware_serial = ? AND (platform = 'darwin' OR platform = 'ios' OR platform = 'ipados') ORDER BY id LIMIT 1)`, nodeKeyColumn))
+		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, 2 priority, platform FROM hosts WHERE hardware_serial = ? AND (platform = 'darwin' OR platform = 'ios' OR platform = 'ipados')%s ORDER BY id LIMIT 1)`, nodeKeyColumn, teamFilter))
 		args = append(args, serial)
+		if teamFilter != "" {
+			args = append(args, teamArg)
+		}
 	}
 
 	// Android-specific UUID match
@@ -2316,8 +2360,11 @@ func matchHostDuringEnrollment(
 		if query.Len() > 0 {
 			_, _ = query.WriteString(" UNION ")
 		}
-		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, 3 priority, platform FROM hosts WHERE uuid = ? AND (platform = 'android') ORDER BY id LIMIT 1)`, nodeKeyColumn))
+		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, 3 priority, platform FROM hosts WHERE uuid = ? AND (platform = 'android')%s ORDER BY id LIMIT 1)`, nodeKeyColumn, teamFilter))
 		args = append(args, uuid)
+		if teamFilter != "" {
+			args = append(args, teamArg)
+		}
 	}
 
 	if err := sqlx.SelectContext(ctx, q, &rows, query.String(), args...); err != nil {
@@ -3282,7 +3329,17 @@ func (ds *Datastore) HostIDsByIdentifier(ctx context.Context, filter fleet.TeamF
 		`, ds.whereFilterHostsByTeams(filter, "hosts"),
 	)
 
-	sql, args, err := sqlx.In(sqlStatement, hostIdentifiers, hostIdentifiers, hostIdentifiers, hostIdentifiers, hostIdentifiers)
+	inArgs := []interface{}{hostIdentifiers, hostIdentifiers, hostIdentifiers, hostIdentifiers, hostIdentifiers}
+	// >>> OPENFRAME(mysql-multitenancy): the TeamFilter above is the caller's ROLE filter (a
+	// global-admin token passes everything) — it is not a tenant boundary. Scope identifier→id
+	// resolution (used to target labels and live-query campaigns) to the pinned team; foreign
+	// identifiers simply resolve to nothing. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sqlStatement += " AND hosts.team_id = ?"
+		inArgs = append(inArgs, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	sql, args, err := sqlx.In(sqlStatement, inArgs...)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "building query to get host IDs by identifier")
 	}
@@ -3378,7 +3435,17 @@ SELECT
 FROM hosts
 WHERE id IN (?)`
 
-	stmt, args, err := sqlx.In(stmt, ids)
+	inArgs := []interface{}{ids}
+	// >>> OPENFRAME(mysql-multitenancy): scope the batch by-id read to the pinned team — its
+	// callers are validation reads on otherwise-fenced paths (delete-hosts, hosts_include_any),
+	// where an unfenced read is a cross-tenant host-id existence oracle. Foreign ids drop out and
+	// read as nonexistent. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += ` AND team_id = ?`
+		inArgs = append(inArgs, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	stmt, args, err := sqlx.In(stmt, inArgs...)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "building query to select hosts by id")
 	}
@@ -3448,11 +3515,18 @@ func (ds *Datastore) HostByIdentifier(ctx context.Context, identifier string) (*
     LEFT JOIN host_updates hu ON (h.id = hu.host_id)
     LEFT JOIN host_disks hd ON hd.host_id = h.id
     ` + hostMDMJoin + `
-    WHERE ? IN (h.hostname, h.osquery_host_id, h.node_key, h.uuid, h.hardware_serial)
-    LIMIT 1
-	`
+    WHERE ? IN (h.hostname, h.osquery_host_id, h.node_key, h.uuid, h.hardware_serial)`
+	args := []interface{}{identifier}
+	// >>> OPENFRAME(mysql-multitenancy): scope identifier lookup to the pinned team (uuid/hostname/
+	// serial aren't globally unique) → foreign match gives NotFound.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += " AND h.team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	stmt += " LIMIT 1"
 	host := &fleet.Host{}
-	err := sqlx.GetContext(ctx, ds.reader(ctx), host, stmt, identifier)
+	err := sqlx.GetContext(ctx, ds.reader(ctx), host, stmt, args...)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ctxerr.Wrap(ctx, notFound("Host").WithName(identifier))
@@ -3470,6 +3544,12 @@ func (ds *Datastore) HostByIdentifier(ctx context.Context, identifier string) (*
 }
 
 // HostByUUID matches only against the uuid column.
+//
+// OPENFRAME(mysql-multitenancy): deliberately NOT team-fenced. Its only caller is
+// AuthenticateIDeviceByURL — a PRE-authentication identity lookup (like VerifyEnrollSecret): at
+// call time no tenant is pinned yet; the host it resolves is what establishes the request's team
+// (openframePinHostTeam fails closed afterwards if the host has no team). A pin-based fence here
+// would be a no-op on that path.
 func (ds *Datastore) HostByUUID(ctx context.Context, uuid string) (*fleet.Host, error) {
 	stmt := `
     SELECT
@@ -3556,6 +3636,24 @@ func (ds *Datastore) AddHostsToTeam(ctx context.Context, params *fleet.AddHostsT
 	if len(hostIDs) == 0 {
 		return nil
 	}
+
+	// >>> OPENFRAME(mysql-multitenancy): a tenant may only move its own hosts, and only within its
+	// own team — refuse a foreign or "No team" target and drop any hosts it does not own, so a
+	// shared-DB "transfer" cannot move hosts across tenants. No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		if teamID == nil || *teamID != pinned {
+			return ctxerr.Wrap(ctx, notFound("Fleet").WithMessage("target team is not accessible"))
+		}
+		owned, err := filterHostIDsByTeam(ctx, ds.writer(ctx), hostIDs, pinned)
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "scoping hosts to team for transfer")
+		}
+		hostIDs = owned
+		if len(hostIDs) == 0 {
+			return nil
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	for i := 0; i < len(hostIDs); i += batchSize {
 		start := i
@@ -5625,6 +5723,13 @@ ON DUPLICATE KEY UPDATE
 //
 // If the host doesn't exist, a NotFoundError is returned.
 func (ds *Datastore) HostLite(ctx context.Context, id uint) (*fleet.Host, error) {
+	// >>> OPENFRAME(mysql-multitenancy): scope by-id host read to this process's team so a tenant
+	// cannot read another tenant's host by id; a foreign id matches no rows → NotFound (404).
+	whereExprs := []goqu.Expression{goqu.I("id").Eq(id)}
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		whereExprs = append(whereExprs, goqu.I("team_id").Eq(teamID))
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	query, args, err := dialect.From(goqu.I("hosts")).Select(
 		"id",
 		"created_at",
@@ -5648,7 +5753,7 @@ func (ds *Datastore) HostLite(ctx context.Context, id uint) (*fleet.Host, error)
 		"policy_updated_at",
 		"refetch_requested",
 		"refetch_critical_queries_until",
-	).Where(goqu.I("id").Eq(id)).ToSQL()
+	).Where(whereExprs...).ToSQL()
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "sql build")
 	}
@@ -6515,8 +6620,17 @@ func (ds *Datastore) loadHostLite(ctx context.Context, id *uint, identifier *str
 		whereClause = "WHERE id = ?"
 		arg = id
 	}
+	queryArgs := []interface{}{arg}
+	// >>> OPENFRAME(mysql-multitenancy): scope the lite host lookup (by id or by free-form
+	// identifier — hostname/uuid/serial are guessable) to this process's pinned team so a tenant
+	// cannot resolve another tenant's host on a shared DB; foreign → NotFound. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		whereClause += " AND h.team_id = ?"
+		queryArgs = append(queryArgs, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	host := &fleet.HostLite{}
-	err := sqlx.GetContext(ctx, ds.reader(ctx), host, fmt.Sprintf(stmt, whereClause), arg)
+	err := sqlx.GetContext(ctx, ds.reader(ctx), host, fmt.Sprintf(stmt, whereClause), queryArgs...)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			if identifier != nil {

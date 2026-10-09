@@ -46,7 +46,7 @@ rm -f vet.err
 # 3. Marker presence: if a merge silently dropped fork code, its OPENFRAME markers
 #    vanish too. A slug dropping to zero is a red flag worth a human look.
 step "OPENFRAME marker presence (dropped-fork-code detector)"
-for slug in host-assignments redis-key-prefix redis-seed-nodes query-results-ttl osquery-host-id agent-openframe-mode migration-race; do
+for slug in host-assignments managed-policies managed-queries redis-key-prefix redis-seed-nodes query-results-ttl osquery-host-id agent-openframe-mode agent-json-content-type agent-skip-setup-experience agent-host-info-diagnostics migration-race; do
   n=$(grep -rIl "OPENFRAME($slug" --include='*.go' --include='*.yaml' --include='*.tpl' . 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" -gt 0 ]; then ok "$slug — present in $n file(s)"; else bad "$slug — NO markers found (fork code may have been dropped in the merge)"; fi
 done
@@ -59,7 +59,8 @@ step "OPENFRAME marker coverage (every fork-token line is marked)"
 if python3 - <<'PYEOF'
 import re, subprocess, sys
 SKIP=('/migrations/openframe/','/service/openframe/','/migrations/tables/','/migrations/data/','/server/mock/','/node_modules/','/vendor/','/tools/fleet-mcp/')
-SKIP_EXACT={'server/fleet/openframe.go','server/datastore/redis/keyprefix.go'}
+SKIP_EXACT={'server/fleet/openframe.go','server/datastore/redis/keyprefix.go',
+ 'server/datastore/mysql/openframe.go','server/service/openframe_middleware.go'}
 TOKENS=re.compile('|'.join([
  r'[Oo]pen[Ff]rame',r'FLEET_OPENFRAME_MODE',r'ORBIT_OPENFRAME',r'policy_hosts',r'query_hosts',
  r'HostsIncludeAny',r'\bHostIdent\b',r'loadHostsFor(Policies|Queries)',

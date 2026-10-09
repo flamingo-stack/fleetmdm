@@ -35,6 +35,14 @@ const (
 var querySearchColumns = []string{"q.name"}
 
 func (ds *Datastore) ApplyQueries(ctx context.Context, authorID uint, queries []*fleet.Query, queriesToDiscardResults map[uint]struct{}) error {
+	// >>> OPENFRAME(mysql-multitenancy): a tenant's GitOps apply may only affect its own team — pin
+	// every applied query to this process's team. No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		for _, q := range queries {
+			q.TeamID = &pinned
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	if err := ds.applyQueriesInTx(ctx, authorID, queries); err != nil {
 		return ctxerr.Wrap(ctx, err, "apply queries in tx")
 	}
@@ -201,6 +209,16 @@ func (ds *Datastore) QueryByName(
 	teamID *uint,
 	name string,
 ) (*fleet.Query, error) {
+	// >>> OPENFRAME(mysql-multitenancy): scope name lookup to this process's team — reject another
+	// tenant's team (the URL fleet_id is not a boundary) and redirect "global" to the pinned team.
+	// No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		if teamID != nil && *teamID != pinned {
+			return nil, ctxerr.Wrap(ctx, notFound("Query").WithName(name))
+		}
+		teamID = &pinned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	stmt := `
 		SELECT
 			id,
@@ -258,6 +276,13 @@ func (ds *Datastore) NewQuery(
 	query.CreatedAt = now
 	query.UpdatedAt = now
 
+	// >>> OPENFRAME(mysql-multitenancy): pin new queries to this process's team so they are not
+	// created as shared "global" queries (team_id NULL) on a shared DB. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		query.TeamID = &teamID
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	queryStatement := `
 		INSERT INTO queries (
 			name,
@@ -274,9 +299,10 @@ func (ds *Datastore) NewQuery(
 			automations_enabled,
 			logging_type,
 			discard_data,
+			openframe_managed,
 			created_at,
 			updated_at
-		) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+		) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
 	`
 
 	result, err := ds.writer(ctx).ExecContext(
@@ -296,6 +322,7 @@ func (ds *Datastore) NewQuery(
 		query.AutomationsEnabled,
 		query.Logging,
 		query.DiscardData,
+		query.OpenframeManaged,
 		query.CreatedAt,
 		query.UpdatedAt,
 	)
@@ -449,6 +476,15 @@ func (ds *Datastore) SaveQuery(ctx context.Context, q *fleet.Query, shouldDiscar
 		return ctxerr.Wrap(ctx, err)
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): verify (on the primary — read before write) the query
+	// belongs to the pinned team; a foreign/global query returns NotFound. No-op when unpinned.
+	if _, ok := fleet.OpenframeTeamID(ctx); ok {
+		if _, qErr := query(ctx, ds.writer(ctx), q.ID); qErr != nil {
+			return ctxerr.Wrap(ctx, qErr, "verify query team before save")
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	updateSQL := `
 		UPDATE queries
 		SET name                = ?,
@@ -464,7 +500,8 @@ func (ds *Datastore) SaveQuery(ctx context.Context, q *fleet.Query, shouldDiscar
 			schedule_interval   = ?,
 			automations_enabled = ?,
 			logging_type        = ?,
-			discard_data		= ?
+			discard_data		= ?,
+			openframe_managed   = ?
 		WHERE id = ?
 	`
 	result, err := ds.writer(ctx).ExecContext(
@@ -484,6 +521,7 @@ func (ds *Datastore) SaveQuery(ctx context.Context, q *fleet.Query, shouldDiscar
 		q.AutomationsEnabled,
 		q.Logging,
 		q.DiscardData,
+		q.OpenframeManaged,
 		q.ID)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "updating query")
@@ -527,6 +565,14 @@ func (ds *Datastore) deleteQueryResults(ctx context.Context, queryID uint) error
 }
 
 func (ds *Datastore) DeleteQuery(ctx context.Context, teamID *uint, name string) error {
+	// >>> OPENFRAME(mysql-multitenancy): a "global" delete-by-name (teamID nil) on a shared DB would
+	// match another tenant's query; scope it to this process's pinned team. No-op when unpinned.
+	if teamID == nil {
+		if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+			teamID = &pinned
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	selectStmt := "SELECT id FROM queries WHERE name = ?"
 	args := []interface{}{name}
 	whereClause := " AND team_id_char = ''"
@@ -573,6 +619,20 @@ func (ds *Datastore) DeleteQuery(ctx context.Context, teamID *uint, name string)
 // DeleteQueries deletes the existing query objects with the provided IDs. The
 // number of deleted queries is returned along with any error.
 func (ds *Datastore) DeleteQueries(ctx context.Context, ids []uint) (uint, error) {
+	// >>> OPENFRAME(mysql-multitenancy): fence by-id query deletion to this process's team — drop
+	// foreign ids so a tenant cannot delete another tenant's query on a shared DB. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		owned, err := filterQueryIDsByTeam(ctx, ds.writer(ctx), ids, teamID)
+		if err != nil {
+			return 0, err
+		}
+		if len(owned) == 0 {
+			return 0, nil
+		}
+		ids = owned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	deleted, err := ds.deleteEntities(ctx, queriesTable, ids)
 	if err != nil {
 		return deleted, err
@@ -619,8 +679,24 @@ func (ds *Datastore) deleteQueryStats(ctx context.Context, queryIDs []uint) {
 	}
 }
 
+// >>> OPENFRAME(managed-queries): platform-owned queries kept out of the query list endpoints — openframe/docs/managed-queries.md
+
+// openframeManagedQueryExclusion is the WHERE fragment that keeps OpenFrame-managed queries out of
+// a listing; the listing below aliases the table as `q`. Unconditional: `prepare db` always runs
+// MigrateOpenframe, so the column exists in every deployment — FLEET_OPENFRAME_MODE gates
+// behavior, not schema.
+const openframeManagedQueryExclusion = ` AND q.openframe_managed = 0`
+
+// <<< OPENFRAME(managed-queries)
+
 // >>> OPENFRAME(host-assignments): per-host query assignment CRUD backed by the query_hosts table — openframe/docs/architecture-host-assignments.md
 func (ds *Datastore) AddQueryHosts(ctx context.Context, queryID uint, hostIDs []uint) (uint, error) {
+	// OPENFRAME(mysql-multitenancy): verify the query is in this process's team and drop foreign
+	// host ids (no-op when unpinned).
+	hostIDs, err := ds.openframeScopeQueryHosts(ctx, queryID, hostIDs)
+	if err != nil {
+		return 0, err
+	}
 	if len(hostIDs) == 0 {
 		return 0, nil
 	}
@@ -640,6 +716,12 @@ func (ds *Datastore) AddQueryHosts(ctx context.Context, queryID uint, hostIDs []
 }
 
 func (ds *Datastore) RemoveQueryHosts(ctx context.Context, queryID uint, hostIDs []uint) (uint, error) {
+	// OPENFRAME(mysql-multitenancy): verify the query is in this process's team and drop foreign
+	// host ids (no-op when unpinned).
+	hostIDs, err := ds.openframeScopeQueryHosts(ctx, queryID, hostIDs)
+	if err != nil {
+		return 0, err
+	}
 	if len(hostIDs) == 0 {
 		return 0, nil
 	}
@@ -656,6 +738,12 @@ func (ds *Datastore) RemoveQueryHosts(ctx context.Context, queryID uint, hostIDs
 }
 
 func (ds *Datastore) ReplaceQueryHosts(ctx context.Context, queryID uint, hostIDs []uint) error {
+	// OPENFRAME(mysql-multitenancy): verify the query is in this process's team and drop foreign
+	// host ids before replacing (no-op when unpinned).
+	hostIDs, err := ds.openframeScopeQueryHosts(ctx, queryID, hostIDs)
+	if err != nil {
+		return err
+	}
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM query_hosts WHERE query_id = ?`, queryID); err != nil {
 			return ctxerr.Wrap(ctx, err, "delete all query hosts")
@@ -683,6 +771,11 @@ var queryHostsAllowedOrderKeys = common_mysql.OrderKeyAllowlist{
 }
 
 func (ds *Datastore) ListQueryHosts(ctx context.Context, queryID uint, opts fleet.ListOptions) ([]fleet.HostIdent, *fleet.PaginationMetadata, error) {
+	// OPENFRAME(mysql-multitenancy): a foreign query's assigned hosts must not be listable; verify
+	// the query is in this process's team (no-op when unpinned).
+	if _, err := ds.openframeScopeQueryHosts(ctx, queryID, nil); err != nil {
+		return nil, nil, err
+	}
 	stmt := `
 		SELECT h.id, h.hostname
 		FROM query_hosts qh
@@ -736,6 +829,7 @@ func query(ctx context.Context, db sqlx.QueryerContext, id uint) (*fleet.Query, 
 			q.automations_enabled,
 			q.logging_type,
 			q.discard_data,
+			q.openframe_managed,
 			q.created_at,
 			q.updated_at,
 			q.discard_data,
@@ -753,8 +847,17 @@ func query(ctx context.Context, db sqlx.QueryerContext, id uint) (*fleet.Query, 
 			ON (ag.id = q.id AND ag.global_stats = ? AND ag.type = ?)
 		WHERE q.id = ?
 	`
+	args := []interface{}{false, fleet.AggregatedStatsTypeScheduledQuery, id}
+	// >>> OPENFRAME(mysql-multitenancy): scope by-id (scheduled-)query reads to this process's team
+	// so a tenant cannot read another tenant's query by id on a shared DB; foreign (or global,
+	// pre-backfill) → NotFound. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sqlQuery += " AND q.team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	query := &fleet.Query{}
-	if err := sqlx.GetContext(ctx, db, query, sqlQuery, false, fleet.AggregatedStatsTypeScheduledQuery, id); err != nil {
+	if err := sqlx.GetContext(ctx, db, query, sqlQuery, args...); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ctxerr.Wrap(ctx, notFound("Report").WithID(id))
 		}
@@ -784,6 +887,13 @@ func query(ctx context.Context, db sqlx.QueryerContext, id uint) (*fleet.Query, 
 // determined by passed in fleet.ListOptions, count of total queries returned without limits, and
 // pagination metadata
 func (ds *Datastore) ListQueries(ctx context.Context, opt fleet.ListQueryOptions) (queries []*fleet.Query, total int, inherited int, metadata *fleet.PaginationMetadata, err error) {
+	// >>> OPENFRAME(mysql-multitenancy): scope query listing to this process's team and exclude
+	// inherited globals (other tenants' global queries) on a shared DB. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		opt.TeamID = &teamID
+		opt.MergeInherited = false
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	getQueriesStmt := `
 		SELECT
 			q.id,
@@ -800,6 +910,7 @@ func (ds *Datastore) ListQueries(ctx context.Context, opt fleet.ListQueryOptions
 			q.automations_enabled,
 			q.logging_type,
 			q.discard_data,
+			q.openframe_managed,
 			q.created_at,
 			q.updated_at,
 			COALESCE(u.name, '<deleted>') AS author_name,
@@ -816,6 +927,13 @@ func (ds *Datastore) ListQueries(ctx context.Context, opt fleet.ListQueryOptions
 
 	args := []interface{}{false, fleet.AggregatedStatsTypeScheduledQuery}
 	whereClauses := "WHERE saved = true"
+	// >>> OPENFRAME(managed-queries): drop platform-owned queries from this listing and from the
+	// count derived from it — openframe/docs/managed-queries.md. Opt-in callers (query sync,
+	// host auto-assign) pass IncludeOpenframeManaged to enumerate what OpenFrame owns.
+	if !opt.IncludeOpenframeManaged {
+		whereClauses += openframeManagedQueryExclusion
+	}
+	// <<< OPENFRAME(managed-queries)
 
 	switch {
 	case opt.TeamID != nil && opt.MergeInherited:

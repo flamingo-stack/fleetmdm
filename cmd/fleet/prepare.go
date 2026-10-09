@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/WatchBeam/clock"
 	"github.com/fleetdm/fleet/v4/server/config"
@@ -32,6 +33,13 @@ To setup Fleet infrastructure, use one of the available commands.
 	// Whether to show table stats before and after the migration
 	showTableStats := false
 
+	// >>> OPENFRAME(mysql-multitenancy): how long a `prepare db` run waits for a concurrent
+	// migration run against the same shared MySQL to finish before giving up. Generous because
+	// index builds on a large shared hosts table can take minutes; a K8s Job that fails here is
+	// retried by its backoff policy anyway.
+	const openframeMigrationLockWait = 15 * time.Minute
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	dbCmd := &cobra.Command{
 		Use:   "db",
 		Short: "Given correct database configurations, prepare the databases for use",
@@ -48,6 +56,19 @@ To setup Fleet infrastructure, use one of the available commands.
 			if err != nil {
 				initFatal(err, "creating db connection")
 			}
+
+			// >>> OPENFRAME(mysql-multitenancy): on a shared MySQL, serialize `prepare db`
+			// runs across clusters/jobs/replicas with a named MySQL lock — Fleet's goose has
+			// no advisory lock, so concurrent runs race on DDL. Held on a dedicated session
+			// (auto-released if the job dies). Flag-off runs are untouched.
+			if fleet.IsOpenframeMultitenancy() {
+				release, err := ds.AcquireOpenframeMigrationLock(cmd.Context(), openframeMigrationLockWait)
+				if err != nil {
+					initFatal(err, "acquiring openframe migration lock")
+				}
+				defer release()
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 
 			status, err := ds.MigrationStatus(cmd.Context())
 			if err != nil {

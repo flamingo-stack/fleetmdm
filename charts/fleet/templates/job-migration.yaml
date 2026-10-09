@@ -29,13 +29,22 @@ spec:
 
     spec:
       restartPolicy: Never
-      shareProcessNamespace: true
+      # >>> OPENFRAME(hardening): pod-level non-root context — openframe/docs/helm-chart.md
+      {{- with .Values.fleet.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # <<< OPENFRAME(hardening)
 
       # >>> OPENFRAME(helm): fork-added init container blocking migration until MySQL is reachable — openframe/docs/helm-chart.md
-      {{- if .Values.fleet.waitForMysql.enabled }}
+      {{- if and .Values.fleet.waitForMysql.enabled (not .Values.gke.cloudSQL.enableProxy) }}
       initContainers:
       - name: wait-for-mysql
         image: {{ .Values.fleet.waitForMysql.image | quote }}
+        {{- with .Values.fleet.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         command: ['sh', '-c', 'until nc -z -w 2 "$HOST" "$PORT"; do sleep 5; done']
         env:
           - name: HOST
@@ -58,7 +67,9 @@ spec:
           - |
             /usr/bin/fleet prepare db --no-prompt;
             {{- if .Values.gke.cloudSQL.enableProxy }}
-            sql_proxy_pid=$(pgrep cloud_sql_proxy) && kill -INT $sql_proxy_pid;
+            rc=$?;
+            timeout 10 sh -c 'until wget -q -Y off -T 2 -O- http://127.0.0.1:9091/quitquitquit; do sleep 1; done' || true;
+            exit $rc;
             {{- end }}
         image: "{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
         {{- with .Values.imagePullPolicy }}
@@ -102,6 +113,12 @@ spec:
           - name: FLEET_SERVER_KEY
             value: "/secrets/tls/{{ .Values.fleet.tls.keySecretKey }}"
           {{- end }}
+          # >>> OPENFRAME(mysql-multitenancy): with multitenancy on, `fleet prepare db`
+          # serializes concurrent migration runs against the shared MySQL via a named lock
+          # (GET_LOCK) — the flag must reach the migration Job, not only the server.
+          - name: FLEET_OPENFRAME_MULTI_TENANCY_ENABLED
+            value: {{ .Values.fleet.openframe.multiTenancy.enabled | quote }}
+          # <<< OPENFRAME(mysql-multitenancy)
           ## END FLEET SECTION
           ## BEGIN MYSQL SECTION
           - name: FLEET_MYSQL_HOST
@@ -156,27 +173,17 @@ spec:
             value: "{{ .Values.database.tls.serverName }}"
           {{- end }}
           ## END MYSQL SECTION
+        # >>> OPENFRAME(hardening): non-root, read-only rootfs — openframe/docs/helm-chart.md
+        {{- with .Values.fleet.securityContext }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            {{- if .Values.gke.cloudSQL.enableProxy }}
-            add:
-              - SYS_PTRACE
-            {{- else }}
-            drop: [ALL]
-            {{- end }}
-          privileged: false
-          readOnlyRootFilesystem: true
-          {{- if .Values.fleet.securityContext.runAsGroup }}
-          runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsUser }}
-          runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsNonRoot }}
-          runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-          {{- end }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        # <<< OPENFRAME(hardening)
         volumeMounts:
+          # >>> OPENFRAME(hardening): writable /tmp under the read-only rootfs — openframe/docs/helm-chart.md
+          - name: tmp
+            mountPath: /tmp
+          # <<< OPENFRAME(hardening)
           {{- if .Values.database.tls.enabled }}
           - name: mysql-tls
             readOnly: true
@@ -185,10 +192,16 @@ spec:
       {{- if .Values.gke.cloudSQL.enableProxy }}
       - name: cloudsql-proxy
         image: "{{ .Values.gke.cloudSQL.imageRepository }}:{{ .Values.gke.cloudSQL.imageTag }}"
-        command:
-        - "/cloud_sql_proxy"
-        - "-verbose={{ .Values.gke.cloudSQL.verbose}}"
-        - "-instances={{ .Values.gke.cloudSQL.instanceName }}=tcp:3306"
+        # >>> OPENFRAME(cloudsql-v2): v2 CLI + quitquitquit so the migration container can stop the sidecar — openframe/docs/helm-chart.md
+        args:
+        - "--port=3306"
+        - "--structured-logs"
+        - "--quitquitquit"
+        {{- if not .Values.gke.cloudSQL.verbose }}
+        - "--quiet"
+        {{- end }}
+        - "{{ required "gke.cloudSQL.instanceName is required when gke.cloudSQL.enableProxy is true" .Values.gke.cloudSQL.instanceName }}"
+        # <<< OPENFRAME(cloudsql-v2)
         resources:
           limits:
             cpu: 0.5 # 500Mhz
@@ -196,21 +209,12 @@ spec:
           requests:
             cpu: 0.1 # 100Mhz
             memory: 50Mi
+        # >>> OPENFRAME(hardening): proxy runs nonroot with a read-only rootfs — openframe/docs/helm-chart.md
+        {{- with .Values.gke.cloudSQL.securityContext }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: [ALL]
-          privileged: false
-          readOnlyRootFilesystem: true
-          {{- if .Values.fleet.securityContext.runAsGroup }}
-          runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsUser }}
-          runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsNonRoot }}
-          runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-          {{- end }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        # <<< OPENFRAME(hardening)
       {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -218,10 +222,16 @@ spec:
       {{- end }}
       serviceAccountName: fleet
       volumes:
+        # >>> OPENFRAME(hardening): writable /tmp under the read-only rootfs — openframe/docs/helm-chart.md
+        - name: tmp
+          emptyDir:
+        # <<< OPENFRAME(hardening)
         {{- if .Values.database.tls.enabled }}
         - name: mysql-tls
           secret:
-            secretName: "{{ .Values.database.secretName }}"
+            # >>> OPENFRAME(helm): the server CA rides in the same externally managed Secret as
+            secretName: "{{ default .Values.database.secretName .Values.database.existingSecret }}"
+            # <<< OPENFRAME(helm)
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

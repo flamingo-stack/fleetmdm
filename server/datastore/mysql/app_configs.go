@@ -35,6 +35,40 @@ func (ds *Datastore) GetCurrentTime(ctx context.Context) (time.Time, error) {
 	return now, nil
 }
 
+// >>> OPENFRAME(mysql-multitenancy): pick the app_config_json row a reader must use.
+// Tenant rows live at id = team id; id = 1 is the instance row. Pinned readers get their
+// tenant row; unpinned multitenant readers (crons, workers, boot) get the instance row —
+// upstream's bare `LIMIT 1` would hand them an arbitrary row. Non-multitenant keeps the
+// upstream statement byte-identical.
+const openframeGlobalAppConfigID uint = 1
+
+const (
+	openframeAppConfigSelectAny  = `SELECT json_value FROM app_config_json LIMIT 1`
+	openframeAppConfigSelectByID = `SELECT json_value FROM app_config_json WHERE id = ? LIMIT 1`
+)
+
+func openframeAppConfigSelectDecision(teamID uint, pinned, multitenancy bool) (string, []any) {
+	if pinned {
+		return openframeAppConfigSelectByID, []any{teamID}
+	}
+	if multitenancy {
+		return openframeAppConfigSelectByID, []any{openframeGlobalAppConfigID}
+	}
+	return openframeAppConfigSelectAny, nil
+}
+
+func openframeAppConfigSelect(ctx context.Context) (string, []any) {
+	teamID, pinned := fleet.OpenframeTeamID(ctx)
+	return openframeAppConfigSelectDecision(teamID, pinned, fleet.IsOpenframeMultitenancy())
+}
+
+func openframeAppConfigDefaultsOnMissing(ctx context.Context) bool {
+	_, pinned := fleet.OpenframeTeamID(ctx)
+	return pinned || fleet.IsOpenframeMultitenancy()
+}
+
+// <<< OPENFRAME(mysql-multitenancy)
+
 func (ds *Datastore) AppConfig(ctx context.Context) (*fleet.AppConfig, error) {
 	return appConfigDB(ctx, ds.reader(ctx))
 }
@@ -42,11 +76,24 @@ func (ds *Datastore) AppConfig(ctx context.Context) (*fleet.AppConfig, error) {
 func appConfigDB(ctx context.Context, q sqlx.QueryerContext) (*fleet.AppConfig, error) {
 	info := &fleet.AppConfig{}
 	var bytes []byte
-	err := sqlx.GetContext(ctx, q, &bytes, `SELECT json_value FROM app_config_json LIMIT 1`)
+
+	// >>> OPENFRAME(mysql-multitenancy): tenant row when pinned, instance row (id = 1) when
+	// unpinned under multitenancy — see openframeAppConfigSelect.
+	stmt, args := openframeAppConfigSelect(ctx)
+	// <<< OPENFRAME(mysql-multitenancy)
+
+	err := sqlx.GetContext(ctx, q, &bytes, stmt, args...)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, ctxerr.Wrap(ctx, err, "selecting app config")
 	}
 	if err == sql.ErrNoRows {
+		// >>> OPENFRAME(mysql-multitenancy): a multitenant reader may have no row yet (tenant
+		// predating config seeding, or an unseeded instance row) — serve the seeded defaults
+		// instead of a zero config. Non-multitenant keeps the upstream bare-config behavior.
+		if openframeAppConfigDefaultsOnMissing(ctx) {
+			return fleet.OpenframeDefaultAppConfig(), nil
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		return &fleet.AppConfig{}, nil
 	}
 
@@ -62,7 +109,12 @@ func appConfigDB(ctx context.Context, q sqlx.QueryerContext) (*fleet.AppConfig, 
 func (ds *Datastore) AppConfigUrls(ctx context.Context) (*fleet.AppConfigUrls, error) {
 	info := &fleet.AppConfigUrls{}
 	var bytes []byte
-	err := sqlx.GetContext(ctx, ds.reader(ctx), &bytes, `SELECT json_value FROM app_config_json LIMIT 1`)
+
+	// >>> OPENFRAME(mysql-multitenancy): same row selection as appConfigDB.
+	stmt, args := openframeAppConfigSelect(ctx)
+	// <<< OPENFRAME(mysql-multitenancy)
+
+	err := sqlx.GetContext(ctx, ds.reader(ctx), &bytes, stmt, args...)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, ctxerr.Wrap(ctx, err, "selecting app config urls")
 	}
@@ -84,10 +136,20 @@ func (ds *Datastore) SaveAppConfig(ctx context.Context, info *fleet.AppConfig) e
 			return ctxerr.Wrap(ctx, err, "marshaling config")
 		}
 
-		_, err = tx.ExecContext(ctx,
-			`INSERT INTO app_config_json(json_value) VALUES(?) ON DUPLICATE KEY UPDATE json_value = VALUES(json_value)`,
-			configBytes,
-		)
+		// >>> OPENFRAME(mysql-multitenancy): store this tenant's config under id = its team id
+		// so tenants don't overwrite a shared single config row.
+		if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO app_config_json(id, json_value) VALUES(?, ?) ON DUPLICATE KEY UPDATE json_value = VALUES(json_value)`,
+				teamID, configBytes,
+			)
+		} else {
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO app_config_json(json_value) VALUES(?) ON DUPLICATE KEY UPDATE json_value = VALUES(json_value)`,
+				configBytes,
+			)
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "insert app_config_json")
 		}
@@ -136,7 +198,17 @@ func (ds *Datastore) SetAndroidEnabledAndConfigured(ctx context.Context, configu
 
 func (ds *Datastore) VerifyEnrollSecret(ctx context.Context, secret string) (*fleet.EnrollSecret, error) {
 	var s fleet.EnrollSecret
-	err := sqlx.GetContext(ctx, ds.reader(ctx), &s, "SELECT team_id FROM enroll_secrets WHERE secret = ?", secret)
+	// >>> OPENFRAME(mysql-multitenancy): an agent may only enroll using THIS process's tenant secret.
+	// On a shared DB, reject a secret belonging to another team (or a pre-backfill global secret) so
+	// an agent can't enroll into the wrong tenant. No-op when unpinned.
+	stmt := "SELECT team_id FROM enroll_secrets WHERE secret = ?"
+	args := []interface{}{secret}
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += " AND team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	err := sqlx.GetContext(ctx, ds.reader(ctx), &s, stmt, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ctxerr.Wrap(ctx, notFound("EnrollSecret"), "no matching secret found")
@@ -170,6 +242,12 @@ func (ds *Datastore) IsEnrollSecretAvailable(ctx context.Context, secret string,
 }
 
 func (ds *Datastore) ApplyEnrollSecrets(ctx context.Context, teamID *uint, secrets []*fleet.EnrollSecret) error {
+	// >>> OPENFRAME(mysql-multitenancy): a per-tenant process manages only its own team's secrets;
+	// scope writes to the pinned team (global → pinned, foreign → pinned) on a shared DB. No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		teamID = &pinned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
 		return applyEnrollSecretsDB(ctx, tx, teamID, secrets)
 	})
@@ -248,6 +326,13 @@ func applyEnrollSecretsDB(ctx context.Context, q sqlx.ExtContext, teamID *uint, 
 }
 
 func (ds *Datastore) GetEnrollSecrets(ctx context.Context, teamID *uint) ([]*fleet.EnrollSecret, error) {
+	// >>> OPENFRAME(mysql-multitenancy): scope enroll-secret reads to this process's team (global →
+	// pinned, foreign → pinned) so a tenant cannot read another tenant's secrets on a shared DB.
+	// No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		teamID = &pinned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	return getEnrollSecretsDB(ctx, ds.reader(ctx), teamID)
 }
 

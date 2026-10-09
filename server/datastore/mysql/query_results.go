@@ -47,17 +47,32 @@ func (ds *Datastore) OverwriteQueryResultRows(ctx context.Context, rows []*fleet
 		}
 
 		// Insert the new rows
+		// >>> OPENFRAME(mysql-multitenancy): stamp the tenant team onto CDC-captured rows so the
+		// shared-DB Debezium pipeline can resolve the tenant per event — openframe/docs/mysql-multitenancy-feature.md.
+		// This path runs with an authenticated-host context, which is team-pinned whenever the
+		// multitenancy flag is on; unpinned (flag off) keeps the original statement byte-identical.
+		insertCols := "query_id, host_id, last_fetched, data"
+		rowShape := "(?, ?, ?, ?)"
+		teamID, teamPinned := fleet.OpenframeTeamID(ctx)
+		if teamPinned {
+			insertCols += ", team_id"
+			rowShape = "(?, ?, ?, ?, ?)"
+		}
 		valueStrings := make([]string, 0, len(rows))
-		valueArgs := make([]interface{}, 0, len(rows)*4)
+		valueArgs := make([]interface{}, 0, len(rows)*5)
 		for _, row := range rows {
-			valueStrings = append(valueStrings, "(?, ?, ?, ?)")
+			valueStrings = append(valueStrings, rowShape)
 			valueArgs = append(valueArgs, queryID, hostID, row.LastFetched, row.Data)
+			if teamPinned {
+				valueArgs = append(valueArgs, teamID)
+			}
 		}
 
 		//nolint:gosec // SQL query is constructed using constant strings
 		insertStmt := `
-		INSERT IGNORE INTO query_results (query_id, host_id, last_fetched, data) VALUES
+		INSERT IGNORE INTO query_results (` + insertCols + `) VALUES
 	` + strings.Join(valueStrings, ",")
+		// <<< OPENFRAME(mysql-multitenancy)
 
 		result, err = tx.ExecContext(ctx, insertStmt, valueArgs...)
 		if err != nil {

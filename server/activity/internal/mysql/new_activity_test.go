@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -9,6 +10,10 @@ import (
 	"github.com/fleetdm/fleet/v4/server/activity/api"
 	"github.com/fleetdm/fleet/v4/server/activity/internal/testutils"
 	"github.com/fleetdm/fleet/v4/server/activity/internal/types"
+	// >>> OPENFRAME(mysql-multitenancy)
+	"github.com/fleetdm/fleet/v4/server/datastore/mysql/migrations/openframe"
+	"github.com/fleetdm/fleet/v4/server/fleet"
+	// <<< OPENFRAME(mysql-multitenancy)
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +34,9 @@ func TestNewActivity(t *testing.T) {
 		{"HostAssociation", testNewActivityHostAssociation},
 		{"HostOnly", testNewActivityHostOnly},
 		{"DeletedUser", testNewActivityDeletedUser},
+		// >>> OPENFRAME(mysql-multitenancy)
+		{"OpenframeTeamStamping", testNewActivityOpenframeTeamStamping},
+		// <<< OPENFRAME(mysql-multitenancy)
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -244,3 +252,63 @@ func mustJSON(t *testing.T, v any) []byte {
 	require.NoError(t, err)
 	return b
 }
+
+// >>> OPENFRAME(mysql-multitenancy): CDC team_id stamping — openframe/docs/mysql-multitenancy-feature.md
+// testNewActivityOpenframeTeamStamping verifies that with the multitenancy flag on:
+//   - a team-pinned context stamps activity_past.team_id (the only tenant signal for host-less
+//     activities);
+//   - activity_host_past rows are stamped with their host's own team via the scalar subselect
+//     (host activities may be written from unpinned cron contexts).
+//
+// The test schema comes from schema.sql, which does not include the OpenFrame migration
+// pipeline, so the CDC migration is applied directly first.
+func testNewActivityOpenframeTeamStamping(t *testing.T, env *testEnv) {
+	// No t.Setenv (the harness runs parallel): the host-activity stamping gate is
+	// (multitenancy env || ctx pin), and the pinned context below engages it.
+	ctx := webhookCtx(t)
+
+	// Apply the openframe CDC migration (idempotent) — adds team_id to the captured tables.
+	tx, err := env.DB.Begin()
+	require.NoError(t, err)
+	require.NoError(t, openframe.Up_20260722000001(tx))
+	require.NoError(t, tx.Commit())
+
+	// A real team row (hosts.team_id has an FK to teams).
+	res, err := env.DB.ExecContext(t.Context(), `INSERT INTO teams (name) VALUES ('cdc-team')`)
+	require.NoError(t, err)
+	teamID64, err := res.LastInsertId()
+	require.NoError(t, err)
+	hostTeamID := uint(teamID64) //nolint:gosec // test value from LastInsertId
+	hostID := env.InsertHost(t, "cdc.local", &hostTeamID)
+
+	userID := env.InsertUser(t, "cdcuser", "cdc@example.com")
+	user := &api.User{ID: userID, Name: "cdcuser", Email: "cdc@example.com"}
+
+	// Pin the request to a different team than the host's to tell the two stamps apart.
+	const pinnedTeam = uint(77)
+	pinnedCtx := fleet.NewOpenframeTeamContext(ctx, pinnedTeam)
+
+	activity := hostActivity{
+		dummyActivity: dummyActivity{name: "ran_script", details: map[string]any{"host_id": float64(hostID)}},
+		hostIDs:       []uint{hostID},
+	}
+	require.NoError(t, env.ds.NewActivity(pinnedCtx, user, activity, mustJSON(t, activity.details), time.Now()))
+
+	// activity_past carries the request pin.
+	var actTeam sql.NullInt64
+	var actID uint
+	require.NoError(t, env.DB.QueryRowContext(t.Context(),
+		`SELECT id, team_id FROM activity_past WHERE activity_type = 'ran_script' AND user_id = ? ORDER BY id DESC LIMIT 1`,
+		userID).Scan(&actID, &actTeam))
+	require.True(t, actTeam.Valid)
+	require.EqualValues(t, pinnedTeam, actTeam.Int64)
+
+	// activity_host_past carries the HOST's team (subselect), not the pin.
+	var hostActTeam sql.NullInt64
+	require.NoError(t, env.DB.QueryRowContext(t.Context(),
+		`SELECT team_id FROM activity_host_past WHERE activity_id = ? AND host_id = ?`, actID, hostID).Scan(&hostActTeam))
+	require.True(t, hostActTeam.Valid)
+	require.EqualValues(t, hostTeamID, hostActTeam.Int64)
+}
+
+// <<< OPENFRAME(mysql-multitenancy)

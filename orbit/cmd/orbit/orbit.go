@@ -1374,10 +1374,14 @@ func orbitAction(c *cli.Context) error {
 		orbitClient.RegisterConfigReceiver(update.ApplyNudgeConfigReceiverMiddleware(update.NudgeConfigFetcherOptions{
 			UpdateRunner: updateRunner, RootDir: c.String("root-dir"), Interval: nudgeLaunchInterval,
 		}))
-		setupExperiencer := setupexperience.NewSetupExperiencer(orbitClient, deviceClient, c.String("root-dir"), trw)
-		// Use the legacy UI if the server indicates so via capabilities.
-		setupExperiencer.UseLegacyUI = !orbitClient.GetServerCapabilities().Has(fleet.CapabilityMacOSWebSetupExperience)
-		orbitClient.RegisterConfigReceiver(setupExperiencer)
+		// >>> OPENFRAME(agent-skip-setup-experience): OpenFrame never runs the Fleet setup experience (Premium-only endpoints, device-token UI) — openframe/docs/agent-skip-setup-experience.md
+		if !c.Bool("openframe-mode") {
+			setupExperiencer := setupexperience.NewSetupExperiencer(orbitClient, deviceClient, c.String("root-dir"), trw)
+			// Use the legacy UI if the server indicates so via capabilities.
+			setupExperiencer.UseLegacyUI = !orbitClient.GetServerCapabilities().Has(fleet.CapabilityMacOSWebSetupExperience)
+			orbitClient.RegisterConfigReceiver(setupExperiencer)
+		}
+		// <<< OPENFRAME(agent-skip-setup-experience)
 		orbitClient.RegisterConfigReceiver(update.ApplySwiftDialogDownloaderMiddleware(updateRunner))
 
 	case "windows":
@@ -1709,7 +1713,9 @@ func orbitAction(c *cli.Context) error {
 	go sigusrListener(c.String("root-dir"))
 
 	setupExperienceOS := runtime.GOOS == "linux" || runtime.GOOS == "windows"
-	setupExperienceNotDisabled := !c.Bool("disable-setup-experience")
+	// >>> OPENFRAME(agent-skip-setup-experience): openframe mode implies --disable-setup-experience; init/status are Premium-only endpoints (402 on the platform Fleet) — openframe/docs/agent-skip-setup-experience.md
+	setupExperienceNotDisabled := !c.Bool("disable-setup-experience") && !c.Bool("openframe-mode")
+	// <<< OPENFRAME(agent-skip-setup-experience)
 	runSetupExperience := setupExperienceOS && setupExperienceNotDisabled
 	log.Debug().
 		Bool("setupExperienceOS", setupExperienceOS).
@@ -1805,6 +1811,11 @@ func processSetupExperience(orbitClient *fleetclient.OrbitClient, rootDir string
 			return fmt.Errorf("writing setup experience file: %w", err)
 		}
 
+		// >>> OPENFRAME(agent-skip-setup-experience): nothing to poll when the server disabled or does not license it; upstream registers the poller anyway and 402s on every config cycle — openframe/docs/agent-skip-setup-experience.md
+		if !initSetupExperienceResponse.Enabled {
+			return nil
+		}
+		// <<< OPENFRAME(agent-skip-setup-experience)
 		setupExperiencer := setupexperience.NewLinuxSetupExperiencer(orbitClient, rootDir)
 		orbitClient.RegisterConfigReceiver(setupExperiencer)
 	case !exp.Enabled:
@@ -2264,7 +2275,10 @@ func getHostInfo(osqueryPath string, osqueryDBPath string) (*osqueryHostInfo, er
 		}
 	}
 	if len(info) != 1 {
-		return nil, fmt.Errorf("invalid number of rows from system info query: %d", len(info))
+		// >>> OPENFRAME(agent-host-info-diagnostics): carry osqueryd's stderr and name WMI, upstream reports only the row count — openframe/docs/agent-host-info-diagnostics.md
+		osquerydExitedOK := cmd.ProcessState != nil && cmd.ProcessState.Success()
+		return nil, hostInfoRowsError(len(info), osquerydStderr.String(), osquerydExitedOK, runtime.GOOS)
+		// <<< OPENFRAME(agent-host-info-diagnostics)
 	}
 	return &info[0], nil
 }

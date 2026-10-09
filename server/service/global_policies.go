@@ -40,6 +40,9 @@ func globalPolicyEndpoint(ctx context.Context, request interface{}, svc fleet.Se
 		LabelsExcludeAny: req.LabelsExcludeAny,
 		LabelsExcludeAll: req.LabelsExcludeAll,
 		Type:             fleet.PolicyTypeDynamic,
+		// >>> OPENFRAME(managed-policies): let the platform mark the policy it owns — openframe/docs/managed-policies.md
+		OpenframeManaged: req.OpenframeManaged,
+		// <<< OPENFRAME(managed-policies)
 	})
 	if err != nil {
 		return fleet.GlobalPolicyResponse{Err: err}, nil
@@ -167,6 +170,15 @@ func (svc Service) DeleteGlobalPolicies(ctx context.Context, ids []uint) ([]uint
 	}
 	for _, policy := range policiesByID {
 		if policy.PolicyData.TeamID != nil {
+			// >>> OPENFRAME(mysql-multitenancy): under a per-request tenant pin every policy the
+			// tenant owns carries its team id (creation re-homes "global" policies to the pinned
+			// team), so from the tenant's perspective an own-team policy IS a global policy — let to
+			// delete proceed. Foreign teams never reach here: the fenced PoliciesByID above already
+			// returned NotFound for them. Unpinned (flag off) keeps upstreams reject-any-team check.
+			if pinned, ok := fleet.OpenframeTeamID(ctx); ok && *policy.PolicyData.TeamID == pinned {
+				continue
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 			return nil, authz.ForbiddenWithInternal(
 				"attempting to delete policy that belongs to team",
 				authz.UserFromContext(ctx),

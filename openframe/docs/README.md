@@ -39,6 +39,8 @@ The agent has its own switch, `--openframe-mode` / `ORBIT_OPENFRAME_MODE`.
 |-----|--------|
 | [architecture-host-assignments.md](architecture-host-assignments.md) | Direct host → policy/query targeting (`policy_hosts` / `query_hosts` join tables), gated by `FLEET_OPENFRAME_MODE`. Design & internals. |
 | [api-host-assignments.md](api-host-assignments.md) | REST API for the above (add/remove/replace/list hosts). |
+| [managed-policies.md](managed-policies.md) | `policies.openframe_managed` — platform-owned policies omitted from the policy list/count endpoints (and from GitOps deletion) while still running on hosts and reporting results. |
+| [managed-queries.md](managed-queries.md) | `queries.openframe_managed` — the queries twin: platform-owned queries omitted from the query listing and its count. |
 | [api-expose-osquery-host-id.md](api-expose-osquery-host-id.md) | Exposes `osquery_host_id` in the host JSON so the OpenFrame control plane can match agents. |
 | [query-results-ttl-cleanup.md](query-results-ttl-cleanup.md) | Time-based cleanup of `query_results` (keeps the Debezium CDC pipeline alive without unbounded growth). Gated by OpenFrame mode **and** a positive TTL. |
 | [redis-key-prefix.md](redis-key-prefix.md) | Per-tenant Redis key/channel prefix (`FLEET_REDIS_KEY_PREFIX`) so tenants can share one Redis. |
@@ -49,6 +51,11 @@ The agent has its own switch, `--openframe-mode` / `ORBIT_OPENFRAME_MODE`.
 |-----|--------|
 | [agent-openframe-mode.md](agent-openframe-mode.md) | OpenFrame agent mode: gateway URL prefix, encrypted bearer-token pipeline (extract / decrypt / refresh), custom osqueryd, `orbit uuid` command. |
 | [node-key-management.md](node-key-management.md) | Node-key enrollment caching, 401 re-enrollment, Windows file-lock resilience. |
+| [agent-json-content-type.md](agent-json-content-type.md) | Orbit sets `Content-Type: application/json` on requests with a body (upstream sets none). Without it a WAF cannot JSON-parse the body — Cloud Armor flagged 100% of `/orbit/config` polls as SQLi. Unconditional, not gated on OpenFrame mode. |
+| [agent-skip-setup-experience.md](agent-skip-setup-experience.md) | In openframe mode orbit never calls the Premium-only `setup_experience/init` + `/status` endpoints (openframe mode implies `--disable-setup-experience`). In any mode a not-enabled (402) `init` no longer leaves the status poller registered (upstream bug; it 402s every config cycle until restart — the 2026-09-05 prod storm). |
+| [agent-host-info-diagnostics.md](agent-host-info-diagnostics.md) | The startup host-info error (`get UUID: invalid number of rows from system info query: N`) carries osqueryd's stderr, and on Windows with zero rows names WMI as the cause. Upstream reports only the row count, so a broken-WMI host could not be diagnosed from logs. Unconditional, not gated on OpenFrame mode. |
+| [agent-options.md](agent-options.md) | Keeps Fleet agent options (`distributed_interval: 10` et al.): skips upstream's setup-time starter-library apply in OpenFrame mode (it nulls the options setup just wrote) and seeds shared-mode tenants with the full new-install defaults. |
+| [agent-inventory-waf-shape.md](agent-inventory-waf-shape.md) | The `certificates_darwin`/`certificates_windows` detail queries hex-encode their distinguished-name columns; the ingest decodes them. Raw X.509 DNs are `/`+`=` dense and trip CRS 942431/942432 on every inventory write. Server-side only — no agent upgrade. |
 
 ## Database migrations
 

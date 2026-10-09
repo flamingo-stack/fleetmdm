@@ -1,0 +1,115 @@
+name: Detect Changes
+
+on:
+  workflow_call:
+    outputs:
+      images_matrix:
+        description: "Images matrix configuration for all components"
+        value: ${{ jobs.collect.outputs.images_matrix }}
+      clients_matrix:
+        description: "Clients matrix configuration for all components"
+        value: ${{ jobs.collect.outputs.clients_matrix }}
+      changes:
+        description: "JSON object mapping each component key to true/false"
+        value: ${{ jobs.collect.outputs.changes }}
+
+jobs:
+  collect:
+    name: Changes and Matrix
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      images_matrix: ${{ steps.define.outputs.images_matrix }}
+      clients_matrix: ${{ steps.define.outputs.clients_matrix }}
+      changes: ${{ steps.changes.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Define components
+        id: define
+        run: |
+          set -euo pipefail
+
+          IMAGES='[
+            {
+              "id": "server",
+              "name": "fleet",
+              "paths": ["./server/**", "./cmd/**", "./pkg/**", "./ee/**", "./tools/**", "./Dockerfile", "./.goreleaser.yml"]
+            }
+          ]'
+
+          CLIENTS='[
+            {
+              "id": "client",
+              "name": "macos",
+              "path": "./orbit",
+              "os": "macos-latest",
+              "go_os": "darwin",
+              "go_arch": ["arm64", "amd64"],
+              "artifact_name": "fleet-mac-universal"
+            },
+            {
+              "id": "client",
+              "name": "windows",
+              "path": "./orbit",
+              "os": "windows-latest",
+              "go_os": "windows",
+              "go_arch": "amd64",
+              "artifact_name": "fleet-windows-amd64"
+            }
+          ]'
+
+          ADDONS='{
+            "helm": ["./charts/**"]
+          }'
+
+          # the go module files rebuild both the server and the client
+          SHARED='["./go.mod", "./go.sum"]'
+
+          images_matrix=$(jq -c '[ .[] | { name } ]' <<< "$IMAGES")
+          clients_matrix=$(jq -c '[ .[] | { name, os, go_os, go_arch, artifact_name } ]' <<< "$CLIENTS")
+
+          filters=$(jq -nc \
+            --argjson images "$IMAGES" \
+            --argjson clients "$CLIENTS" \
+            --argjson addons "$ADDONS" \
+            --argjson shared "$SHARED" '
+            ( [ $images[]  | { key: (.id // .name), value: ((.paths // ["\(.path)/**"]) + $shared) } ]
+            + [ $clients[] | { key: (.id // .name), value: ((.paths // ["\(.path)/**"]) + $shared) } ]
+              | from_entries )
+            + $addons
+          ')
+
+          keys=$(jq -nc --argjson f "$filters" '$f | keys')
+
+          # fail fast if the matrix or filters came out empty
+          [ "$(jq 'length' <<< "$images_matrix")"  -gt 0 ] || { echo "images_matrix is empty"  >&2; exit 1; }
+          [ "$(jq 'length' <<< "$clients_matrix")" -gt 0 ] || { echo "clients_matrix is empty" >&2; exit 1; }
+          [ "$(jq 'length' <<< "$keys")"           -gt 0 ] || { echo "no change filters"        >&2; exit 1; }
+
+          {
+            echo "images_matrix=$images_matrix"
+            echo "clients_matrix=$clients_matrix"
+            echo "filters=$filters"
+            echo "keys=$keys"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: dorny/paths-filter@v4.0.2
+        id: filter
+        with:
+          filters: ${{ steps.define.outputs.filters }}
+
+      - name: Build changes map
+        id: changes
+        env:
+          CHANGED: ${{ steps.filter.outputs.changes || '[]' }}
+          KEYS: ${{ steps.define.outputs.keys }}
+        run: |
+          set -euo pipefail
+          changes=$(jq -nc --argjson changed "$CHANGED" --argjson keys "$KEYS" '
+            reduce $keys[] as $k ({}; .[$k] = ((($changed | index($k)) != null) | tostring))
+          ')
+          echo "changes=$changes" >> "$GITHUB_OUTPUT"

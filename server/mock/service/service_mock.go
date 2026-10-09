@@ -184,7 +184,7 @@ type GetQuerySpecsFunc func(ctx context.Context, teamID *uint) ([]*fleet.QuerySp
 
 type GetQuerySpecFunc func(ctx context.Context, teamID *uint, name string) (*fleet.QuerySpec, error)
 
-type ListQueriesFunc func(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error)
+type ListQueriesFunc func(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string, includeOpenframeManaged bool) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error)
 
 type GetQueryFunc func(ctx context.Context, id uint) (*fleet.Query, error)
 
@@ -539,6 +539,8 @@ type ListVulnerabilitiesFunc func(ctx context.Context, opt fleet.VulnListOptions
 type VulnerabilityFunc func(ctx context.Context, cve string, teamID *uint, useCVSScores bool) (vuln *fleet.VulnerabilityWithMetadata, known bool, err error)
 
 type CountVulnerabilitiesFunc func(ctx context.Context, opt fleet.VulnListOptions) (uint, error)
+
+type VulnerabilityHostCountsUpdatedAtFunc func(ctx context.Context) (time.Time, error)
 
 type ListOSVersionsByCVEFunc func(ctx context.Context, cve string, teamID *uint) (result []*fleet.VulnerableOS, updatedAt time.Time, err error)
 
@@ -1736,6 +1738,9 @@ type Service struct {
 
 	CountVulnerabilitiesFunc        CountVulnerabilitiesFunc
 	CountVulnerabilitiesFuncInvoked bool
+
+	VulnerabilityHostCountsUpdatedAtFunc        VulnerabilityHostCountsUpdatedAtFunc
+	VulnerabilityHostCountsUpdatedAtFuncInvoked bool
 
 	ListOSVersionsByCVEFunc        ListOSVersionsByCVEFunc
 	ListOSVersionsByCVEFuncInvoked bool
@@ -2938,11 +2943,11 @@ func (s *Service) GetQuerySpec(ctx context.Context, teamID *uint, name string) (
 	return s.GetQuerySpecFunc(ctx, teamID, name)
 }
 
-func (s *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error) {
+func (s *Service) ListQueries(ctx context.Context, opt fleet.ListOptions, teamID *uint, scheduled *bool, mergeInherited bool, platform *string, includeOpenframeManaged bool) ([]*fleet.Query, int, int, *fleet.PaginationMetadata, error) {
 	s.mu.Lock()
 	s.ListQueriesFuncInvoked = true
 	s.mu.Unlock()
-	return s.ListQueriesFunc(ctx, opt, teamID, scheduled, mergeInherited, platform)
+	return s.ListQueriesFunc(ctx, opt, teamID, scheduled, mergeInherited, platform, includeOpenframeManaged)
 }
 
 func (s *Service) GetQuery(ctx context.Context, id uint) (*fleet.Query, error) {
@@ -4182,6 +4187,13 @@ func (s *Service) CountVulnerabilities(ctx context.Context, opt fleet.VulnListOp
 	s.CountVulnerabilitiesFuncInvoked = true
 	s.mu.Unlock()
 	return s.CountVulnerabilitiesFunc(ctx, opt)
+}
+
+func (s *Service) VulnerabilityHostCountsUpdatedAt(ctx context.Context) (time.Time, error) {
+	s.mu.Lock()
+	s.VulnerabilityHostCountsUpdatedAtFuncInvoked = true
+	s.mu.Unlock()
+	return s.VulnerabilityHostCountsUpdatedAtFunc(ctx)
 }
 
 func (s *Service) ListOSVersionsByCVE(ctx context.Context, cve string, teamID *uint) (result []*fleet.VulnerableOS, updatedAt time.Time, err error) {

@@ -38,21 +38,26 @@ spec:
         heritage: {{ .Release.Service }}
         release: {{ .Release.Name }}
     spec:
+      # >>> OPENFRAME(hardening): pod-level non-root context — openframe/docs/helm-chart.md
+      {{- with .Values.fleet.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # <<< OPENFRAME(hardening)
       initContainers:
       # >>> OPENFRAME(helm): fork-added init container installing custom CA certs into truststore — openframe/docs/helm-chart.md
       {{- if include "fleet.additionalCAs.enabled" . }}
       - name: install-trusted-cas
         image: "{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
+        {{- with .Values.fleet.securityContext }}
         securityContext:
-          runAsUser: 0
-          runAsNonRoot: false
-          allowPrivilegeEscalation: false
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         command:
           - sh
           - -c
           - |
             set -e
-            apk add ca-certificates
             echo "Installing trusted CA certificates..."
 
             for dir in /custom-ca/*; do
@@ -73,6 +78,8 @@ spec:
             mountPath: /custom-ca/secret-{{ .name }}
             readOnly: true
       {{- end }}
+          - name: ca-local
+            mountPath: /usr/local/share/ca-certificates
           - name: ca-certs
             mountPath: /etc/ssl/certs
       {{- end }}
@@ -209,6 +216,22 @@ spec:
           - name: FLEET_OPENFRAME_MODE
             value: {{ .Values.fleet.setup.openframeMode | quote }}
           # <<< OPENFRAME(helm)
+          # >>> OPENFRAME(mysql-multitenancy): shared-DB multitenancy feature envs — openframe/docs/helm-chart.md
+          # Master switch (maps openframe.fleet.multi-tenancy.enabled). "false" ⇒ pre-feature
+          # fork behavior. "true" + tenant UUID ⇒ pinned mode (one Fleet per tenant);
+          # "true" + no tenant UUID ⇒ shared per-request mode (one Fleet per cluster, fail closed).
+          - name: FLEET_OPENFRAME_MULTI_TENANCY_ENABLED
+            value: {{ .Values.fleet.openframe.multiTenancy.enabled | quote }}
+          - name: FLEET_OPENFRAME_TENANT_UUID
+            valueFrom:
+              configMapKeyRef:
+                name: {{ default "fleet-openframe-tenant" .Values.fleet.openframe.multiTenancy.existingConfigMap }}
+                key: {{ .Values.fleet.openframe.multiTenancy.tenantUuidKey }}
+          {{- if .Values.fleet.openframe.multiTenancy.teamId }}
+          - name: FLEET_OPENFRAME_TEAM_ID
+            value: {{ .Values.fleet.openframe.multiTenancy.teamId | quote }}
+          {{- end }}
+          # <<< OPENFRAME(mysql-multitenancy)
           ## END FLEET SECTION
           ## BEGIN MYSQL SECTION
           # >>> OPENFRAME(helm): fork-externalized DB connection from ConfigMap/Secret refs — openframe/docs/helm-chart.md
@@ -336,6 +359,24 @@ spec:
           # <<< OPENFRAME(helm)
           - name: FLEET_REDIS_DATABASE
             value: "{{ .Values.cache.database }}"
+          # >>> OPENFRAME(helm): fork-added Redis TLS — openframe/docs/helm-chart.md
+          {{- if .Values.cache.tls.enabled }}
+          - name: FLEET_REDIS_USE_TLS
+            value: "true"
+          {{- if .Values.cache.tls.caCertKey }}
+          - name: FLEET_REDIS_TLS_CA
+            value: "/secrets/redis/{{ .Values.cache.tls.caCertKey }}"
+          {{- end }}
+          {{- if .Values.cache.tls.serverName }}
+          - name: FLEET_REDIS_TLS_SERVER_NAME
+            value: "{{ .Values.cache.tls.serverName }}"
+          {{- end }}
+          {{- end }}
+          # <<< OPENFRAME(helm)
+          # >>> OPENFRAME(helm): retry the first Redis dial — openframe/docs/helm-chart.md
+          - name: FLEET_REDIS_CONNECT_RETRY_ATTEMPTS
+            value: "{{ .Values.cache.connectRetryAttempts }}"
+          # <<< OPENFRAME(helm)
           {{- if .Values.cache.usePassword }}
           - name: FLEET_REDIS_PASSWORD
             valueFrom:
@@ -497,21 +538,23 @@ spec:
                 key: {{ .valueFrom.secretKeyRef.key }}
           {{- end }}
           {{- end }}
+        # >>> OPENFRAME(hardening): full container context from values
+        {{- with .Values.fleet.securityContext }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: [ALL]
-          privileged: false
-          readOnlyRootFilesystem: true
-          {{- if .Values.fleet.securityContext.runAsGroup }}
-          runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsUser }}
-          runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsNonRoot }}
-          runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-          {{- end }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        # <<< OPENFRAME(hardening)
+        # >>> OPENFRAME(helm): probe timings, upstream sets none — openframe/docs/helm-chart.md
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: {{ .Values.fleet.listenPort }}
+            {{- if .Values.fleet.tls.enabled }}
+            scheme: HTTPS
+            {{- end }}
+          periodSeconds: {{ .Values.fleet.probes.startup.periodSeconds }}
+          failureThreshold: {{ .Values.fleet.probes.startup.failureThreshold }}
+          timeoutSeconds: {{ .Values.fleet.probes.startup.timeoutSeconds }}
         livenessProbe:
           httpGet:
             path: /healthz
@@ -519,6 +562,9 @@ spec:
             {{- if .Values.fleet.tls.enabled }}
             scheme: HTTPS
             {{- end }}
+          periodSeconds: {{ .Values.fleet.probes.liveness.periodSeconds }}
+          failureThreshold: {{ .Values.fleet.probes.liveness.failureThreshold }}
+          timeoutSeconds: {{ .Values.fleet.probes.liveness.timeoutSeconds }}
         readinessProbe:
           httpGet:
             path: /healthz
@@ -526,10 +572,15 @@ spec:
             {{- if .Values.fleet.tls.enabled }}
             scheme: HTTPS
             {{- end }}
-        {{- if or (.Values.fleet.tls.enabled) (.Values.database.tls.enabled) (eq .Values.osquery.logging.statusPlugin "filesystem") (eq .Values.osquery.logging.resultPlugin "filesystem") (include "fleet.additionalCAs.enabled" .) }}
+          periodSeconds: {{ .Values.fleet.probes.readiness.periodSeconds }}
+          failureThreshold: {{ .Values.fleet.probes.readiness.failureThreshold }}
+          timeoutSeconds: {{ .Values.fleet.probes.readiness.timeoutSeconds }}
+        # <<< OPENFRAME(helm)
+        # >>> OPENFRAME(hardening): unconditional — tmp is always mounted — openframe/docs/helm-chart.md
         volumeMounts:
           - name: tmp
             mountPath: /tmp
+          # <<< OPENFRAME(hardening)
           {{- if .Values.fleet.tls.enabled }}
           - name: fleet-tls
             readOnly: true
@@ -539,6 +590,11 @@ spec:
           - name: mysql-tls
             readOnly: true
             mountPath: /secrets/mysql
+          {{- end }}
+          {{- if .Values.cache.tls.enabled }}
+          - name: redis-tls
+            readOnly: true
+            mountPath: /secrets/redis
           {{- end }}
           {{- if or (eq .Values.osquery.logging.statusPlugin "filesystem") (eq .Values.osquery.logging.resultPlugin "filesystem") }}
           - name: osquery-logs
@@ -553,14 +609,18 @@ spec:
           {{- with .Values.fleet.extraVolumeMounts }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
-        {{- end }}
       {{- if .Values.gke.cloudSQL.enableProxy }}
       - name: cloudsql-proxy
         image: "{{ .Values.gke.cloudSQL.imageRepository }}:{{ .Values.gke.cloudSQL.imageTag }}"
-        command:
-        - "/cloud_sql_proxy"
-        - "-verbose={{ .Values.gke.cloudSQL.verbose}}"
-        - "-instances={{ .Values.gke.cloudSQL.instanceName }}=tcp:3306"
+        # >>> OPENFRAME(cloudsql-v2): v2 CLI — entrypoint is /cloud-sql-proxy, instance is positional — openframe/docs/helm-chart.md
+        args:
+        - "--port=3306"
+        - "--structured-logs"
+        {{- if not .Values.gke.cloudSQL.verbose }}
+        - "--quiet"
+        {{- end }}
+        - "{{ required "gke.cloudSQL.instanceName is required when gke.cloudSQL.enableProxy is true" .Values.gke.cloudSQL.instanceName }}"
+        # <<< OPENFRAME(cloudsql-v2)
         resources:
           limits:
             cpu: 0.5 # 500Mhz
@@ -568,21 +628,12 @@ spec:
           requests:
             cpu: 0.1 # 100Mhz
             memory: 50Mi
+        # >>> OPENFRAME(hardening): proxy runs nonroot with a read-only rootfs
+        {{- with .Values.gke.cloudSQL.securityContext }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: [ALL]
-          privileged: false
-          readOnlyRootFilesystem: true
-          {{- if .Values.fleet.securityContext.runAsGroup }}
-          runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsUser }}
-          runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsNonRoot }}
-          runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-          {{- end }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        # <<< OPENFRAME(hardening)
       {{- end }}
       hostPID: false
       hostNetwork: false
@@ -592,8 +643,9 @@ spec:
         {{- toYaml . | nindent 8}}
       {{- end }}
       serviceAccountName: fleet
-      {{- if or (.Values.fleet.tls.enabled) (.Values.database.tls.enabled) (eq .Values.osquery.logging.statusPlugin "filesystem") (eq .Values.osquery.logging.resultPlugin "filesystem") }}
+      # >>> OPENFRAME(hardening): unconditional — tmp is always mounted
       volumes:
+        # <<< OPENFRAME(hardening)
         - name: tmp
           emptyDir:
         {{- if .Values.fleet.tls.enabled }}
@@ -608,7 +660,14 @@ spec:
         {{- if .Values.database.tls.enabled }}
         - name: mysql-tls
           secret:
-            secretName: "{{ .Values.database.secretName }}"
+            # >>> OPENFRAME(helm): the server CA rides in the same externally managed Secret as
+            secretName: "{{ default .Values.database.secretName .Values.database.existingSecret }}"
+            # <<< OPENFRAME(helm)
+        {{- end }}
+        {{- if .Values.cache.tls.enabled }}
+        - name: redis-tls
+          secret:
+            secretName: "{{ default .Values.cache.secretName .Values.cache.tls.existingSecret }}"
         {{- end }}
         {{- if or (eq .Values.osquery.logging.statusPlugin "filesystem") (eq .Values.osquery.logging.resultPlugin "filesystem") }}
         - name: osquery-logs
@@ -630,11 +689,12 @@ spec:
           secret:
             secretName: {{ .name }}
         {{- end }}
+        - name: ca-local
+          emptyDir: {}
         - name: ca-certs
           emptyDir: {}
         {{- end }}
         # <<< OPENFRAME(helm)
-      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

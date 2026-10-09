@@ -75,7 +75,10 @@ server/service/openframe/                           # agent token-auth pipeline
 server/datastore/mysql/migrations/openframe/        # separate goose client
 ├── migration.go
 ├── 20260301000001_AddPolicyHostsJoinTable.go
-└── 20260301000002_AddQueryHostsJoinTable.go
+├── 20260301000002_AddQueryHostsJoinTable.go
+├── 20260818000001_AddPoliciesOpenframeManagedColumn.go   # policies.openframe_managed
+├── 20260818000002_AddQueriesOpenframeManagedColumn.go    # queries.openframe_managed
+└── 20260831000001_SeedGlobalAppConfigRow.go              # instance app_config row (id=1)
 
 server/datastore/redis/keyprefix.go                 # per-tenant Redis prefix
 server/fleet/openframe.go                           # IsOpenframeMode() gate
@@ -89,7 +92,7 @@ orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-fi
 .github/steps/sign-windows-package/action.yml
 .github/workflows/release.yml
 .github/workflows/test.yml
-.github/workflows/changes.yml
+.github/workflows/changes.yaml
 .github/workflows/sync-upstream.yml
 charts/fleet/templates/configmap.yaml
 charts/fleet/templates/secret.yaml
@@ -128,10 +131,15 @@ and the heaviest standing rebase cost.
 | Area | Files |
 |------|-------|
 | Host assignments | `server/fleet/{policies,queries,hosts,datastore,service}.go`, `server/datastore/mysql/{policies,queries,hosts}.go`, `server/service/{global_policies,queries,handler,labels_util}.go`, `server/mock/{datastore,datastore_mock}.go`, `server/mock/service/service_mock.go`, `server/datastore/mysql/mysql.go`, `cmd/fleet/prepare.go` |
+| Managed queries / policies | flag: `server/fleet/{queries,policies}.go`, `server/service/{queries,global_policies,team_policies}.go`, `server/datastore/mysql/{queries,policies}.go`, `schema.sql`; queries listing opt-in (`include_openframe_managed`): `server/fleet/{app,api_queries,service}.go`, `server/service/{global_schedule,team_schedule,queries_test}.go`, `server/mock/service/service_mock.go`; tests: `server/datastore/mysql/{queries,policies}_openframe_managed_test.go` — see [managed-queries.md](managed-queries.md), [managed-policies.md](managed-policies.md) |
 | osquery host id | `server/fleet/hosts.go` |
 | Query-results TTL cleanup | `server/config/config.go`, `server/fleet/{cron_schedules,datastore}.go`, `server/datastore/mysql/query_results.go`, `cmd/fleet/{cron,serve}.go` |
 | Redis key prefix | `server/datastore/redis/redis.go`, `server/config/config.go`, `cmd/fleet/serve.go` |
-| Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/osquery/osquery.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
+| Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/openframe_identifier_test.go`, `orbit/pkg/constant/constant.go`, `orbit/pkg/osquery/osquery.go`, `client/orbit_client.go`, `server/fleet/api_orbit.go`, `server/fleet/orbit.go`, `server/service/orbit.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
+| Agent options kept | `cmd/fleet/serve.go` (starter-library skip under multitenancy), `server/fleet/openframe.go` (trimmed seed/fallback defaults), `server/datastore/mysql/teams_openframe_test.go`, `server/fleet/openframe_test.go` |
+| Agent JSON content-type | `client/orbit_client.go`, `client/device_client.go`, `orbit/cmd/fetch_cert/main.go`, `client/orbit_client_content_type_test.go` |
+| Agent skip setup experience | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/setup_experience/setup_experience.go`, `orbit/cmd/orbit/setup_experience_openframe_test.go`, `orbit/pkg/setup_experience/setup_experience_openframe_test.go` |
+| Agent host-info diagnostics | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/host_info_openframe.go`, `orbit/cmd/orbit/host_info_openframe_test.go` |
 | Build / meta | `go.mod`, `go.sum`, `.gitignore`, `README.md`, `.github/pull_request_template.md`, `server/archtest/*` |
 
 ### Helm chart (~9 files)
@@ -180,12 +188,12 @@ Computed from the fork working tree vs the upstream baseline
 `server/datastore/mysql/migrations/data/` (the ~473 idempotent upstream migrations —
 see [migrations.md](migrations.md)). Paths are repo-root-relative.
 
-### Added (38)
+### Added (40)
 
 ```
 .github/steps/sign-macos-package/action.yml
 .github/steps/sign-windows-package/action.yml
-.github/workflows/changes.yml
+.github/workflows/changes.yaml
 .github/workflows/release.yml
 .github/workflows/sync-upstream.yml
 .github/workflows/test.yml
@@ -213,6 +221,7 @@ openframe/scripts/test_host_assignments.sh
 openframe/scripts/verify.sh
 server/datastore/mysql/migrations/openframe/20260301000001_AddPolicyHostsJoinTable.go
 server/datastore/mysql/migrations/openframe/20260301000002_AddQueryHostsJoinTable.go
+server/datastore/mysql/migrations/openframe/20260722000001_AddTeamIdToCdcTables.go
 server/datastore/mysql/migrations/openframe/migration.go
 server/datastore/mysql/migrations_openframe_test.go
 server/datastore/redis/keyprefix.go
@@ -224,7 +233,7 @@ server/service/openframe/openframe_authorization_manager.go
 server/service/openframe/openframe_token_refresher.go
 ```
 
-### Modified (46)
+### Modified (53)
 
 ```
 .github/pull_request_template.md
@@ -250,6 +259,7 @@ go.sum
 orbit/cmd/orbit/orbit.go
 orbit/pkg/constant/constant.go
 orbit/pkg/osquery/osquery.go
+server/activity/internal/mysql/new_activity.go
 server/archtest/README.md
 server/archtest/test_files/dependency/dependency.go
 server/config/config.go
@@ -260,6 +270,8 @@ server/datastore/mysql/queries.go
 server/datastore/mysql/query_results.go
 server/datastore/redis/redis.go
 server/fleet/api_orbit.go
+server/fleet/api_queries.go
+server/fleet/app.go
 server/fleet/cron_schedules.go
 server/fleet/datastore.go
 server/fleet/hosts.go
@@ -272,10 +284,14 @@ server/mock/datastore_mock.go
 server/mock/service/service_mock.go
 server/service/base_client.go
 server/service/global_policies.go
+server/service/global_schedule.go
 server/service/handler.go
+server/service/handler_test.go
 server/service/labels_util.go
 server/service/orbit.go
 server/service/orbit_client.go
+server/service/osquery_utils/queries.go
 server/service/queries.go
+server/service/team_schedule.go
 server/vulnerabilities/nvd/cpe.go
 ```

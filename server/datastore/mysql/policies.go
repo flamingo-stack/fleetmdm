@@ -40,7 +40,8 @@ const policyCols = `
 	p.author_id, p.platforms, p.created_at, p.updated_at, p.critical,
 	p.calendar_events_enabled, p.software_installer_id, p.script_id,
 	p.vpp_apps_teams_id, p.conditional_access_enabled, p.type,
-	p.patch_software_title_id, p.continuous_automations_enabled
+	p.patch_software_title_id, p.continuous_automations_enabled,
+	p.openframe_managed
 `
 
 const (
@@ -79,6 +80,13 @@ type policyCleanupArgs struct {
 }
 
 func (ds *Datastore) NewGlobalPolicy(ctx context.Context, authorID *uint, args fleet.PolicyPayload) (*fleet.Policy, error) {
+	// >>> OPENFRAME(mysql-multitenancy): on a shared DB a "global" policy (team_id NULL) is visible
+	// to all tenants. Redirect creation to this process's pinned team so it stays tenant-private.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		return ds.NewTeamPolicy(ctx, teamID, authorID, args)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	var newPolicy *fleet.Policy
 
 	if err := ds.withTx(ctx, func(tx sqlx.ExtContext) error {
@@ -115,10 +123,10 @@ func newGlobalPolicy(ctx context.Context, db sqlx.ExtContext, authorID *uint, ar
 	nameUnicode := norm.NFC.String(args.Name)
 	res, err := db.ExecContext(ctx,
 		fmt.Sprintf(
-			`INSERT INTO policies (name, query, description, resolution, author_id, platforms, critical, checksum) VALUES (?, ?, ?, ?, ?, ?, ?, %s)`,
+			`INSERT INTO policies (name, query, description, resolution, author_id, platforms, critical, openframe_managed, checksum) VALUES (?, ?, ?, ?, ?, ?, ?, ?, %s)`,
 			policiesChecksumComputedColumn(),
 		),
-		nameUnicode, args.Query, args.Description, args.Resolution, authorID, args.Platform, args.Critical,
+		nameUnicode, args.Query, args.Description, args.Resolution, authorID, args.Platform, args.Critical, args.OpenframeManaged,
 	)
 	switch {
 	case err == nil:
@@ -234,6 +242,12 @@ func updatePolicyLabelsTx(ctx context.Context, tx sqlx.ExtContext, policy *fleet
 
 // >>> OPENFRAME(host-assignments): per-host policy assignment CRUD + loader backed by the policy_hosts table — openframe/docs/architecture-host-assignments.md
 func (ds *Datastore) AddPolicyHosts(ctx context.Context, policyID uint, hostIDs []uint) (uint, error) {
+	// OPENFRAME(mysql-multitenancy): verify the policy is in this process's team and drop foreign
+	// host ids (no-op when unpinned).
+	hostIDs, err := ds.openframeScopePolicyHosts(ctx, policyID, hostIDs)
+	if err != nil {
+		return 0, err
+	}
 	if len(hostIDs) == 0 {
 		return 0, nil
 	}
@@ -253,6 +267,12 @@ func (ds *Datastore) AddPolicyHosts(ctx context.Context, policyID uint, hostIDs 
 }
 
 func (ds *Datastore) RemovePolicyHosts(ctx context.Context, policyID uint, hostIDs []uint) (uint, error) {
+	// OPENFRAME(mysql-multitenancy): verify the policy is in this process's team and drop foreign
+	// host ids (no-op when unpinned).
+	hostIDs, err := ds.openframeScopePolicyHosts(ctx, policyID, hostIDs)
+	if err != nil {
+		return 0, err
+	}
 	if len(hostIDs) == 0 {
 		return 0, nil
 	}
@@ -269,6 +289,12 @@ func (ds *Datastore) RemovePolicyHosts(ctx context.Context, policyID uint, hostI
 }
 
 func (ds *Datastore) ReplacePolicyHosts(ctx context.Context, policyID uint, hostIDs []uint) error {
+	// OPENFRAME(mysql-multitenancy): verify the policy is in this process's team and drop foreign
+	// host ids before replacing (no-op when unpinned).
+	hostIDs, err := ds.openframeScopePolicyHosts(ctx, policyID, hostIDs)
+	if err != nil {
+		return err
+	}
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM policy_hosts WHERE policy_id = ?`, policyID); err != nil {
 			return ctxerr.Wrap(ctx, err, "delete all policy hosts")
@@ -296,6 +322,11 @@ var policyHostsAllowedOrderKeys = common_mysql.OrderKeyAllowlist{
 }
 
 func (ds *Datastore) ListPolicyHosts(ctx context.Context, policyID uint, opts fleet.ListOptions) ([]fleet.HostIdent, *fleet.PaginationMetadata, error) {
+	// OPENFRAME(mysql-multitenancy): a foreign policy's assigned hosts must not be listable; verify
+	// the policy is in this process's team (no-op when unpinned).
+	if _, err := ds.openframeScopePolicyHosts(ctx, policyID, nil); err != nil {
+		return nil, nil, err
+	}
 	stmt := `
 		SELECT h.id, h.hostname
 		FROM policy_hosts ph
@@ -375,6 +406,16 @@ func loadHostsForPolicies(ctx context.Context, db sqlx.QueryerContext, policies 
 }
 
 // <<< OPENFRAME(host-assignments)
+
+// >>> OPENFRAME(managed-policies): platform-owned policies kept out of the policy list endpoints — openframe/docs/managed-policies.md
+
+// openframeManagedExclusion is the WHERE fragment that keeps OpenFrame-managed policies out of a
+// listing; every listing/count query below aliases the table as `p`. Unconditional: `prepare db`
+// always runs MigrateOpenframe, so the column exists in every deployment — FLEET_OPENFRAME_MODE
+// gates behavior, not schema.
+const openframeManagedExclusion = ` AND p.openframe_managed = 0`
+
+// <<< OPENFRAME(managed-policies)
 
 func loadLabelsForPolicies(ctx context.Context, db sqlx.QueryerContext, policies []*fleet.Policy) error {
 	const sql = `
@@ -460,6 +501,16 @@ func (ds *Datastore) Policy(ctx context.Context, id uint) (*fleet.Policy, error)
 }
 
 func policyDB(ctx context.Context, q sqlx.QueryerContext, id uint, teamID *uint) (*fleet.Policy, error) {
+	// >>> OPENFRAME(mysql-multitenancy): when no explicit team filter is given, scope by-id policy
+	// reads to this process's pinned team so a tenant cannot read another tenant's policy by id on a
+	// shared DB; a foreign (or global, pre-backfill) policy matches no rows → NotFound (404). Reuses
+	// the existing teamWhere plumbing; no-op when unpinned.
+	if teamID == nil {
+		if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+			teamID = &pinned
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	teamWhere := "TRUE"
 	args := []interface{}{id}
 	if teamID != nil {
@@ -505,11 +556,18 @@ func policyDB(ctx context.Context, q sqlx.QueryerContext, id uint, teamID *uint)
 }
 
 func (ds *Datastore) PolicyLite(ctx context.Context, id uint) (*fleet.PolicyLite, error) {
+	stmt := `SELECT id, name, description, resolution FROM policies WHERE id=?`
+	args := []interface{}{id}
+	// >>> OPENFRAME(mysql-multitenancy): scope by-id policy-lite reads to this process's team
+	// (foreign → NotFound). No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += " AND team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	var policy fleet.PolicyLite
-	err := sqlx.GetContext(
-		ctx, ds.reader(ctx), &policy,
-		`SELECT id, name, description, resolution FROM policies WHERE id=?`, id,
-	)
+	err := sqlx.GetContext(ctx, ds.reader(ctx), &policy, stmt, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ctxerr.Wrap(ctx, notFound("Policy").WithID(id))
@@ -523,6 +581,15 @@ func (ds *Datastore) PolicyLite(ctx context.Context, id uint) (*fleet.PolicyLite
 //
 // Currently, SavePolicy does not allow updating the team of an existing policy.
 func (ds *Datastore) SavePolicy(ctx context.Context, p *fleet.Policy, shouldRemoveAllPolicyMemberships bool, removePolicyStats bool) error {
+	// >>> OPENFRAME(mysql-multitenancy): verify (on the primary — read before write) the policy
+	// belongs to the pinned team; a foreign/global policy returns NotFound. No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		if _, err := policyDB(ctx, ds.writer(ctx), p.ID, &pinned); err != nil {
+			return ctxerr.Wrap(ctx, err, "verify policy team before save")
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	if err := ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
 		return savePolicy(ctx, tx, ds.logger, p, shouldRemoveAllPolicyMemberships, removePolicyStats)
 	}); err != nil {
@@ -554,11 +621,12 @@ func savePolicy(ctx context.Context, db sqlx.ExtContext, logger *slog.Logger, p 
 			platforms = ?, critical = ?, calendar_events_enabled = ?,
 			software_installer_id = ?, script_id = ?, vpp_apps_teams_id = ?,
 			conditional_access_enabled = ?, continuous_automations_enabled = ?,
+			openframe_managed = ?,
 			checksum = ` + policiesChecksumComputedColumn() + `
 			WHERE id = ?
 	`
 	result, err := db.ExecContext(
-		ctx, updateStmt, p.Name, p.Query, p.Description, p.Resolution, p.Platform, p.Critical, p.CalendarEventsEnabled, p.SoftwareInstallerID, p.ScriptID, p.VPPAppsTeamsID, p.ConditionalAccessEnabled, p.ContinuousAutomationsEnabled, p.ID,
+		ctx, updateStmt, p.Name, p.Query, p.Description, p.Resolution, p.Platform, p.Critical, p.CalendarEventsEnabled, p.SoftwareInstallerID, p.ScriptID, p.VPPAppsTeamsID, p.ConditionalAccessEnabled, p.ContinuousAutomationsEnabled, p.OpenframeManaged, p.ID,
 	)
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "updating policy")
@@ -851,6 +919,21 @@ func (ds *Datastore) RecordPolicyQueryExecutions(ctx context.Context, host *flee
 		return err
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): stamp the tenant team onto CDC-captured rows so the
+	// shared-DB Debezium pipeline can resolve the tenant per event — openframe/docs/mysql-multitenancy-feature.md.
+	// This path runs with an authenticated-host context, which is team-pinned whenever the
+	// multitenancy flag is on; unpinned (flag off) keeps the original statement byte-identical.
+	membershipCols := "updated_at, policy_id, host_id, passes"
+	membershipOnDup := "updated_at=VALUES(updated_at), passes=VALUES(passes)"
+	membershipRowShape := "(?,?,?,?)"
+	teamID, teamPinned := fleet.OpenframeTeamID(ctx)
+	if teamPinned {
+		membershipCols += ", team_id"
+		membershipOnDup += ", team_id=VALUES(team_id)"
+		membershipRowShape = "(?,?,?,?,?)"
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	vals := []interface{}{}
 	bindvars := []string{}
 	if len(needsWrite) > 0 {
@@ -863,8 +946,13 @@ func (ds *Datastore) RecordPolicyQueryExecutions(ctx context.Context, host *flee
 
 		for _, policyID := range orderedIDs {
 			matches := results[policyID]
-			bindvars = append(bindvars, "(?,?,?,?)")
+			bindvars = append(bindvars, membershipRowShape)
 			vals = append(vals, updated, policyID, host.ID, matches)
+			// >>> OPENFRAME(mysql-multitenancy)
+			if teamPinned {
+				vals = append(vals, teamID)
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 		}
 	}
 
@@ -881,13 +969,19 @@ func (ds *Datastore) RecordPolicyQueryExecutions(ctx context.Context, host *flee
 
 	err = ds.withTx(ctx, func(tx sqlx.ExtContext) error {
 		if len(vals) > 0 {
+			// >>> OPENFRAME(mysql-multitenancy): the column list and ON DUPLICATE KEY UPDATE
+			// clause carry team_id when the request is team-pinned (see membershipCols above) —
+			// openframe/docs/mysql-multitenancy-feature.md. Upstream hardcodes the columns.
 			query := fmt.Sprintf(
 				// INSERT IGNORE skips rows whose policy_id no longer exists (policy deleted
 				// after query was distributed but before results arrived).
-				`INSERT IGNORE INTO policy_membership (updated_at, policy_id, host_id, passes)
-			VALUES %s ON DUPLICATE KEY UPDATE updated_at=VALUES(updated_at), passes=VALUES(passes)`,
+				`INSERT IGNORE INTO policy_membership (%s)
+			VALUES %s ON DUPLICATE KEY UPDATE %s`,
+				membershipCols,
 				strings.Join(bindvars, ","),
+				membershipOnDup,
 			)
+			// <<< OPENFRAME(mysql-multitenancy)
 			if _, err := tx.ExecContext(ctx, query, vals...); err != nil {
 				return ctxerr.Wrapf(ctx, err, "insert policy_membership (%v)", vals)
 			}
@@ -1061,7 +1155,14 @@ WHERE
 }
 
 func (ds *Datastore) ListGlobalPolicies(ctx context.Context, opts fleet.ListOptions) ([]*fleet.Policy, error) {
-	return listPoliciesDB(ctx, ds.reader(ctx), nil, opts, "", nil)
+	// >>> OPENFRAME(mysql-multitenancy): list this tenant's policies instead of the shared global
+	// set (team_id IS NULL → team_id = pinned). No-op when unpinned.
+	var teamID *uint
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		teamID = &pinned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	return listPoliciesDB(ctx, ds.reader(ctx), teamID, opts, "", nil)
 }
 
 // returns the list of policies associated with the provided teamID, or the
@@ -1094,6 +1195,10 @@ func listPoliciesDB(ctx context.Context, q sqlx.QueryerContext, teamID *uint, op
 	if len(filterArgs) > 0 {
 		args = append(args, filterArgs...)
 	}
+
+	// >>> OPENFRAME(managed-policies): drop platform-owned policies from this listing — openframe/docs/managed-policies.md
+	query += openframeManagedExclusion
+	// <<< OPENFRAME(managed-policies)
 
 	// We must normalize the name for full Unicode support (Unicode equivalence).
 	match := norm.NFC.String(opts.MatchQuery)
@@ -1143,6 +1248,10 @@ func getInheritedPoliciesForTeam(ctx context.Context, q sqlx.QueryerContext, tea
         WHERE p.team_id IS NULL
     `
 
+	// >>> OPENFRAME(managed-policies): drop platform-owned policies from this listing — openframe/docs/managed-policies.md
+	query += openframeManagedExclusion
+	// <<< OPENFRAME(managed-policies)
+
 	args = append(args, teamID)
 
 	// We must normalize the name for full Unicode support (Unicode equivalence).
@@ -1177,6 +1286,19 @@ func getInheritedPoliciesForTeam(ctx context.Context, q sqlx.QueryerContext, tea
 // CountPolicies returns the total number of team policies.
 // If teamID is nil, it returns the total number of global policies.
 func (ds *Datastore) CountPolicies(ctx context.Context, teamID *uint, matchQuery string, automationType string) (int, error) {
+	// >>> OPENFRAME(mysql-multitenancy): a "global" count (teamID nil) on a shared DB would count
+	// all tenants' policies, so scope it to the pinned team; an explicit foreign team must count
+	// nothing. No-op when unpinned.
+	if pinned, ok := fleet.OpenframeTeamID(ctx); ok {
+		switch {
+		case teamID == nil:
+			teamID = &pinned
+		case *teamID != pinned:
+			return 0, nil
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	var (
 		query string
 		args  []interface{}
@@ -1189,6 +1311,11 @@ func (ds *Datastore) CountPolicies(ctx context.Context, teamID *uint, matchQuery
 		query = `SELECT count(*) FROM policies p WHERE team_id = ?`
 		args = append(args, *teamID)
 	}
+
+	// >>> OPENFRAME(managed-policies): keep platform-owned policies out of the paging/badge counts too — openframe/docs/managed-policies.md
+	// either — openframe/docs/managed-policies.md
+	query += openframeManagedExclusion
+	// <<< OPENFRAME(managed-policies)
 
 	if teamID != nil {
 		automationFilter, filterArgs, err := ds.createAutomationClause(ctx, automationType, *teamID)
@@ -1215,9 +1342,18 @@ func (ds *Datastore) CountPolicies(ctx context.Context, teamID *uint, matchQuery
 }
 
 func (ds *Datastore) CountMergedTeamPolicies(ctx context.Context, teamID uint, matchQuery string, automationType string) (int, error) {
+	// >>> OPENFRAME(mysql-multitenancy): don't count another tenant's policies (see ListMergedTeamPolicies).
+	if openframeForeignTeam(ctx, teamID) {
+		return 0, nil
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	var args []interface{}
 
 	query := `SELECT count(*) FROM policies p WHERE (p.team_id = ? OR p.team_id IS NULL)`
+	// >>> OPENFRAME(managed-policies): keep platform-owned policies out of the paging/badge counts too — openframe/docs/managed-policies.md
+	// either — openframe/docs/managed-policies.md
+	query += openframeManagedExclusion
+	// <<< OPENFRAME(managed-policies)
 	args = append(args, teamID)
 
 	automationFilter, filterArgs, err := ds.createAutomationClause(ctx, automationType, teamID)
@@ -1255,7 +1391,17 @@ func (ds *Datastore) PoliciesByID(ctx context.Context, ids []uint) (map[uint]*fl
 	  LEFT JOIN policy_stats ps ON p.id = ps.policy_id
 	  	AND ((p.team_id IS NULL AND ps.inherited_team_id IS NULL) OR (p.team_id IS NOT NULL))
 	  WHERE p.id IN (?)`
-	query, args, err := sqlx.In(sql, ids)
+	args := []interface{}{ids}
+	// >>> OPENFRAME(mysql-multitenancy): fence the batch by-id read to this process's pinned team —
+	// without it a tenant could hydrate another tenant's policies by id (the delete-validation paths
+	// call this before the fenced delete, leaking existence + content into internal logs). Foreign
+	// ids match no rows → NotFound below, same as a nonexistent id. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sql += ` AND p.team_id = ?`
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	query, args, err := sqlx.In(sql, args...)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "building query to get policies by ID")
 	}
@@ -1285,6 +1431,23 @@ func (ds *Datastore) PoliciesByID(ctx context.Context, ids []uint) (map[uint]*fl
 }
 
 func (ds *Datastore) DeleteGlobalPolicies(ctx context.Context, ids []uint) ([]uint, error) {
+	// >>> OPENFRAME(mysql-multitenancy): fence by-id global-policy deletion to this process's pinned
+	// team — drop foreign ids before any cleanup/delete so a tenant cannot delete another tenant's
+	// policy on a shared DB. No-op when unpinned.
+	teamFilter := (*uint)(nil)
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		owned, err := filterPolicyIDsByTeam(ctx, ds.writer(ctx), ids, teamID)
+		if err != nil {
+			return nil, err
+		}
+		if len(owned) == 0 {
+			return []uint{}, nil
+		}
+		ids = owned
+		teamFilter = &teamID
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	for _, id := range ids {
 		if err := ds.deletePendingSoftwareInstallsForPolicy(ctx, nil, id); err != nil {
 			return nil, ctxerr.Wrap(ctx, err, "delete pending software installs for policy")
@@ -1294,7 +1457,7 @@ func (ds *Datastore) DeleteGlobalPolicies(ctx context.Context, ids []uint) ([]ui
 		}
 	}
 
-	return deletePolicyDB(ctx, ds.writer(ctx), ids, nil)
+	return deletePolicyDB(ctx, ds.writer(ctx), ids, teamFilter)
 }
 
 func deletePolicyDB(ctx context.Context, q sqlx.ExtContext, ids []uint, teamID *uint) ([]uint, error) {
@@ -1543,14 +1706,14 @@ func newTeamPolicy(ctx context.Context, db sqlx.ExtContext, teamID uint, authorI
 			`INSERT INTO policies (
 				name, query, description, team_id, resolution, author_id,
 				platforms, critical, calendar_events_enabled, software_installer_id,
-				script_id, vpp_apps_teams_id, conditional_access_enabled, checksum,
+				script_id, vpp_apps_teams_id, conditional_access_enabled, openframe_managed, checksum,
 				type, patch_software_title_id, continuous_automations_enabled
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, %s, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, %s, ?, ?, ?)`,
 			policiesChecksumComputedColumn(),
 		),
 		nameUnicode, args.Query, args.Description, teamID, args.Resolution, authorID, args.Platform, args.Critical,
 		args.CalendarEventsEnabled, args.SoftwareInstallerID, args.ScriptID, args.VPPAppsTeamsID,
-		args.ConditionalAccessEnabled, args.Type, args.PatchSoftwareTitleID, args.ContinuousAutomationsEnabled,
+		args.ConditionalAccessEnabled, args.OpenframeManaged, args.Type, args.PatchSoftwareTitleID, args.ContinuousAutomationsEnabled,
 	)
 	switch {
 	case err == nil:
@@ -1589,6 +1752,13 @@ func newTeamPolicy(ctx context.Context, db sqlx.ExtContext, teamID uint, authorI
 }
 
 func (ds *Datastore) ListTeamPolicies(ctx context.Context, teamID uint, opts fleet.ListOptions, iopts fleet.ListOptions, automationType string) (teamPolicies, inheritedPolicies []*fleet.Policy, err error) {
+	// >>> OPENFRAME(mysql-multitenancy): the URL fleet_id is caller-supplied, not a boundary; a
+	// pinned process must not list another tenant's team policies on a shared DB. No-op when
+	// unpinned.
+	if openframeForeignTeam(ctx, teamID) {
+		return nil, nil, nil
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	filterClause, filterArgs, err := ds.createAutomationClause(ctx, automationType, teamID)
 	if err != nil {
 		return nil, nil, ctxerr.Wrap(ctx, err, "build automation filter clause")
@@ -1607,6 +1777,12 @@ func (ds *Datastore) ListTeamPolicies(ctx context.Context, teamID uint, opts fle
 }
 
 func (ds *Datastore) ListMergedTeamPolicies(ctx context.Context, teamID uint, opts fleet.ListOptions, automationType string) ([]*fleet.Policy, error) {
+	// >>> OPENFRAME(mysql-multitenancy): merge_inherited twin of ListTeamPolicies serving the same
+	// endpoint; a pinned process must not list another tenant's policies.
+	if openframeForeignTeam(ctx, teamID) {
+		return nil, nil
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	var args []interface{}
 
 	automationFilter, filterArgs, err := ds.createAutomationClause(ctx, automationType, teamID)
@@ -1629,6 +1805,10 @@ func (ds *Datastore) ListMergedTeamPolicies(ctx context.Context, teamID uint, op
 		WHERE (p.team_id = ? OR p.team_id IS NULL)
 		%s
     `, automationFilter)
+
+	// >>> OPENFRAME(managed-policies): drop platform-owned policies from this listing — openframe/docs/managed-policies.md
+	query += openframeManagedExclusion
+	// <<< OPENFRAME(managed-policies)
 
 	args = append(args, teamID, teamID)
 	if len(filterArgs) > 0 {
@@ -1665,6 +1845,12 @@ func (ds *Datastore) ListMergedTeamPolicies(ctx context.Context, teamID uint, op
 }
 
 func (ds *Datastore) DeleteTeamPolicies(ctx context.Context, teamID uint, ids []uint) ([]uint, error) {
+	// >>> OPENFRAME(mysql-multitenancy): reject a delete targeting another tenant's team (the URL
+	// fleet_id is not a boundary). No-op when unpinned.
+	if openframeForeignTeam(ctx, teamID) {
+		return []uint{}, nil
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	for _, id := range ids {
 		if err := ds.deletePendingSoftwareInstallsForPolicy(ctx, &teamID, id); err != nil {
 			return nil, ctxerr.Wrap(ctx, err, "delete pending software installs for policy")
@@ -1678,6 +1864,12 @@ func (ds *Datastore) DeleteTeamPolicies(ctx context.Context, teamID uint, ids []
 }
 
 func (ds *Datastore) TeamPolicy(ctx context.Context, teamID uint, policyID uint) (*fleet.Policy, error) {
+	// >>> OPENFRAME(mysql-multitenancy): reject a read targeting another tenant's team (the URL
+	// fleet_id is not a boundary) → NotFound. No-op when unpinned.
+	if openframeForeignTeam(ctx, teamID) {
+		return nil, ctxerr.Wrap(ctx, notFound("Policy").WithID(policyID))
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	return policyDB(ctx, ds.reader(ctx), policyID, &teamID)
 }
 
@@ -1696,9 +1888,14 @@ func (ds *Datastore) ApplyPolicySpecs(ctx context.Context, authorID uint, specs 
 	teamNameToID := make(map[string]*uint, 1)
 	teamIDToPolicies := make(map[*uint][]*fleet.PolicySpec, 1)
 	softwareInstallerIDs := make(map[*uint]map[uint]*uint) // teamID -> titleID -> softwareInstallerID
-	vppAppsTeamsIDs := make(map[*uint]map[uint]*uint)      // teamID -> titleID -> vppAppsTeamsID
-	fmaTitleIDs := make(map[*uint]map[string]*uint)        // teamID -> FMA slug -> titleID
-	vppTitleIDs := make(map[uint]struct{})                 // set when a title is a VPP app rather than a software installer
+
+	// >>> OPENFRAME(mysql-multitenancy): resolve the pin once so re-homed specs share a single map
+	// key (a per-iteration &pinned would fragment the *uint-keyed batching).
+	openframePinnedTeamID, openframePinned := fleet.OpenframeTeamID(ctx)
+	// <<< OPENFRAME(mysql-multitenancy)
+	vppAppsTeamsIDs := make(map[*uint]map[uint]*uint) // teamID -> titleID -> vppAppsTeamsID
+	fmaTitleIDs := make(map[*uint]map[string]*uint)   // teamID -> FMA slug -> titleID
+	vppTitleIDs := make(map[uint]struct{})            // set when a title is a VPP app rather than a software installer
 
 	// Get the team IDs
 	for _, spec := range specs {
@@ -1724,6 +1921,13 @@ func (ds *Datastore) ApplyPolicySpecs(ctx context.Context, authorID uint, specs 
 			}
 			teamNameToID[spec.Team] = teamID
 		}
+		// >>> OPENFRAME(mysql-multitenancy): a tenant's GitOps apply may only affect its own team —
+		// re-home every spec to the pinned team (shared pointer, see above). No-op when unpinned.
+		if openframePinned {
+			teamID = &openframePinnedTeamID
+			teamNameToID[spec.Team] = teamID
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		teamIDToPolicies[teamID] = append(teamIDToPolicies[teamID], spec)
 	}
 
@@ -2097,17 +2301,39 @@ func (ds *Datastore) AsyncBatchInsertPolicyMembership(ctx context.Context, batch
 	// INSERT IGNORE, to avoid failing if policy / host does not exist (as this
 	// runs asynchronously, they could get deleted in between the data being
 	// received and being upserted).
+	// >>> OPENFRAME(mysql-multitenancy): stamp the tenant team onto CDC-captured rows so the
+	// shared-DB Debezium pipeline can resolve the tenant per event — openframe/docs/mysql-multitenancy-feature.md.
+	// This async collector runs from a cron with no team-pinned context, so the team comes from
+	// the row's own host via a scalar subselect — engaged when the multitenancy flag is on (or
+	// the caller context is explicitly team-pinned, which only tests do on this path). Flag off
+	// keeps the original statement byte-identical.
+	_, ctxPinned := fleet.OpenframeTeamID(ctx)
+	multitenancy := ctxPinned || fleet.IsOpenframeMultitenancy()
 	sql := `INSERT IGNORE INTO policy_membership (policy_id, host_id, passes) VALUES `
-	sql += strings.Repeat(`(?, ?, ?),`, len(batch))
+	rowShape := `(?, ?, ?),`
+	if multitenancy {
+		sql = `INSERT IGNORE INTO policy_membership (policy_id, host_id, passes, team_id) VALUES `
+		rowShape = `(?, ?, ?, (SELECT team_id FROM hosts WHERE id = ?)),`
+	}
+	sql += strings.Repeat(rowShape, len(batch))
 	sql = strings.TrimSuffix(sql, ",")
 	sql += ` ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at), passes = VALUES(passes)`
+	if multitenancy {
+		sql += `, team_id = VALUES(team_id)`
+	}
 
-	vals := make([]interface{}, 0, len(batch)*3)
+	vals := make([]interface{}, 0, len(batch)*4)
+	// <<< OPENFRAME(mysql-multitenancy)
 	hostIDs := make([]uint, 0, len(batch))
 	// Group incoming results per host for flip detection.
 	incomingByHost := make(map[uint]map[uint]*bool, len(batch))
 	for _, tup := range batch {
 		vals = append(vals, tup.PolicyID, tup.HostID, tup.Passes)
+		// >>> OPENFRAME(mysql-multitenancy): extra bind for the team subselect
+		if multitenancy {
+			vals = append(vals, tup.HostID)
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		hostIDs = append(hostIDs, tup.HostID)
 		m, ok := incomingByHost[tup.HostID]
 		if !ok {

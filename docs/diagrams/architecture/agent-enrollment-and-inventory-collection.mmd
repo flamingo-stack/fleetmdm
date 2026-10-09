@@ -1,0 +1,36 @@
+sequenceDiagram
+    participant Agent as "fleetd (orbit)"
+    participant GW as "OpenFrame Gateway"
+    participant API as "Fleet Server API"
+    participant MySQL as "MySQL"
+    participant Redis as "Redis"
+    participant Kafka as "Kafka / Stream"
+
+    Agent->>GW: POST /api/v1/osquery/enroll (enroll secret)
+    GW->>API: Forward enrollment request
+    API->>MySQL: Lookup enroll secret, create/update host record
+    MySQL-->>API: Host node key
+    API-->>GW: 200 OK + node_key
+    GW-->>Agent: node_key
+
+    loop Every config_tls_refresh interval
+        Agent->>GW: POST /api/v1/osquery/config (node_key)
+        GW->>API: Forward config request
+        API->>Redis: Check cached config
+        Redis-->>API: Config (or miss → MySQL)
+        API-->>Agent: Distributed queries + agent options
+    end
+
+    loop Every distributed_interval
+        Agent->>GW: POST /api/v1/osquery/distributed/read
+        GW->>API: Get pending queries (live + scheduled)
+        API->>Redis: Read live query store
+        Redis-->>API: Query list
+        API-->>Agent: Queries to execute
+
+        Agent->>GW: POST /api/v1/osquery/distributed/write (results)
+        GW->>API: Write results
+        API->>MySQL: Update host inventory, software, policies
+        API->>Kafka: Publish osquery result events
+        Kafka->>Pinot: Analytics indexing
+    end

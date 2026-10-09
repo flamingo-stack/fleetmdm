@@ -197,6 +197,16 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		return "", fleet.OrbitError{Message: err.Error()}
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): shared mode — pin the request to the enroll secret's
+	// team (fail closed) so the enrollment fence scopes matching.
+	if fleet.IsOpenframeSharedMode() {
+		if secret.TeamID == nil || *secret.TeamID == 0 {
+			return "", fleet.NewAuthFailedError("openframe shared mode: enroll secret has no team")
+		}
+		ctx = fleet.NewOpenframeTeamContext(ctx, *secret.TeamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	identifier := hostInfo.OsqueryIdentifier
 	if identifier == "" {
 		identifier = hostInfo.HardwareUUID
@@ -682,6 +692,16 @@ func (svc *Service) GetOrbitConfig(ctx context.Context) (fleet.OrbitConfig, erro
 		if err != nil {
 			return fleet.OrbitConfig{}, err
 		}
+
+		// >>> OPENFRAME(mysql-multitenancy): fork-minted teams (EnsureOpenframeTeamID) can lack the
+		// config JSON that service-created teams always carry, making TeamMDMConfig nil and the
+		// unconditional dereferences below panic. Treat a config-less team as all-defaults — the
+		// same effective settings a TeamID-less host gets. Flag-gated so flag-off behavior stays
+		// byte-identical to upstream.
+		if mdmConfig == nil && fleet.IsOpenframeMultitenancy() {
+			mdmConfig = &fleet.TeamMDM{}
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 
 		var nudgeConfig *fleet.NudgeConfig
 		if appConfig.MDM.EnabledAndConfigured &&

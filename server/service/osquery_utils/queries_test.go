@@ -2944,6 +2944,133 @@ func TestDirectIngestHostCertificatesDarwinHexEscapes(t *testing.T) {
 	require.True(t, ds.UpdateHostCertificatesFuncInvoked)
 }
 
+// >>> OPENFRAME(waf-inventory-shape): covers the hex-encoded DN columns the certificates detail
+// queries emit, the pre-encoding fallback during a server upgrade, and malformed input —
+// openframe/docs/agent-inventory-waf-shape.md
+func TestDirectIngestHostCertificatesHexEncodedDN(t *testing.T) {
+	const (
+		commonName = "Ловушка"
+		subject    = `/C=US/ST=California/O=Acme, Inc./CN=Ловушка`
+		issuer     = `/C=US/O=Acme CA/CN=Acme Root`
+	)
+
+	// osquery escapes non-ASCII as literal \xHH before hex() sees it.
+	escape := func(s string) string {
+		var b strings.Builder
+		for _, c := range []byte(s) {
+			if c < 0x80 {
+				b.WriteByte(c)
+			} else {
+				fmt.Fprintf(&b, `\x%02X`, c)
+			}
+		}
+		return b.String()
+	}
+	encode := func(s string) string {
+		return strings.ToUpper(hex.EncodeToString([]byte(escape(s))))
+	}
+
+	baseRow := func() map[string]string {
+		return map[string]string{
+			"ca":                "0",
+			"key_algorithm":     "rsaEncryption",
+			"key_strength":      "2048",
+			"key_usage":         "Digital Signature",
+			"serial":            "abc123",
+			"signing_algorithm": "sha256WithRSAEncryption",
+			"not_valid_after":   "1822755797",
+			"not_valid_before":  "1770228826",
+			"sha1":              "aabbccdd00112233445566778899aabbccddeeff",
+			"source":            "system",
+			"username":          "SYSTEM",
+			"path":              "/Library/Keychains/System.keychain",
+		}
+	}
+
+	for _, tc := range []struct {
+		name           string
+		columns        map[string]string
+		wantCommonName string
+		wantSubjectCN  string
+		wantIssuerCN   string
+	}{
+		{
+			name: "hex encoded",
+			columns: map[string]string{
+				"common_name_hex": encode(commonName),
+				"subject_hex":     encode(subject),
+				"issuer_hex":      encode(issuer),
+			},
+			wantCommonName: commonName,
+			wantSubjectCN:  "Ловушка",
+			wantIssuerCN:   "Acme Root",
+		},
+		{
+			// A host that received the pre-encoding query before this server started.
+			name: "plain columns from an in-flight distributed read",
+			columns: map[string]string{
+				"common_name": escape(commonName),
+				"subject":     escape(subject),
+				"issuer":      escape(issuer),
+			},
+			wantCommonName: commonName,
+			wantSubjectCN:  "Ловушка",
+			wantIssuerCN:   "Acme Root",
+		},
+		{
+			name: "malformed hex is dropped, not ingested raw",
+			columns: map[string]string{
+				"common_name_hex": "zzzz",
+				"subject_hex":     encode(subject),
+				"issuer_hex":      encode(issuer),
+			},
+			wantCommonName: "",
+			wantSubjectCN:  "Ловушка",
+			wantIssuerCN:   "Acme Root",
+		},
+	} {
+		for _, platform := range []string{"darwin", "windows"} {
+			t.Run(tc.name+"/"+platform, func(t *testing.T) {
+				ds := new(mock.Store)
+				ctx := t.Context()
+				logger := slog.New(slog.DiscardHandler)
+				host := &fleet.Host{ID: 1, UUID: "host-uuid", Platform: platform}
+
+				row := baseRow()
+				for k, v := range tc.columns {
+					row[k] = v
+				}
+
+				// parseWindowsDN returns the whole DN as the common name; only parseDarwinDN
+				// splits out the CN component.
+				wantSubjectCN, wantIssuerCN := tc.wantSubjectCN, tc.wantIssuerCN
+				if platform == "windows" {
+					wantSubjectCN, wantIssuerCN = subject, issuer
+				}
+
+				ds.UpdateHostCertificatesFunc = func(ctx context.Context, hostID uint, hostUUID string,
+					certs []*fleet.HostCertificateRecord, origin fleet.HostCertificateOrigin,
+				) error {
+					require.Len(t, certs, 1)
+					assert.Equal(t, tc.wantCommonName, certs[0].CommonName)
+					assert.Equal(t, wantSubjectCN, certs[0].SubjectCommonName)
+					assert.Equal(t, wantIssuerCN, certs[0].IssuerCommonName)
+					return nil
+				}
+
+				ingest := directIngestHostCertificatesDarwin
+				if platform == "windows" {
+					ingest = directIngestHostCertificatesWindows
+				}
+				require.NoError(t, ingest(ctx, logger, host, ds, []map[string]string{row}))
+				require.True(t, ds.UpdateHostCertificatesFuncInvoked)
+			})
+		}
+	}
+}
+
+// <<< OPENFRAME(waf-inventory-shape)
+
 func TestDirectIngestHostCertificatesWindows(t *testing.T) {
 	ds := new(mock.Store)
 	ctx := t.Context()

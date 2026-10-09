@@ -16,7 +16,12 @@ func TestClientPackageDoesNotImportServerService(t *testing.T) {
 			m+"/ee/server/service...",
 		).
 		IgnoreDeps(
-			m + "/server/service/externalsvc", // server/fleet has a dependency on Jira and Zendesk.
+			m+"/server/service/externalsvc", // server/fleet has a dependency on Jira and Zendesk.
+			// >>> OPENFRAME(agent-openframe-mode): the orbit client deliberately imports the
+			// openframe auth manager (a leaf package: cron + zerolog only, no service layer) —
+			// openframe/docs/agent-openframe-mode.md
+			m+"/server/service/openframe",
+			// <<< OPENFRAME(agent-openframe-mode)
 		).
 		Check()
 }

@@ -1,0 +1,73 @@
+flowchart LR
+    subgraph CMD
+        ServeCmd["cmd/fleet serve"]
+        PrepareCmd["cmd/fleet prepare"]
+        FleetctlCmd["cmd/fleetctl"]
+        VulnCmd["cmd/fleet vuln_processing"]
+    end
+
+    subgraph ServerCore
+        API["server/service (REST/GraphQL handlers)"]
+        Auth["server/authz"]
+        Cron["cron scheduler"]
+        Worker["server/worker (async jobs)"]
+    end
+
+    subgraph DataLayer
+        MySQL["datastore/mysql"]
+        CachedMySQL["datastore/cached_mysql"]
+        MysqlRedis["datastore/mysqlredis"]
+        Redis["datastore/redis"]
+        S3Store["datastore/s3"]
+    end
+
+    subgraph MDM
+        AppleMDM["mdm/apple"]
+        MicrosoftMDM["mdm/microsoft"]
+        AndroidMDM["mdm/android"]
+        NanoMDM["mdm/nanomdm"]
+        SCEP["mdm/scep"]
+    end
+
+    subgraph OpenFrameLayer
+        OFAuthMgr["openframe/OpenFrameAuthorizationManager"]
+        OFMode["fleet.IsOpenframeMode()"]
+    end
+
+    subgraph FrontendLayer
+        ReactUI["frontend/ (React + TypeScript)"]
+        Router["frontend/router"]
+        APIServices["frontend/services/entities"]
+    end
+
+    ServeCmd --> API
+    ServeCmd --> Cron
+    ServeCmd --> DataLayer
+    ServeCmd --> MDM
+    PrepareCmd --> MySQL
+    FleetctlCmd --> API
+    VulnCmd --> MySQL
+
+    API --> Auth
+    API --> DataLayer
+    API --> MDM
+    API --> Worker
+    Cron --> API
+    Cron --> DataLayer
+    Cron --> OFMode
+
+    MysqlRedis --> CachedMySQL
+    CachedMySQL --> MySQL
+    MysqlRedis --> Redis
+
+    AppleMDM --> NanoMDM
+    AppleMDM --> SCEP
+    MicrosoftMDM --> API
+    AndroidMDM --> API
+
+    OFAuthMgr --> OFMode
+    ServeCmd --> OFAuthMgr
+
+    ReactUI --> Router
+    ReactUI --> APIServices
+    APIServices --> API

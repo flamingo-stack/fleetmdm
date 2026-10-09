@@ -825,7 +825,7 @@ func TestQueryAuth(t *testing.T) {
 			_, err = svc.QueryReportIsClipped(ctx, tt.qid, fleet.DefaultMaxQueryReportRows)
 			checkAuthErr(t, tt.shouldFailRead, err)
 
-			_, _, _, _, err = svc.ListQueries(ctx, fleet.ListOptions{}, query.TeamID, nil, false, nil)
+			_, _, _, _, err = svc.ListQueries(ctx, fleet.ListOptions{}, query.TeamID, nil, false, nil, false)
 			checkAuthErr(t, tt.shouldFailRead, err)
 
 			teamName := ""

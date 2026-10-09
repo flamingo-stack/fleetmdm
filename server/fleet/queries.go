@@ -47,6 +47,9 @@ type QueryPayload struct {
 	LabelsIncludeAny []string `json:"labels_include_any"`
 	// LabelsIncludeAll scopes the query to hosts that are members of ALL of the listed labels.
 	LabelsIncludeAll []string `json:"labels_include_all"`
+	// >>> OPENFRAME(managed-queries): let the platform mark the query it owns — openframe/docs/managed-queries.md
+	OpenframeManaged *bool `json:"openframe_managed"`
+	// <<< OPENFRAME(managed-queries)
 }
 
 // Query represents a osquery query to run on devices.
@@ -86,8 +89,11 @@ type Query struct {
 	Saved       bool   `json:"saved"`
 	// ObserverCanRun indicates whether users with Observer role can run this as
 	// a live query.
-	ObserverCanRun bool  `json:"observer_can_run" db:"observer_can_run"`
-	AuthorID       *uint `json:"author_id" db:"author_id"`
+	ObserverCanRun bool `json:"observer_can_run" db:"observer_can_run"`
+	// >>> OPENFRAME(managed-queries): platform-owned query, kept out of the query list endpoints — openframe/docs/managed-queries.md
+	OpenframeManaged bool `json:"openframe_managed" db:"openframe_managed"`
+	// <<< OPENFRAME(managed-queries)
+	AuthorID *uint `json:"author_id" db:"author_id"`
 	// AuthorName is retrieved with a join to the users table in the MySQL
 	// backend (using AuthorID)
 	AuthorName string `json:"author_name" db:"author_name"`

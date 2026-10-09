@@ -94,8 +94,9 @@ type OrbitClient struct {
 
 	// >>> OPENFRAME(agent-openframe-mode): openframe-mode flag + bearer-token auth manager on the orbit client — openframe/docs/agent-openframe-mode.md
 	// openframe mode
-	openFrameMode bool
-	authManager   *openframe.OpenFrameAuthorizationManager
+	openFrameMode     bool
+	authManager       *openframe.OpenFrameAuthorizationManager
+	machineIdProvider *openframe.OpenFrameMachineIdProvider
 	// <<< OPENFRAME(agent-openframe-mode)
 }
 
@@ -172,13 +173,25 @@ func (oc *OrbitClient) requestWithExternal(verb string, pathOrURL string, params
 			return err
 		}
 		oc.SetClientCapabilitiesHeader(request)
-		// >>> OPENFRAME(agent-openframe-mode): inject Bearer auth header on every request when in openframe mode — openframe/docs/agent-openframe-mode.md
+		// >>> OPENFRAME(agent-json-content-type): declare JSON so a WAF parses the body instead of regexing it whole — openframe/docs/agent-json-content-type.md
+		if len(bodyBytes) > 0 {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		// <<< OPENFRAME(agent-json-content-type)
+		// >>> OPENFRAME(agent-openframe-mode): inject Bearer auth + x-machine-id headers on every request when in openframe mode — openframe/docs/agent-openframe-mode.md
 		if oc.openFrameMode {
 			authToken := oc.authManager.GetToken()
 			if authToken != "" {
 				request.Header.Add("Authorization", "Bearer "+authToken)
 			} else {
 				log.Debug().Msg("authToken is empty, not adding Authorization header")
+			}
+
+			if oc.machineIdProvider != nil {
+				machineId := oc.machineIdProvider.GetMachineId()
+				if machineId != "" {
+					request.Header.Add("x-machine-id", machineId)
+				}
 			}
 		}
 		// <<< OPENFRAME(agent-openframe-mode)
@@ -254,6 +267,13 @@ func NewOrbitClient(
 	nodeKeyFilePath := filepath.Join(rootDir, constant.OrbitNodeKeyFileName)
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
+	// >>> OPENFRAME(agent-openframe-mode): machine-id provider for the x-machine-id header — openframe/docs/agent-openframe-mode.md
+	var machineIdProvider *openframe.OpenFrameMachineIdProvider
+	if openFrameMode {
+		machineIdProvider = openframe.NewOpenFrameMachineIdProvider()
+	}
+	// <<< OPENFRAME(agent-openframe-mode)
+
 	return &OrbitClient{
 		nodeKeyFilePath:            nodeKeyFilePath,
 		BaseClient:                 bc,
@@ -267,8 +287,9 @@ func NewOrbitClient(
 		receiverUpdateCancelFunc:   cancelFunc,
 		hostIdentityCertPath:       hostIdentityCertPath,
 		// >>> OPENFRAME(agent-openframe-mode): wire openframe fields into the OrbitClient literal — openframe/docs/agent-openframe-mode.md
-		authManager:   authManager,
-		openFrameMode: openFrameMode,
+		authManager:       authManager,
+		openFrameMode:     openFrameMode,
+		machineIdProvider: machineIdProvider,
 		// <<< OPENFRAME(agent-openframe-mode)
 	}, nil
 }
