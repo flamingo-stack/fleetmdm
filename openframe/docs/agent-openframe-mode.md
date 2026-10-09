@@ -171,8 +171,21 @@ fully assembled osqueryd command string (added for logging/diagnostics).
 ## `orbit uuid` subcommand
 
 `UUID openframe mode` (bb2e5d7c) adds a standalone `orbit uuid` command that
-prints the host's hardware UUID. It runs the OpenFrame `osqueryd` against a
-temporary database and executes:
+prints the host's identifier. In OpenFrame mode it reports the identifier orbit
+enrolled with, not a fresh hardware lookup:
+
+1. On every start, after reading host info from its persistent `osquery.db`,
+   orbit writes the identifier it will enroll with (`OsqueryIdentifier`, else
+   `HardwareUUID`) to `<root-dir>/osquery-identifier.txt` (write + rename).
+2. `orbit uuid --openframe-mode` reads that file, waiting up to 10s for it
+   (under the client's 15s agent-id command timeout). If it never appears
+   (orbit not started), the command exits non-zero and the client retries.
+
+Why: when the SMBIOS UUID is a placeholder (e.g. `03000200-0400-0500-0006-000700080009`),
+osquery generates a random UUID and stores it in its database. The old
+implementation queried a throwaway database, so every call returned a new
+random UUID that matched no host in Fleet. Without `--openframe-mode` the
+command keeps upstream behavior: a temporary database and
 
 ```sql
 SELECT uuid FROM system_info
