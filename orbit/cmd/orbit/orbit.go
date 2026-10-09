@@ -2758,20 +2758,16 @@ var uuidCommand = &cli.Command{
 			}
 		}
 
-		// >>> OPENFRAME(agent-openframe-mode): prefer the enrolled identifier; a throwaway osquery DB
+		// >>> OPENFRAME(agent-openframe-mode): report only the enrolled identifier; a throwaway osquery DB
 		// yields a fresh random UUID when the SMBIOS UUID is a placeholder — openframe/docs/agent-openframe-mode.md
 		var hostUUID string
 		if c.Bool("openframe-mode") {
-			identifierPath := filepath.Join(rootDir, constant.OsqueryIdentifierFileName)
-			switch b, err := os.ReadFile(identifierPath); {
-			case err == nil:
-				hostUUID = strings.TrimSpace(string(b))
-			case !errors.Is(err, fs.ErrNotExist):
-				log.Error().Err(err).Str("path", identifierPath).Msg("read osquery identifier file")
+			var err error
+			hostUUID, err = waitOsqueryIdentifierFile(filepath.Join(rootDir, constant.OsqueryIdentifierFileName), osqueryIdentifierWait)
+			if err != nil {
+				return err
 			}
-		}
-
-		if hostUUID == "" {
+		} else {
 			// Use temporary database for UUID query
 			tmpDBPath := filepath.Join(os.TempDir(), fmt.Sprintf("orbit-uuid-%s", uuid.NewString()))
 			defer os.RemoveAll(tmpDBPath)
@@ -2793,7 +2789,32 @@ var uuidCommand = &cli.Command{
 	},
 }
 
-// >>> OPENFRAME(agent-openframe-mode): write+rename so `orbit uuid` never reads a torn identifier — openframe/docs/agent-openframe-mode.md
+// >>> OPENFRAME(agent-openframe-mode): orbit writes the identifier seconds after start; wait for it instead of
+// guessing — openframe/docs/agent-openframe-mode.md
+
+// osqueryIdentifierWait stays under the OpenFrame client's 15s agent-id command timeout.
+const osqueryIdentifierWait = 10 * time.Second
+
+func waitOsqueryIdentifierFile(path string, limit time.Duration) (string, error) {
+	deadline := time.Now().Add(limit)
+	for {
+		b, err := os.ReadFile(path)
+		if err == nil {
+			if identifier := strings.TrimSpace(string(b)); identifier != "" {
+				return identifier, nil
+			}
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			// Transient on Windows while orbit renames the file into place; keep polling.
+			log.Debug().Err(err).Str("path", path).Msg("read osquery identifier file")
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("osquery identifier not written yet at %s (orbit has not started); retry later", path)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// write+rename so `orbit uuid` never reads a torn identifier
 func writeOsqueryIdentifierFile(rootDir, identifier string) error {
 	path := filepath.Join(rootDir, constant.OsqueryIdentifierFileName)
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".osquery-identifier-*")

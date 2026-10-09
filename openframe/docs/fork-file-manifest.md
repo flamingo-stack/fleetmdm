@@ -79,6 +79,7 @@ server/datastore/mysql/migrations/openframe/        # separate goose client
 
 server/datastore/redis/keyprefix.go                 # per-tenant Redis prefix
 server/fleet/openframe.go                           # IsOpenframeMode() gate
+orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-file tests
 ```
 
 ### New CI / packaging files
@@ -239,6 +240,7 @@ charts/fleet/templates/job-migration.yaml
 charts/fleet/templates/rbac.yaml
 charts/fleet/templates/sa.yaml
 charts/fleet/values.yaml
+client/orbit_client.go
 cmd/fleet/cron.go
 cmd/fleet/prepare.go
 cmd/fleet/serve.go
@@ -246,6 +248,7 @@ cmd/osquery-perf/agent.go
 go.mod
 go.sum
 orbit/cmd/orbit/orbit.go
+orbit/pkg/constant/constant.go
 orbit/pkg/osquery/osquery.go
 server/archtest/README.md
 server/archtest/test_files/dependency/dependency.go
@@ -256,9 +259,11 @@ server/datastore/mysql/policies.go
 server/datastore/mysql/queries.go
 server/datastore/mysql/query_results.go
 server/datastore/redis/redis.go
+server/fleet/api_orbit.go
 server/fleet/cron_schedules.go
 server/fleet/datastore.go
 server/fleet/hosts.go
+server/fleet/orbit.go
 server/fleet/policies.go
 server/fleet/queries.go
 server/fleet/service.go
@@ -269,6 +274,7 @@ server/service/base_client.go
 server/service/global_policies.go
 server/service/handler.go
 server/service/labels_util.go
+server/service/orbit.go
 server/service/orbit_client.go
 server/service/queries.go
 server/vulnerabilities/nvd/cpe.go
