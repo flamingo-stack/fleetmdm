@@ -75,6 +75,9 @@ type PolicyPayload struct {
 	//
 	// Only applies to team policies.
 	ContinuousAutomationsEnabled bool
+	// >>> OPENFRAME(managed-policies): platform-owned policy, kept out of the policy list endpoints — openframe/docs/managed-policies.md
+	OpenframeManaged bool
+	// <<< OPENFRAME(managed-policies)
 }
 
 // NewTeamPolicyPayload holds data for team policy creation.
@@ -125,6 +128,10 @@ type NewTeamPolicyPayload struct {
 	// ContinuousAutomationsEnabled indicates whether software/script automations
 	// should run on every failing policy result, not just on pass→fail transitions.
 	ContinuousAutomationsEnabled bool
+
+	// >>> OPENFRAME(managed-policies): platform-owned policy, kept out of the policy list endpoints — openframe/docs/managed-policies.md
+	OpenframeManaged bool `json:"openframe_managed"`
+	// <<< OPENFRAME(managed-policies)
 }
 
 var (
@@ -325,6 +332,10 @@ type ModifyPolicyPayload struct {
 
 	// Type is the policy type. It is 'dynamic' by default and 'patch' for patch policies.
 	Type string `json:"-"`
+
+	// >>> OPENFRAME(managed-policies): platform-owned policy, kept out of the policy list endpoints — openframe/docs/managed-policies.md
+	OpenframeManaged *bool `json:"openframe_managed"`
+	// <<< OPENFRAME(managed-policies)
 }
 
 // Verify verifies the policy payload is valid.
@@ -430,6 +441,14 @@ type PolicyData struct {
 	//
 	// Only applies to team policies.
 	ContinuousAutomationsEnabled bool `json:"continuous_automations_enabled" db:"continuous_automations_enabled"`
+
+	// >>> OPENFRAME(managed-policies): omitted from the policy list and count endpoints; still runs on
+	// hosts and still reports results — openframe/docs/managed-policies.md
+	//
+	// Loaded separately (loadOpenframeManagedForPolicies), not through policyCols, because the column only
+	// exists in OpenFrame databases.
+	OpenframeManaged bool `json:"openframe_managed" db:"openframe_managed"`
+	// <<< OPENFRAME(managed-policies)
 
 	UpdateCreateTimestamps
 }

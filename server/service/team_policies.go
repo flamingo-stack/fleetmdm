@@ -307,6 +307,9 @@ func (svc *Service) newTeamPolicyPayloadToPolicyPayload(ctx context.Context, tea
 		ContinuousAutomationsEnabled: p.ContinuousAutomationsEnabled,
 		Type:                         policyType,
 		PatchSoftwareTitleID:         p.PatchSoftwareTitleID,
+		// >>> OPENFRAME(managed-policies): let the platform mark the policy it owns — openframe/docs/managed-policies.md
+		OpenframeManaged: p.OpenframeManaged,
+		// <<< OPENFRAME(managed-policies)
 	}, nil
 }
 
@@ -602,7 +605,19 @@ func (svc *Service) modifyPolicy(ctx context.Context, teamID *uint, id uint, p f
 		return nil, err
 	}
 
-	if ok := checkTeamID(teamID, policy); !ok {
+	ok := checkTeamID(teamID, policy)
+	// >>> OPENFRAME(mysql-multitenancy): under a per-request tenant pin the tenant's own policies
+	// carry the pinned team id (creation re-homes "global" policies to the pinned team), so from
+	// the tenant's perspective an own-team policy IS a global policy — the global modify endpoint
+	// must accept it. Same allowance as DeleteGlobalPolicies. Foreign policies never reach here:
+	// the fenced ds.Policy above already returned NotFound for them. Unpinned (flag off) keeps
+	// upstream's exact check.
+	if !ok && teamID == nil && policy.TeamID != nil {
+		pinned, pinnedOK := fleet.OpenframeTeamID(ctx)
+		ok = pinnedOK && *policy.TeamID == pinned
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+	if !ok {
 		return nil, ctxerr.Wrap(ctx, &fleet.BadRequestError{
 			Message:     "policy does not belong to team/global",
 			InternalErr: fmt.Errorf("teamID: %+v, policy: %+v", teamID, policy),
@@ -672,6 +687,11 @@ func (svc *Service) modifyPolicy(ctx context.Context, teamID *uint, id uint, p f
 	if p.ContinuousAutomationsEnabled != nil {
 		policy.ContinuousAutomationsEnabled = *p.ContinuousAutomationsEnabled
 	}
+	// >>> OPENFRAME(managed-policies): let the platform mark the policy it owns — openframe/docs/managed-policies.md
+	if p.OpenframeManaged != nil {
+		policy.OpenframeManaged = *p.OpenframeManaged
+	}
+	// <<< OPENFRAME(managed-policies)
 	if removeStats {
 		policy.FailingHostCount = 0
 		policy.PassingHostCount = 0

@@ -26,6 +26,10 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ${{ github.event_name == 'push' && 'fleet-release-latest' || 'fleet-release-manual' }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   BINARY_NAME: fleet
@@ -43,9 +47,9 @@ jobs:
 
   changes:
     name: Detect Changes
-    uses: ./.github/workflows/changes.yml
+    uses: ./.github/workflows/changes.yaml
     if: |
-      github.event_name == 'workflow_dispatch' || 
+      github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push'
 
 
@@ -54,7 +58,7 @@ jobs:
     needs: [version, changes]
     runs-on: ${{ matrix.os }}
     if: |
-      (github.event_name == 'push' && needs.changes.outputs.client == 'true') ||
+      (github.event_name == 'push' && fromJSON(needs.changes.outputs.changes || '{}').client == 'true') ||
       (github.event_name == 'workflow_dispatch' && needs.version.outputs.version != '')
     defaults:
       run:
@@ -62,15 +66,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            go_os: darwin
-            go_arch: ["arm64", "amd64"]
-            artifact_name: fleet-mac-universal
-          - os: windows-latest
-            go_os: windows
-            go_arch: amd64
-            artifact_name: fleet-windows-amd64
+        include: ${{ fromJson(needs.changes.outputs.clients_matrix) }}
 
     steps:
       - name: Checkout
@@ -147,7 +143,7 @@ jobs:
     needs: [version, changes]
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'push' && needs.changes.outputs.server == 'true') ||
+      (github.event_name == 'push' && fromJSON(needs.changes.outputs.changes || '{}').server == 'true') ||
       (github.event_name == 'workflow_dispatch' && needs.version.outputs.version != '')
     steps:
       - name: Harden Runner
@@ -210,7 +206,7 @@ jobs:
     needs: [version, changes]
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'push' && needs.changes.outputs.helm == 'true') ||
+      (github.event_name == 'push' && fromJSON(needs.changes.outputs.changes || '{}').helm == 'true') ||
       (github.event_name == 'workflow_dispatch' && needs.version.outputs.version != '')
     steps:
       - name: Checkout
@@ -247,6 +243,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           mkdir -p final-artifacts/clients
@@ -264,13 +262,18 @@ jobs:
           fi
 
           ls -lh final-artifacts/clients/
+          for f in fleet-macos-universal.tar.gz fleet-windows-amd64.zip; do
+            [ -s "final-artifacts/clients/$f" ] || { echo "::error::missing client assets: $f"; exit 1; }
+          done
 
       - name: Generate release header
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          IMAGES=$(echo '${{ needs.changes.outputs.images_matrix }}' | jq -r '.[] | "- `${{ env.REGISTRY }}/${{ github.repository }}/\(.name):'"${VERSION}"'`"')
+
           cat > RELEASE_HEADER.md <<EOF
           ## Images
-          - \`${{ env.REGISTRY }}/${{ github.repository }}/fleet:${VERSION}\`
+          ${IMAGES}
 
           ## Fleet Clients
           - **macOS** (Universal): \`fleet-macos-universal.tar.gz\`
@@ -295,6 +298,7 @@ jobs:
           prerelease: ${{ github.event_name == 'push' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           body_path: RELEASE_HEADER.md
+          fail_on_unmatched_files: true
           files: |
             final-artifacts/clients/*.zip
             final-artifacts/clients/*.tar.gz

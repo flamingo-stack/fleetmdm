@@ -138,9 +138,6 @@ custom-gcl
 tools/dibble/dibble
 
 # OPENFRAME(agent-openframe-mode): ignore fork build artifacts (orbit/osquery binaries) — openframe/docs/agent-openframe-mode.md
-# Openframe build artifacts (not the source directories)
+# Keep anchored: unanchored `orbit**` matches any basename at any depth, incl. client/orbit_*.go
 /orbit-*
 /osquery-*
-# Openframe
-orbit**
-osquery**

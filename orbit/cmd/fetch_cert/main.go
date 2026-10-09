@@ -127,6 +127,9 @@ func requestCert(signer *httpsig.Signer, fleetURL string, certificateAuthorityID
 	if err != nil {
 		return "", fmt.Errorf("creating http request: %w", err)
 	}
+	// >>> OPENFRAME(agent-json-content-type): declare JSON so a WAF parses the body instead of regexing it whole; set before Sign() in case covered fields ever include it — openframe/docs/agent-json-content-type.md
+	req.Header.Set("Content-Type", "application/json")
+	// <<< OPENFRAME(agent-json-content-type)
 
 	if err := signer.Sign(req); err != nil {
 		return "", fmt.Errorf("failed to sign request: %w", err)

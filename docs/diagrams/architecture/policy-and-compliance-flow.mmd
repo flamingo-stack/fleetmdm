@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant Operator as "Fleet Operator (UI/CLI)"
+    participant API as "Fleet Server API"
+    participant MySQL as "MySQL"
+    participant Cron as "Cron Scheduler"
+    participant Agent as "fleetd (orbit)"
+    participant Pinot as "Pinot Analytics"
+
+    Operator->>API: POST /api/v1/fleet/policies (create policy)
+    API->>MySQL: Persist policy definition
+    MySQL-->>API: Policy ID
+
+    Cron->>MySQL: Read pending policy evaluations
+    MySQL-->>Cron: Policy queries per host
+
+    Agent->>API: POST distributed/write (policy query results)
+    API->>MySQL: Record pass/fail per host per policy
+    API->>Pinot: Publish compliance events
+
+    Operator->>API: GET /api/v1/fleet/policies (view results)
+    API->>MySQL: Aggregate passing/failing host counts
+    MySQL-->>API: Policy stats
+    API-->>Operator: Policy dashboard data

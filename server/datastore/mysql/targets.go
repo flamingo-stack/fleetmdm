@@ -22,6 +22,18 @@ func (ds *Datastore) CountHostsInTargets(ctx context.Context, filter fleet.TeamF
 
 	queryTargetLogicCondition, queryTargetArgs := targetSQLCondAndArgs(targets, "h")
 
+	// >>> OPENFRAME(mysql-multitenancy): fence target host resolution to this process's pinned team
+	// so a live query cannot target/count another tenant's hosts on a shared DB. The Redis key
+	// prefix already isolates live-query execution/results; this fences the MySQL target set too,
+	// keeping counts correct and foreign host ids out of campaign targets.
+	openframeTeamCond := ""
+	var openframeTeamArgs []interface{}
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		openframeTeamCond = " AND h.team_id = ?"
+		openframeTeamArgs = append(openframeTeamArgs, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	// As of Fleet 4.15, mia hosts are also included in the total for offline hosts
 	sql := fmt.Sprintf(`
 		SELECT
@@ -32,12 +44,14 @@ func (ds *Datastore) CountHostsInTargets(ctx context.Context, filter fleet.TeamF
 			COALESCE(SUM(CASE WHEN DATE_ADD(h.created_at, INTERVAL 1 DAY) >= ? THEN 1 ELSE 0 END), 0) new
 		FROM hosts h
 		LEFT JOIN host_seen_times hst ON (h.id=hst.host_id)`+hostMDMSeenTimeJoin+`
-		WHERE %s AND %s`,
+		WHERE %s AND %s%s`,
 		fleet.OnlineIntervalBuffer, fleet.OnlineIntervalBuffer,
-		queryTargetLogicCondition, ds.whereFilterHostsByTeams(filter, "h"),
+		queryTargetLogicCondition, ds.whereFilterHostsByTeams(filter, "h"), openframeTeamCond, // OPENFRAME(mysql-multitenancy)
 	)
 
-	query, args, err := sqlx.In(sql, append([]interface{}{now, now, now, now}, queryTargetArgs...)...)
+	countArgs := append([]interface{}{now, now, now, now}, queryTargetArgs...)
+	countArgs = append(countArgs, openframeTeamArgs...) // OPENFRAME(mysql-multitenancy)
+	query, args, err := sqlx.In(sql, countArgs...)
 	if err != nil {
 		return fleet.TargetMetrics{}, ctxerr.Wrap(ctx, err, "sqlx.In CountHostsInTargets")
 	}
@@ -132,14 +146,25 @@ func (ds *Datastore) HostIDsInTargets(ctx context.Context, filter fleet.TeamFilt
 
 	queryTargetLogicCondition, queryTargetArgs := targetSQLCondAndArgs(targets, "hosts")
 
+	// >>> OPENFRAME(mysql-multitenancy): fence target host resolution to this process's pinned team
+	// so a live query cannot distribute to another tenant's hosts on a shared DB. Injected into the
+	// WHERE clause (before ORDER BY).
+	openframeTeamCond := ""
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		openframeTeamCond = " AND hosts.team_id = ?"
+		queryTargetArgs = append(queryTargetArgs, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	sql := fmt.Sprintf(`
 			SELECT DISTINCT id
 			FROM hosts
-			WHERE %s AND %s
+			WHERE %s AND %s%s
 			ORDER BY id ASC
 		`,
 		queryTargetLogicCondition,
 		ds.whereFilterHostsByTeams(filter, "hosts"),
+		openframeTeamCond, // OPENFRAME(mysql-multitenancy)
 	)
 
 	query, args, err := sqlx.In(sql, queryTargetArgs...)

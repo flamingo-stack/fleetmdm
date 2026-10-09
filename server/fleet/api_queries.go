@@ -31,6 +31,12 @@ type ListQueriesRequest struct {
 	MergeInherited bool `query:"merge_inherited,optional"`
 	// only return queries targeted to run on this platform
 	Platform string `query:"platform,optional"`
+	// >>> OPENFRAME(managed-queries): opt-in to list platform-owned queries — openframe/docs/managed-queries.md
+	// IncludeOpenframeManaged, when true, keeps OpenFrame-managed queries in the listing instead of
+	// hiding them. Defaults false so the operator-facing UI stays decluttered; OpenFrame's own
+	// services (query sync, host auto-assign) opt in to enumerate what they own.
+	IncludeOpenframeManaged bool `query:"include_openframe_managed,optional"`
+	// <<< OPENFRAME(managed-queries)
 }
 
 type ListQueriesResponse struct {

@@ -62,8 +62,18 @@ func (ds *Datastore) DistributedQueryCampaign(ctx context.Context, id uint) (*fl
 	sql := `
 		SELECT * FROM distributed_query_campaigns WHERE id = ?
 	`
+	args := []interface{}{id}
+	// >>> OPENFRAME(mysql-multitenancy): a campaign's tenant is its query's team (pinned creation
+	// re-homes ad-hoc query rows to the tenant team) — fence by-id reads so one tenant cannot load
+	// (and then stream) another tenant's campaign on the shared DB. No-op when unpinned.
+	// — openframe/docs/mysql-multitenancy-feature.md
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sql += ` AND EXISTS (SELECT 1 FROM queries q WHERE q.id = distributed_query_campaigns.query_id AND q.team_id = ?)`
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	campaign := &fleet.DistributedQueryCampaign{}
-	if err := sqlx.GetContext(ctx, ds.reader(ctx), campaign, sql, id); err != nil {
+	if err := sqlx.GetContext(ctx, ds.reader(ctx), campaign, sql, args...); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "selecting distributed query campaign")
 	}
 
@@ -106,9 +116,21 @@ func (ds *Datastore) DistributedQueryCampaignTargetIDs(ctx context.Context, id u
 	sqlStatement := `
 		SELECT * FROM distributed_query_campaign_targets WHERE distributed_query_campaign_id = ?
 	`
+	args := []interface{}{id}
+	// >>> OPENFRAME(mysql-multitenancy): same fence as DistributedQueryCampaign — targets resolve
+	// via their campaign's query team. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		sqlStatement += ` AND EXISTS (
+			SELECT 1 FROM distributed_query_campaigns dqc
+			JOIN queries q ON q.id = dqc.query_id
+			WHERE dqc.id = distributed_query_campaign_targets.distributed_query_campaign_id AND q.team_id = ?
+		)`
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	targets := []fleet.DistributedQueryCampaignTarget{}
 
-	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &targets, sqlStatement, id); err != nil {
+	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &targets, sqlStatement, args...); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "select distributed campaign target")
 	}
 

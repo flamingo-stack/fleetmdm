@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 //     and add tests in cached_mysql_test.go to ensure it works as expected.
 const (
 	appConfigKey                       = "AppConfig:%s"
+	openframeAppConfigKeyPrefix        = "AppConfig:openframe_team:" // OPENFRAME(mysql-multitenancy)
 	defaultAppConfigExpiration         = 1 * time.Second
 	packsHostKey                       = "Packs:host:%d"
 	defaultPacksExpiration             = 1 * time.Minute
@@ -231,19 +233,30 @@ func New(ds fleet.Datastore, opts ...Option) fleet.Datastore {
 	return c
 }
 
+// >>> OPENFRAME(mysql-multitenancy): key the AppConfig cache by the request's team so a shared
+// process never serves one tenant's config to another; unpinned keeps the constant key.
+func openframeAppConfigKey(ctx context.Context) string {
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		return openframeAppConfigKeyPrefix + strconv.FormatUint(uint64(teamID), 10)
+	}
+	return appConfigKey
+}
+
+// <<< OPENFRAME(mysql-multitenancy)
+
 func (ds *cachedMysql) NewAppConfig(ctx context.Context, info *fleet.AppConfig) (*fleet.AppConfig, error) {
 	ac, err := ds.Datastore.NewAppConfig(ctx, info)
 	if err != nil {
 		return nil, err
 	}
 
-	ds.c.Set(ctx, appConfigKey, ac, ds.appConfigExp)
+	ds.c.Set(ctx, openframeAppConfigKey(ctx), ac, ds.appConfigExp) // OPENFRAME(mysql-multitenancy)
 
 	return ac, nil
 }
 
 func (ds *cachedMysql) AppConfig(ctx context.Context) (*fleet.AppConfig, error) {
-	if x, found := ds.c.Get(ctx, appConfigKey); found {
+	if x, found := ds.c.Get(ctx, openframeAppConfigKey(ctx)); found { // OPENFRAME(mysql-multitenancy)
 		ac, ok := x.(*fleet.AppConfig)
 		if ok {
 			return ac, nil
@@ -255,7 +268,7 @@ func (ds *cachedMysql) AppConfig(ctx context.Context) (*fleet.AppConfig, error) 
 		return nil, err
 	}
 
-	ds.c.Set(ctx, appConfigKey, ac, ds.appConfigExp)
+	ds.c.Set(ctx, openframeAppConfigKey(ctx), ac, ds.appConfigExp) // OPENFRAME(mysql-multitenancy)
 
 	return ac, nil
 }
@@ -266,7 +279,7 @@ func (ds *cachedMysql) SaveAppConfig(ctx context.Context, info *fleet.AppConfig)
 		return err
 	}
 
-	ds.c.Set(ctx, appConfigKey, info, ds.appConfigExp)
+	ds.c.Set(ctx, openframeAppConfigKey(ctx), info, ds.appConfigExp) // OPENFRAME(mysql-multitenancy)
 
 	return nil
 }

@@ -26,7 +26,8 @@ Every fork edit inside a shared upstream file is wrapped in sentinel comments:
 Find them all: `grep -rn "OPENFRAME(" --include='*.go' --include='*.yaml' --include='*.tpl' .`
 Net-new fork-only code lives under `openframe/`, `server/service/openframe/`,
 `server/datastore/mysql/migrations/openframe/`, `server/datastore/redis/keyprefix.go`,
-and `server/fleet/openframe.go`.
+`server/fleet/openframe.go`, `server/datastore/mysql/openframe.go`, and
+`server/service/openframe_middleware.go`.
 
 ## Syncing from upstream (the important workflow)
 

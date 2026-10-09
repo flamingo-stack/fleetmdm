@@ -14,7 +14,9 @@ rules:
   resources:
   - secrets
   resourceNames:
-  - {{ .Values.database.secretName }}
+  # >>> OPENFRAME(helm): mirror the mysql-tls volume source — openframe/docs/helm-chart.md
+  - {{ default .Values.database.secretName .Values.database.existingSecret }}
+  # <<< OPENFRAME(helm)
   - {{ .Values.cache.secretName }}
   - {{ .Values.fleet.secretName }}
   - {{ .Values.osquery.secretName }}

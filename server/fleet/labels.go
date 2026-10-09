@@ -211,6 +211,11 @@ type Label struct {
 	LabelMembershipType LabelMembershipType `json:"label_membership_type" db:"label_membership_type"`
 	HostCount           int                 `json:"host_count,omitempty" db:"host_count"`
 	TeamID              *uint               `json:"team_id" renameto:"fleet_id" db:"team_id"`
+	// >>> OPENFRAME(mysql-multitenancy): generated column IFNULL(team_id,0) backing the
+	// per-team unique index on (name, openframe_team_key); mapped only so `SELECT l.*`
+	// sqlx scans don't fail on the extra column. Never set by code; not part of the API.
+	OpenframeTeamKey uint `json:"-" db:"openframe_team_key"`
+	// <<< OPENFRAME(mysql-multitenancy)
 }
 
 type LabelWithTeamName struct {

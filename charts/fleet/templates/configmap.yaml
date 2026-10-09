@@ -14,6 +14,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fleet-database
+  # >>> OPENFRAME(helm): annotations so the migration Job's ConfigMap can join an Argo PreSync phase — openframe/docs/helm-chart.md
+  {{- with .Values.database.configMapAnnotations }}
+  annotations:
+    {{- toYaml . | trim | nindent 4 }}
+  {{- end }}
+  # <<< OPENFRAME(helm)
   labels:
     {{- include "fleet.labels" . | nindent 4 }}
 data:
@@ -22,3 +28,16 @@ data:
   {{ .Values.database.databaseKey }}: {{ .Values.database.database | quote }}
   {{ .Values.database.usernameKey }}: {{ .Values.database.username | quote }}
 {{- end }}
+---
+{{- if not .Values.fleet.openframe.multiTenancy.existingConfigMap }}
+# >>> OPENFRAME(mysql-multitenancy): chart-managed ConfigMap holding the tenant UUID — openframe/docs/helm-chart.md
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fleet-openframe-tenant
+  labels:
+    {{- include "fleet.labels" . | nindent 4 }}
+data:
+  {{ .Values.fleet.openframe.multiTenancy.tenantUuidKey }}: {{ .Values.fleet.openframe.multiTenancy.tenantUuid | quote }}
+{{- end }}
+# <<< OPENFRAME(mysql-multitenancy)

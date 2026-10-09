@@ -81,6 +81,24 @@ fleet:
     enabled: true
     image: busybox:1.36
   # <<< OPENFRAME(helm)
+  # >>> OPENFRAME(helm): upstream sets no probe timings and the defaults kill too early — openframe/docs/helm-chart.md
+  probes:
+    # 24 × 15 = 6 min
+    startup:
+      periodSeconds: 15
+      failureThreshold: 25
+      timeoutSeconds: 10
+    # 8 × 15 = 2 min, keep it above readiness
+    liveness:
+      periodSeconds: 15
+      failureThreshold: 9
+      timeoutSeconds: 10
+    # 4 × 15 = 1 min
+    readiness:
+      periodSeconds: 15
+      failureThreshold: 5
+      timeoutSeconds: 10
+  # <<< OPENFRAME(helm)
   tls:
     enabled: true
     # Set to true if you need a separate secret for just TLS data.
@@ -111,6 +129,15 @@ fleet:
       existingSecret: ""  # Name of a K8s Secret. If set, secretKeyValue is ignored.
       secretKeyKey: "FLEET_SETUP_ADMIN_PASSWORD"  # Key name within the secret to read the value from.
       secretKeyValue: "fleet"  # Plain text password (for dev/test only). Ignored if secret is set.
+  # >>> OPENFRAME(mysql-multitenancy): OpenFrame feature block.
+  openframe:
+    multiTenancy:
+      enabled: false
+      tenantUuid: ""          # pinned mode: tenant UUID, stored in the chart-managed ConfigMap
+      existingConfigMap: ""   # optional: read the tenant UUID from your own ConfigMap instead
+      tenantUuidKey: "FLEET_OPENFRAME_TENANT_UUID"  # key holding the UUID in either ConfigMap
+      teamId: ""              # escape hatch: direct FLEET_OPENFRAME_TEAM_ID pin (prefer tenantUuid)
+  # <<< OPENFRAME(mysql-multitenancy)
   mdm:
     windows:
       wstepIdentityCertKey: ""
@@ -140,14 +167,32 @@ fleet:
     licenseKey: license-key
   extraVolumes: []
   extraVolumeMounts: []
-  # Currently only passes runAsNonRoot, runAsUser, runAsGroup
+
+  # >>> OPENFRAME(hardening): non-root + read-only rootfs for every fleet container
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 3333
+    runAsGroup: 3333
+    fsGroup: 3333
+    seccompProfile:
+      type: RuntimeDefault
+
   securityContext:
     runAsNonRoot: true
     runAsUser: 3333
     runAsGroup: 3333
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    privileged: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+  # <<< OPENFRAME(hardening)
   # >>> OPENFRAME(helm): fork-added custom CA truststore support — openframe/docs/helm-chart.md
   # Add additional CA's to the Fleet container truststore
-  # To add CA's, set enabled: true 
+  # To add CA's, set enabled: true
   # Supports adding CA's from Config maps and Secrets
   # configMaps:
   #   - name: fleet-ca-config
@@ -176,8 +221,14 @@ vulnProcessing:
   schedule: "0 * * * *"
   # >>> OPENFRAME(vuln-persistence): fork-added feed-cache persistence for the vuln cron — openframe/docs/helm-chart.md
   # When true, `schedule` is ignored and the job runs hourly at a minute derived
-  # from the release namespace, so tenants sharing a cluster don't all fire at :00.
+  # from `staggerKey`, so releases sharing a feed mirror or a database don't all
+  # fire at :00.
   staggerSchedule: false
+  # Hash input for the stagger; empty means the release namespace. Set it to
+  # something that differs per release (cluster id, tenant id) whenever every
+  # release lands in an identically named namespace — otherwise every release
+  # derives the same minute and the stagger is a no-op.
+  staggerKey: ""
   # Persist FLEET_VULNERABILITIES_DATABASES_PATH (/tmp/vuln) across runs so each
   # run only fetches feed deltas instead of the full ~800MB. Requires dedicated=true.
   persistence:
@@ -259,17 +310,22 @@ osquery:
 ## Section: database
 # All of the connection settings for MySQL
 database:
-  # Name of the Secret resource containing MySQL password and TLS secrets
+  # Name of the Secret resource containing MySQL password and TLS secrets.
+  # Only used when existingSecret is empty — see existingSecret below.
   secretName: mysql
   # >>> OPENFRAME(helm): fork-externalized DB connection config (ConfigMap/Secret refs) — openframe/docs/helm-chart.md
   # To read connection details from a ConfigMap instead of using static values below:
   existingConfigMap: ""  # Name of a K8s ConfigMap. If set, host/port/database/username values are ignored.
+  configMapAnnotations: {}  # Annotations for the chart-managed fleet-database ConfigMap. Argo CD users making
+                            # the migration Job a PreSync hook must put the ConfigMap in the same phase:
+                            # argocd.argoproj.io/hook: PreSync + hook-delete-policy: HookFailed
   hostKey: "FLEET_MYSQL_HOST"
   portKey: "FLEET_MYSQL_PORT"
   databaseKey: "MYSQL_DATABASE"
   usernameKey: "MYSQL_USER"
   # To read password from a Secret instead of the chart-created one:
   existingSecret: ""  # Name of a K8s Secret. If set, secretName is ignored for password.
+  secretAnnotations: {}  # Annotations for the chart-managed fleet-database Secret. Same PreSync note as above.
   secretKey: "MYSQL_PASSWORD"
   host: 127.0.0.1
   port: "3306"
@@ -331,6 +387,18 @@ cache:
   usePassword: false
   secretName: redis
   passwordKey: redis-password
+  # >>> OPENFRAME(helm): upstream defaults this to 0, so a boot without Redis dies at once — openframe/docs/helm-chart.md
+  connectRetryAttempts: 10
+  # <<< OPENFRAME(helm)
+  # >>> OPENFRAME(helm): fork-added Redis TLS, mirrors database.tls — openframe/docs/helm-chart.md
+  # Managed Redis (Memorystore) answers only over TLS. The CA rides in an externally managed Secret,
+  # mounted whole at /secrets/redis, exactly like the MySQL server CA.
+  tls:
+    enabled: false
+    existingSecret: ""  # defaults to cache.secretName
+    caCertKey: ""       # key inside that Secret holding the server CA in PEM
+    serverName: ""      # only when the certificate names a host the address does not
+  # <<< OPENFRAME(helm)
   # >>> OPENFRAME(redis-key-prefix): fork-added per-tenant Redis key prefix — openframe/docs/redis-key-prefix.md
   # When set, wires FLEET_REDIS_KEY_PREFIX from existingConfigMap[keyPrefixKey].
   # Required when sharing one Redis across multiple Fleet servers (multi-tenant).
@@ -343,10 +411,25 @@ gke:
   # The CloudSQL Proxy runs as a container in the Fleet Pod that proxies connections to a Cloud SQL instance
   cloudSQL:
     enableProxy: false
-    imageRepository: gcr.io/cloudsql-docker/gce-proxy
-    imageTag: 1.17-alpine
+    imageRepository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    imageTag: 2.25.0-alpine
     verbose: true
-    instanceName: ""
+    instanceName: "" # my-proj:us-central1:fleet-db, append ?private-ip=true for a private instance
+    # >>> OPENFRAME(hardening): proxy image ships its own nonroot uid
+    # uid and gid 65532 nonroot user in the proxy image
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      privileged: false
+      readOnlyRootFilesystem: true
+      seccompProfile:
+        type: RuntimeDefault
+    # <<< OPENFRAME(hardening)
   # The GKE Ingress requires a few changes that other ingress controllers don't
   ingress:
     useManagedCertificate: false
@@ -385,4 +468,3 @@ mysql:
 
 redis:
   enabled: false
-

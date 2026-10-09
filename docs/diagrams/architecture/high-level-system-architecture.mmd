@@ -1,0 +1,42 @@
+flowchart TD
+    subgraph Endpoints
+        WinAgent["Windows Agent (fleetd/orbit)"]
+        MacAgent["macOS Agent (fleetd/orbit)"]
+        LinuxAgent["Linux Agent (fleetd/orbit)"]
+        ChromeExt["Chrome Extension (fleetd-chrome)"]
+    end
+
+    subgraph OpenFrame
+        GW["OpenFrame Gateway"]
+        FleetAPI["Fleet Server API (Go)"]
+        subgraph Storage
+            MySQL["MySQL (inventory, policy, jobs)"]
+            Redis["Redis (cache, live query, pub/sub)"]
+            S3["S3 (carves, software installers)"]
+        end
+        subgraph Streaming
+            Stream["OpenFrame Stream"]
+            Kafka["Kafka"]
+            Cassandra["Cassandra"]
+            Pinot["Pinot Analytics"]
+        end
+        subgraph Frontend
+            WebUI["React/TypeScript Web Console"]
+        end
+        ArgoCD["ArgoCD (app-of-apps)"]
+    end
+
+    WinAgent -- "enroll/inventory/policy" --> GW
+    MacAgent -- "enroll/inventory/policy" --> GW
+    LinuxAgent -- "enroll/inventory/policy" --> GW
+    ChromeExt -- "inventory" --> GW
+    GW --> FleetAPI
+    FleetAPI --> MySQL
+    FleetAPI --> Redis
+    FleetAPI --> S3
+    FleetAPI --> Stream
+    Stream --> Kafka
+    Kafka --> Cassandra
+    Kafka --> Pinot
+    WebUI --> FleetAPI
+    ArgoCD --> FleetAPI

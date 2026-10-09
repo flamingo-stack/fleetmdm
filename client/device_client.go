@@ -107,6 +107,11 @@ func (dc *DeviceClient) requestAttempt(verb string, path string, query string, p
 	}
 
 	dc.SetClientCapabilitiesHeader(request)
+	// >>> OPENFRAME(agent-json-content-type): declare JSON so a WAF parses the body instead of regexing it whole — openframe/docs/agent-json-content-type.md
+	if len(bodyBytes) > 0 {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	// <<< OPENFRAME(agent-json-content-type)
 	response, err := dc.DoHTTPRequest(request)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", verb, path, err)

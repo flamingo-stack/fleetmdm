@@ -33,9 +33,9 @@ spec:
     spec:
       restartPolicy: Never
       # Same fsGroup as the CronJob so the fresh claim is chowned on first mount.
-      {{- if .Values.fleet.securityContext.runAsGroup }}
+      {{- with .Values.fleet.podSecurityContext }}
       securityContext:
-        fsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
+        {{- toYaml . | nindent 8 }}
         fsGroupChangePolicy: OnRootMismatch
       {{- end }}
       containers:
@@ -50,21 +50,10 @@ spec:
           limits:
             cpu: 100m
             memory: 64Mi
+        {{- with .Values.fleet.securityContext }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: [ALL]
-          privileged: false
-          readOnlyRootFilesystem: true
-          {{- if .Values.fleet.securityContext.runAsGroup }}
-          runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsUser }}
-          runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-          {{- end }}
-          {{- if .Values.fleet.securityContext.runAsNonRoot }}
-          runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-          {{- end }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         volumeMounts:
         - name: vuln-data
           mountPath: /tmp/vuln

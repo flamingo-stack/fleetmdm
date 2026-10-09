@@ -108,6 +108,12 @@ func authenticatedDevice(svc fleet.Service, logger *slog.Logger, next endpoint.E
 		hostProvider := &hostctx.HostAttributeProvider{Host: host}
 		ctx = ctxerr.AddErrorContextProvider(ctx, hostProvider)
 
+		// >>> OPENFRAME(mysql-multitenancy): shared mode — pin to the host's team (fail closed).
+		if ctx, err = openframePinHostTeam(ctx, host); err != nil {
+			return nil, err
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
+
 		instrumentHostLogger(ctx, host.ID)
 		if ac, ok := authz_ctx.FromContext(ctx); ok {
 			ac.SetAuthnMethod(authnMethod)
@@ -150,6 +156,12 @@ func authenticatedHost(svc fleet.Service, logger *slog.Logger, next endpoint.End
 			if !ok {
 				return nil, ctxerr.New(ctx, "osquery pre-auth marker set without host in ctx")
 			}
+			// >>> OPENFRAME(mysql-multitenancy): shared mode — pin to the host's team (fail closed).
+			var err error
+			if ctx, err = openframePinHostTeam(ctx, host); err != nil {
+				return nil, err
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 			instrumentHostLogger(ctx, host.ID)
 			if ac, ok := authz_ctx.FromContext(ctx); ok {
 				ac.SetAuthnMethod(authz_ctx.AuthnHostToken)
@@ -190,6 +202,12 @@ func authenticatedHost(svc fleet.Service, logger *slog.Logger, next endpoint.End
 		// Register host as error context provider for ctxerr enrichment
 		hostProvider := &hostctx.HostAttributeProvider{Host: host}
 		ctx = ctxerr.AddErrorContextProvider(ctx, hostProvider)
+
+		// >>> OPENFRAME(mysql-multitenancy): shared mode — pin to the host's team (fail closed).
+		if ctx, err = openframePinHostTeam(ctx, host); err != nil {
+			return nil, err
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 
 		instrumentHostLogger(ctx, host.ID)
 		if ac, ok := authz_ctx.FromContext(ctx); ok {
@@ -236,6 +254,12 @@ func authenticatedOrbitHost(
 		// Register host as error context provider for ctxerr enrichment
 		hostProvider := &hostctx.HostAttributeProvider{Host: host}
 		ctx = ctxerr.AddErrorContextProvider(ctx, hostProvider)
+
+		// >>> OPENFRAME(mysql-multitenancy): shared mode — pin to the host's team (fail closed).
+		if ctx, err = openframePinHostTeam(ctx, host); err != nil {
+			return nil, err
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 
 		instrumentHostLogger(ctx, host.ID)
 		if ac, ok := authz_ctx.FromContext(ctx); ok {

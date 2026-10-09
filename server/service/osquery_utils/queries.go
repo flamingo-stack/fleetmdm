@@ -836,9 +836,12 @@ var extraDetailQueries = map[string]DetailQuery{
 		DirectIngestFunc: directIngestDiskEncryptionWindows,
 	},
 	"certificates_darwin": {
+		// >>> OPENFRAME(waf-inventory-shape): hex-encode the DN columns — a raw X.509 DN is `/`
+		// and `=` dense, which the edge WAF scores as SQLi (CRS 942431/942432) on every inventory
+		// write. Decoded in decodeCertificateDNColumns. openframe/docs/agent-inventory-waf-shape.md
 		Query: `
 	SELECT
-		ca, common_name, subject, issuer,
+		ca, hex(common_name) AS common_name_hex, hex(subject) AS subject_hex, hex(issuer) AS issuer_hex,
 		key_algorithm, key_strength, key_usage, signing_algorithm,
 		not_valid_after, not_valid_before,
 		serial, sha1, "system" as source,
@@ -849,7 +852,7 @@ var extraDetailQueries = map[string]DetailQuery{
 		path = '/Library/Keychains/System.keychain'
 	UNION
 	SELECT
-		ca, common_name, subject, issuer,
+		ca, hex(common_name) AS common_name_hex, hex(subject) AS subject_hex, hex(issuer) AS issuer_hex,
 		key_algorithm, key_strength, key_usage, signing_algorithm,
 		not_valid_after, not_valid_before,
 		serial, sha1, "user" as source,
@@ -858,13 +861,16 @@ var extraDetailQueries = map[string]DetailQuery{
 		certificates
 	WHERE
 		path LIKE '/Users/%/Library/Keychains/login.keychain-db';`,
+		// <<< OPENFRAME(waf-inventory-shape)
 		Platforms:        []string{"darwin"},
 		DirectIngestFunc: directIngestHostCertificatesDarwin,
 	},
 	"certificates_windows": {
+		// >>> OPENFRAME(waf-inventory-shape): same treatment as certificates_darwin above —
+		// openframe/docs/agent-inventory-waf-shape.md
 		Query: `
 	SELECT
-		ca, common_name, subject, issuer,
+		ca, hex(common_name) AS common_name_hex, hex(subject) AS subject_hex, hex(issuer) AS issuer_hex,
 		key_algorithm, key_strength, key_usage, signing_algorithm,
 		not_valid_after, not_valid_before,
 		serial, sha1, username,
@@ -873,6 +879,7 @@ var extraDetailQueries = map[string]DetailQuery{
 		certificates
 	WHERE
 		store = 'Personal';`,
+		// <<< OPENFRAME(waf-inventory-shape)
 		Platforms:        []string{"windows"},
 		DirectIngestFunc: directIngestHostCertificatesWindows,
 	},
@@ -3496,6 +3503,36 @@ func GetDetailQueries(
 
 var rxExtractUsernameFromHostCertPath = regexp.MustCompile(`^/Users/([^/]+)/Library/Keychains/login\.keychain\-db$`)
 
+// >>> OPENFRAME(waf-inventory-shape): the certificates detail queries hex-encode their DN columns
+// so raw X.509 punctuation never reaches the edge WAF (CRS 942431/942432 count `/` and `=` as SQL
+// special characters); this decodes them back — openframe/docs/agent-inventory-waf-shape.md
+var certificateDNColumns = []string{"common_name", "subject", "issuer"}
+
+// decodeCertificateDNColumns normalizes the DN columns of one certificates row in place, so the
+// rest of the ingest sees the plain values it always has. A row missing `<col>_hex` came from a
+// host still running the pre-encoding query handed out before this server started; its plain
+// columns are already in place, so only the \xHH unescape runs.
+func decodeCertificateDNColumns(ctx context.Context, logger *slog.Logger, row map[string]string) {
+	for _, col := range certificateDNColumns {
+		if encoded, ok := row[col+"_hex"]; ok {
+			decoded, err := hex.DecodeString(encoded)
+			if err != nil {
+				// Empty beats ingesting a hex string as if it were a DN.
+				logger.ErrorContext(ctx, "decoding hex certificate column", "component", "service",
+					"method", "directIngestHostCertificates", "column", col, "err", err)
+				row[col] = ""
+			} else {
+				row[col] = string(decoded)
+			}
+		}
+
+		// Unescape \xHH sequences for non-ASCII characters (e.g. Cyrillic) in the DN.
+		row[col] = fleet.DecodeHexEscapes(row[col])
+	}
+}
+
+// <<< OPENFRAME(waf-inventory-shape)
+
 func directIngestHostCertificatesDarwin(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -3511,11 +3548,10 @@ func directIngestHostCertificatesDarwin(
 
 	certs := make([]*fleet.HostCertificateRecord, 0, len(rows))
 	for _, row := range rows {
-		// Unescape \xHH sequences in fields that may contain non-ASCII
-		// characters (e.g. Cyrillic) in the certificate's distinguished name.
-		row["common_name"] = fleet.DecodeHexEscapes(row["common_name"])
-		row["subject"] = fleet.DecodeHexEscapes(row["subject"])
-		row["issuer"] = fleet.DecodeHexEscapes(row["issuer"])
+		// >>> OPENFRAME(waf-inventory-shape): the DN columns arrive hex-encoded from the detail
+		// query and must be decoded before use — openframe/docs/agent-inventory-waf-shape.md
+		decodeCertificateDNColumns(ctx, logger, row)
+		// <<< OPENFRAME(waf-inventory-shape)
 
 		csum, err := hex.DecodeString(row["sha1"])
 		if err != nil {
@@ -3604,11 +3640,10 @@ func directIngestHostCertificatesWindows(
 	// SHA1 sum + username
 	existsSha1User := make(map[string]bool, len(rows))
 	for _, row := range rows {
-		// Unescape \xHH sequences in fields that may contain non-ASCII
-		// characters (e.g. Cyrillic) in the certificate's distinguished name.
-		row["common_name"] = fleet.DecodeHexEscapes(row["common_name"])
-		row["subject"] = fleet.DecodeHexEscapes(row["subject"])
-		row["issuer"] = fleet.DecodeHexEscapes(row["issuer"])
+		// >>> OPENFRAME(waf-inventory-shape): the DN columns arrive hex-encoded from the detail
+		// query and must be decoded before use — openframe/docs/agent-inventory-waf-shape.md
+		decodeCertificateDNColumns(ctx, logger, row)
+		// <<< OPENFRAME(waf-inventory-shape)
 
 		csum, err := hex.DecodeString(row["sha1"])
 		if err != nil {

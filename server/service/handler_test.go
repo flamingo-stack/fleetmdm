@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/fleetdm/fleet/v4/pkg/fleethttp"
+	apiendpoints "github.com/fleetdm/fleet/v4/server/api_endpoints"
 	"github.com/fleetdm/fleet/v4/server/config"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mock"
@@ -24,6 +25,37 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/throttled/throttled/v2/store/memstore"
 )
+
+// >>> OPENFRAME(osquery-schema-retirement): schema search belongs to the AI service, not Fleet.
+func TestOpenframeOsquerySchemaRouteIsNotRegistered(t *testing.T) {
+	ds := new(mock.Store)
+	svc, _ := newTestService(t, ds, nil, nil)
+	limitStore, err := memstore.New(0)
+	require.NoError(t, err)
+	router := MakeHandler(svc, config.TestConfig(), slog.New(slog.DiscardHandler), limitStore, nil, nil, nil).(*mux.Router)
+
+	routes := make(map[string]bool)
+	err = router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+		path, pathErr := route.GetPathTemplate()
+		methods, methodsErr := route.GetMethods()
+		if pathErr == nil && methodsErr == nil {
+			for _, method := range methods {
+				routes[method+" "+path] = true
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	const prefix = "/api/{fleetversion:(?:v1|2022-04|latest)}/fleet"
+	require.True(t, routes["GET "+prefix+"/reports"])
+	require.True(t, routes["POST "+prefix+"/reports"])
+	require.True(t, routes["POST "+prefix+"/reports/run"])
+	require.True(t, routes["GET "+prefix+"/policies/{policy_id}/hosts"])
+	require.False(t, routes["GET "+prefix+"/osquery/schema/search"])
+	require.False(t, apiendpoints.IsInCatalog(fleet.NewAPIEndpointFromTpl("GET", "/api/v1/fleet/osquery/schema/search").Fingerprint()))
+}
+
+// <<< OPENFRAME(osquery-schema-retirement)
 
 func TestAPIRoutesConflicts(t *testing.T) {
 	ds := new(mock.Store)

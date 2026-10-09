@@ -84,6 +84,27 @@ func makeStreamDistributedQueryCampaignResultsHandler(config config.ServerConfig
 
 			ctx := viewer.NewContext(context.Background(), *vc)
 
+			// >>> OPENFRAME(mysql-multitenancy): sockjs handlers rebuild their context from
+			// Background, discarding the upgrade request's context that WithOpenframeTenant pinned
+			// with the tenant team — leaving the whole campaign stream unfenced and the live_query
+			// activity stamped with a NULL team_id. Re-apply the pin from the upgrade request (read
+			// once: polling transports mutate the session request under a lock). The base ctx stays
+			// Background so the stream's cancellation semantics are unchanged. Fail closed in shared
+			// mode: the middleware 401s a headerless upgrade before the handler runs, so an unpinned
+			// session here means the handler was mounted outside the middleware.
+			// — openframe/docs/mysql-multitenancy-feature.md
+			if req := session.Request(); req != nil {
+				if teamID, ok := fleet.OpenframeTeamID(req.Context()); ok {
+					ctx = fleet.NewOpenframeTeamContext(ctx, teamID)
+				}
+			}
+			if _, ok := fleet.OpenframeTeamID(ctx); !ok && fleet.IsOpenframeSharedMode() {
+				logger.ErrorContext(ctx, "openframe shared mode: rejecting campaign stream without tenant pin")
+				conn.WriteJSONError("missing tenant") //nolint:errcheck
+				return
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
+
 			msg, err := conn.ReadJSONMessage()
 			if err != nil {
 				logger.ErrorContext(ctx, "reading select_campaign JSON", "err", err)

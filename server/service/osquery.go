@@ -112,6 +112,16 @@ func (svc *Service) EnrollOsquery(ctx context.Context, enrollSecret, hostIdentif
 		return "", newOsqueryErrorWithInvalidNode("enroll failed: " + err.Error())
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): shared mode — pin the request to the enroll secret's
+	// team (fail closed) so the enrollment fence scopes matching.
+	if fleet.IsOpenframeSharedMode() {
+		if secret.TeamID == nil || *secret.TeamID == 0 {
+			return "", newOsqueryErrorWithInvalidNode("enroll failed: enroll secret has no team")
+		}
+		ctx = fleet.NewOpenframeTeamContext(ctx, *secret.TeamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	identityCert, err := svc.ds.GetHostIdentityCertByName(ctx, hostIdentifier)
 	if err != nil && !fleet.IsNotFound(err) {
 		return "", fleet.OrbitError{Message: fmt.Sprintf("loading certificate: %s", err.Error())}

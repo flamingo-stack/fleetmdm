@@ -10,9 +10,9 @@ metadata:
   name: fleet-vulnprocessing
   namespace: {{ .Release.Namespace }}
 spec:
-  # >>> OPENFRAME(vuln-persistence): optional namespace-derived hourly stagger — openframe/docs/helm-chart.md
+  # >>> OPENFRAME(vuln-persistence): optional hashed hourly stagger — openframe/docs/helm-chart.md
   {{- if .Values.vulnProcessing.staggerSchedule }}
-  schedule: "{{ mod (atoi (adler32sum .Release.Namespace)) 60 }} * * * *"
+  schedule: "{{ mod (atoi (adler32sum (default .Release.Namespace .Values.vulnProcessing.staggerKey))) 60 }} * * * *"
   {{- else }}
   schedule: {{ .Values.vulnProcessing.schedule | quote }}
   {{- end }}
@@ -38,16 +38,15 @@ spec:
           {{- if include "fleet.additionalCAs.enabled" . }}
           - name: install-trusted-cas
             image: "{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
+            {{- with .Values.fleet.securityContext }}
             securityContext:
-              runAsUser: 0
-              runAsNonRoot: false
-              allowPrivilegeEscalation: false
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
             command:
               - sh
               - -c
               - |
                 set -e
-                apk add ca-certificates
                 echo "Installing trusted CA certificates..."
 
                 for dir in /custom-ca/*; do
@@ -68,17 +67,21 @@ spec:
                 mountPath: /custom-ca/secret-{{ .name }}
                 readOnly: true
           {{- end }}
+              - name: ca-local
+                mountPath: /usr/local/share/ca-certificates
               - name: ca-certs
                 mountPath: /etc/ssl/certs
           {{- end }}
           # <<< OPENFRAME(helm)
           restartPolicy: Never
-          shareProcessNamespace: true
           # >>> OPENFRAME(vuln-persistence): fsGroup so uid 3333 can write the PVC (emptyDir was 0777) — openframe/docs/helm-chart.md
-          {{- if and .Values.vulnProcessing.persistence .Values.vulnProcessing.persistence.enabled .Values.fleet.securityContext.runAsGroup }}
+          {{- $persist := and .Values.vulnProcessing.persistence .Values.vulnProcessing.persistence.enabled }}
+          {{- with .Values.fleet.podSecurityContext }}
           securityContext:
-            fsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
+            {{- toYaml . | nindent 12 }}
+            {{- if $persist }}
             fsGroupChangePolicy: OnRootMismatch
+            {{- end }}
           {{- end }}
           # <<< OPENFRAME(vuln-persistence)
           containers:
@@ -88,7 +91,9 @@ spec:
               - |
                 /usr/bin/fleet vuln_processing;
                 {{- if .Values.gke.cloudSQL.enableProxy }}
-                sql_proxy_pid=$(pgrep cloud_sql_proxy) && kill -INT $sql_proxy_pid;
+                rc=$?;
+                timeout 10 sh -c 'until wget -q -Y off -T 2 -O- http://127.0.0.1:9091/quitquitquit; do sleep 1; done' || true;
+                exit $rc;
                 {{- end }}
             image: "{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
             resources:
@@ -264,6 +269,20 @@ spec:
               # <<< OPENFRAME(helm)
               - name: FLEET_REDIS_DATABASE
                 value: "{{ .Values.cache.database }}"
+              # >>> OPENFRAME(helm): fork-added Redis TLS — openframe/docs/helm-chart.md
+              {{- if .Values.cache.tls.enabled }}
+              - name: FLEET_REDIS_USE_TLS
+                value: "true"
+              {{- if .Values.cache.tls.caCertKey }}
+              - name: FLEET_REDIS_TLS_CA
+                value: "/secrets/redis/{{ .Values.cache.tls.caCertKey }}"
+              {{- end }}
+              {{- if .Values.cache.tls.serverName }}
+              - name: FLEET_REDIS_TLS_SERVER_NAME
+                value: "{{ .Values.cache.tls.serverName }}"
+              {{- end }}
+              {{- end }}
+              # <<< OPENFRAME(helm)
               {{- if .Values.cache.usePassword }}
               - name: FLEET_REDIS_PASSWORD
                 valueFrom:
@@ -300,26 +319,12 @@ spec:
                     key: {{ .valueFrom.secretKeyRef.key }}
               {{- end }}
               {{- end }}
+            # >>> OPENFRAME(hardening): non-root, read-only rootfs — openframe/docs/helm-chart.md
+            {{- with .Values.fleet.securityContext }}
             securityContext:
-              allowPrivilegeEscalation: false
-              capabilities:
-                {{- if .Values.gke.cloudSQL.enableProxy }}
-                add:
-                  - SYS_PTRACE
-                {{- else }}
-                drop: [ALL]
-                {{- end }}
-              privileged: false
-              readOnlyRootFilesystem: true
-              {{- if .Values.fleet.securityContext.runAsGroup }}
-              runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-              {{- end }}
-              {{- if .Values.fleet.securityContext.runAsUser }}
-              runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-              {{- end }}
-              {{- if .Values.fleet.securityContext.runAsNonRoot }}
-              runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-              {{- end }}
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            # <<< OPENFRAME(hardening)
             volumeMounts:
               - name: tmp
                 mountPath: /tmp
@@ -334,6 +339,11 @@ spec:
                 readOnly: true
                 mountPath: /secrets/mysql
               {{- end }}
+              {{- if .Values.cache.tls.enabled }}
+              - name: redis-tls
+                readOnly: true
+                mountPath: /secrets/redis
+              {{- end }}
               # >>> OPENFRAME(helm): fork-added CA truststore volume mount — openframe/docs/helm-chart.md
               {{- if include "fleet.additionalCAs.enabled" . }}
               - name: ca-certs
@@ -343,10 +353,16 @@ spec:
           {{- if .Values.gke.cloudSQL.enableProxy }}
           - name: cloudsql-proxy
             image: "{{ .Values.gke.cloudSQL.imageRepository }}:{{ .Values.gke.cloudSQL.imageTag }}"
-            command:
-            - "/cloud_sql_proxy"
-            - "-verbose={{ .Values.gke.cloudSQL.verbose}}"
-            - "-instances={{ .Values.gke.cloudSQL.instanceName }}=tcp:3306"
+            # >>> OPENFRAME(cloudsql-v2): v2 CLI + quitquitquit so the vuln container can stop the sidecar — openframe/docs/helm-chart.md
+            args:
+            - "--port=3306"
+            - "--structured-logs"
+            - "--quitquitquit"
+            {{- if not .Values.gke.cloudSQL.verbose }}
+            - "--quiet"
+            {{- end }}
+            - "{{ required "gke.cloudSQL.instanceName is required when gke.cloudSQL.enableProxy is true" .Values.gke.cloudSQL.instanceName }}"
+            # <<< OPENFRAME(cloudsql-v2)
             resources:
               limits:
                 cpu: 0.5 # 500Mhz
@@ -354,21 +370,12 @@ spec:
               requests:
                 cpu: 0.1 # 100Mhz
                 memory: 50Mi
+            # >>> OPENFRAME(hardening): proxy runs nonroot with a read-only rootfs — openframe/docs/helm-chart.md
+            {{- with .Values.gke.cloudSQL.securityContext }}
             securityContext:
-              allowPrivilegeEscalation: false
-              capabilities:
-                drop: [ALL]
-              privileged: false
-              readOnlyRootFilesystem: true
-              {{- if .Values.fleet.securityContext.runAsGroup }}
-              runAsGroup: {{ int64 .Values.fleet.securityContext.runAsGroup }}
-              {{- end }}
-              {{- if .Values.fleet.securityContext.runAsUser }}
-              runAsUser: {{ int64 .Values.fleet.securityContext.runAsUser }}
-              {{- end }}
-              {{- if .Values.fleet.securityContext.runAsNonRoot }}
-              runAsNonRoot: {{ .Values.fleet.securityContext.runAsNonRoot }}
-              {{- end }}
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            # <<< OPENFRAME(hardening)
           {{- end }}
           {{- with .Values.imagePullSecrets }}
           imagePullSecrets:
@@ -388,7 +395,14 @@ spec:
             {{- if .Values.database.tls.enabled }}
             - name: mysql-tls
               secret:
-                secretName: "{{ .Values.database.secretName }}"
+                # >>> OPENFRAME(helm): the server CA rides in the same externally managed Secret
+                secretName: "{{ default .Values.database.secretName .Values.database.existingSecret }}"
+                # <<< OPENFRAME(helm)
+            {{- end }}
+            {{- if .Values.cache.tls.enabled }}
+            - name: redis-tls
+              secret:
+                secretName: "{{ default .Values.cache.secretName .Values.cache.tls.existingSecret }}"
             {{- end }}
             # >>> OPENFRAME(helm): fork-added CA truststore volumes (configmaps/secrets) — openframe/docs/helm-chart.md
             {{- if include "fleet.additionalCAs.enabled" . }}
@@ -402,6 +416,8 @@ spec:
               secret:
                 secretName: {{ .name }}
             {{- end }}
+            - name: ca-local
+              emptyDir: {}
             - name: ca-certs
               emptyDir: {}
             {{- end }}

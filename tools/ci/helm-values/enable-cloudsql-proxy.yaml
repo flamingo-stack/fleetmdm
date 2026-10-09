@@ -130,7 +130,7 @@ gke:
   # The CloudSQL Proxy runs as a container in the Fleet Pod that proxies connections to a Cloud SQL instance
   cloudSQL:
     enableProxy: true
-    imageTag: 1.17-alpine
+    imageTag: 2.25.0-alpine
     verbose: true
     instanceName: "project:instance:region"
   # The GKE Ingress requires a few changes that other ingress controllers don't

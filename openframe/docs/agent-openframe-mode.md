@@ -140,6 +140,10 @@ extra constructor arguments — `openFrameMode bool` and
   `Authorization: Bearer <token>` to every request. An empty token logs a debug
   line and sends no header (the gateway then rejects the request, and the next
   refresh cycle will repopulate the token).
+- **Machine-id header.** Also in `requestWithExternal`, `OpenFrameMachineIdProvider`
+  reads the shared OpenFrame `machine_id` file (written by openframe-client) and,
+  if non-empty, adds `x-machine-id: <id>` to every request for gateway/firewall
+  machine identification. A missing or empty file sends no header.
 
 The node-key enrollment behavior is unchanged by OpenFrame mode and is documented
 separately in [node-key-management.md](node-key-management.md).
@@ -194,6 +198,7 @@ host API (see [api-expose-osquery-host-id.md](api-expose-osquery-host-id.md)).
 | `server/service/openframe/openframe-encryption-service.go` | AES-GCM decryption |
 | `server/service/openframe/openframe-token-extractor.go` | Read + decrypt token file |
 | `server/service/openframe/openframe_authorization_manager.go` | Thread-safe token holder |
+| `server/service/openframe/openframe_machine_id_provider.go` | Cached reader of the shared OpenFrame `machine_id` file |
 | `server/service/openframe/openframe_token_refresher.go` | 5-second cron token refresh |
 | `server/service/base_client.go` | Additional enrollment/debug logging |
 

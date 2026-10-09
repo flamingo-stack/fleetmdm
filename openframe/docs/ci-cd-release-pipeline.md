@@ -13,7 +13,7 @@ These workflows are **net-new** (added by the fork, not present upstream):
 |------|------|
 | [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | Main release pipeline |
 | [`.github/workflows/test.yml`](../../.github/workflows/test.yml) | PR validation (build + sign, no publish) |
-| [`.github/workflows/changes.yml`](../../.github/workflows/changes.yml) | Reusable path-filter (server / client / helm) |
+| [`.github/workflows/changes.yaml`](../../.github/workflows/changes.yaml) | Reusable path-filter (server / client / helm) |
 | [`.github/workflows/sync-upstream.yml`](../../.github/workflows/sync-upstream.yml) | Scheduled merge from `fleetdm/fleet` |
 | [`.github/steps/sign-macos-package/action.yml`](../../.github/steps/sign-macos-package/action.yml) | macOS sign + notarize |
 | [`.github/steps/sign-windows-package/action.yml`](../../.github/steps/sign-windows-package/action.yml) | Windows sign (Azure Trusted Signing) |
@@ -53,7 +53,7 @@ Shared env: `REGISTRY: ghcr.io`, `BINARY_NAME: fleet`. Permissions include
 
 | Job | Lines | What it does |
 |-----|-------|--------------|
-| `changes` | 37 | Calls `changes.yml` to decide which of server/client/helm actually changed. |
+| `changes` | 37 | Calls `changes.yaml` to decide which of server/client/helm actually changed. |
 | `build_client` | 45 | Builds agent binaries: **macOS universal** (arm64 + amd64 merged with `lipo`) and **Windows amd64**; then runs the platform signing step. |
 | `build` | 138 | Runs `goreleaser release --clean` to build the Linux server and push multi-arch Docker images. |
 | `build_helm` | 201 | Packages and pushes the Helm chart as an OCI artifact via `appany/helm-oci-chart-releaser@v0.5.0`. |
@@ -153,7 +153,7 @@ re-apply.
 |------|--------|---------|
 | `.github/workflows/release.yml` | new | Build + sign + publish pipeline |
 | `.github/workflows/test.yml` | new | PR build/sign validation |
-| `.github/workflows/changes.yml` | new | Reusable path filter |
+| `.github/workflows/changes.yaml` | new | Reusable path filter |
 | `.github/workflows/sync-upstream.yml` | new | Scheduled upstream merge |
 | `.github/steps/sign-macos-package/action.yml` | new | macOS sign + notarize |
 | `.github/steps/sign-windows-package/action.yml` | new | Windows Azure Trusted Signing |
