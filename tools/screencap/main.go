@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -191,8 +192,7 @@ func main() {
 	defer allocCancel()
 
 	ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithLogf(log.Printf))
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer allocCancel()
+	defer cancel()
 
 	// Kill any orphaned Chrome processes left behind by a previous crashed run
 	// (log.Fatalf calls os.Exit which skips defers, so allocCancel may not
