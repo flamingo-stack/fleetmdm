@@ -31,13 +31,13 @@ func userIsGitOpsOnly(ctx context.Context) (bool, error) {
 		return false, fleet.ErrNoContext
 	}
 	if vc.User == nil {
-		return false, errors.New("missing user in context")
+		return false, ctxerr.New(ctx, "missing user in context")
 	}
 	if vc.User.GlobalRole != nil {
 		return *vc.User.GlobalRole == fleet.RoleGitOps, nil
 	}
 	if len(vc.User.Teams) == 0 {
-		return false, errors.New("user has no roles")
+		return false, ctxerr.New(ctx, "user has no roles")
 	}
 	for _, teamRole := range vc.User.Teams {
 		if teamRole.Role != fleet.RoleGitOps {
@@ -405,7 +405,7 @@ func (svc *Service) DeletePack(ctx context.Context, name string) error {
 	}
 	// if there is a pack by this name, ensure it is not type Global or Team
 	if pack != nil && !pack.EditablePackType() {
-		return fmt.Errorf("cannot delete pack_type %s", *pack.Type)
+		return ctxerr.New(ctx, fmt.Sprintf("cannot delete pack_type %s", *pack.Type))
 	}
 
 	if err := svc.ds.DeletePack(ctx, name); err != nil {
@@ -457,7 +457,7 @@ func (svc *Service) DeletePackByID(ctx context.Context, id uint) error {
 		return err
 	}
 	if pack != nil && !pack.EditablePackType() {
-		return fmt.Errorf("cannot delete pack_type %s", *pack.Type)
+		return ctxerr.New(ctx, fmt.Sprintf("cannot delete pack_type %s", *pack.Type))
 	}
 	if err := svc.ds.DeletePack(ctx, pack.Name); err != nil {
 		return err
@@ -618,3 +618,4 @@ func (svc *Service) ListPacksForHost(ctx context.Context, hid uint) ([]*fleet.Pa
 
 	return svc.ds.ListPacksForHost(ctx, hid)
 }
+
