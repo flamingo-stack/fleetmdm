@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -265,7 +264,7 @@ func (j *Jira) Run(ctx context.Context, argsJSON json.RawMessage) error {
 func (j *Jira) runVuln(ctx context.Context, cli JiraClient, args jiraArgs) error {
 	vargs := args.Vulnerability
 	if vargs == nil {
-		return errors.New("invalid job args")
+		return ctxerr.New(ctx, "invalid job args")
 	}
 
 	var hosts []fleet.HostVulnerabilitySummary
