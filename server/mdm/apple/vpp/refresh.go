@@ -208,7 +208,10 @@ func RefreshVersions(ctx context.Context, ds fleet.Datastore, vppAppsConfig appl
 			// the same adam_id with their own anchors are untouched.
 			if app.CountryCode != b.token.CountryCode {
 				if err := ds.UpdateVPPAppCountryCode(ctx, app.AdamID, app.Platform, b.token.CountryCode); err != nil {
-					return ctxerr.Wrap(ctx, err, "re-anchoring VPP app country")
+					// A failure to re-anchor this one app must not block
+					// version/name/icon updates for other apps and bundles.
+					bundleErrs = append(bundleErrs, ctxerr.Wrap(ctx, err, "re-anchoring VPP app country"))
+					continue
 				}
 				app.CountryCode = b.token.CountryCode
 			}
