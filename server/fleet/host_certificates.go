@@ -262,6 +262,19 @@ func parseDarwinDN(dn string) (*HostCertificateNameDetails, error) {
 	if len(parts) == 1 {
 		// Try to split into parts based on +
 		parts = strings.Split(dn, "+")
+	} else {
+		// Some `/`-delimited parts may themselves contain `+`-joined sub-parts (e.g. a part
+		// containing multiple OU values joined by `+OU=`). Expand those parts in place so that
+		// all key-value pairs are processed, regardless of whether a DN mixes both separators.
+		expanded := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if strings.Contains(part, "+") {
+				expanded = append(expanded, strings.Split(part, "+")...)
+			} else {
+				expanded = append(expanded, part)
+			}
+		}
+		parts = expanded
 	}
 
 	ouParts := []string{}
@@ -291,7 +304,9 @@ func parseDarwinDN(dn string) (*HostCertificateNameDetails, error) {
 			// To handle both cases, we collect all OU values and join them with `+OU=` below.
 			// We should probably reconsider our approaches for normalization of cert data
 			// across the board.
-			// FIXME: How should this work with the edge case covered by PR 33152 (e.g., "+" separator above)?
+			// Note: parts that mix `/` and `+` separators (e.g. PR 33152) are expanded above
+			// before this loop runs, so `+`-joined OU values within a `/`-delimited part are
+			// captured here as well.
 			ouParts = append(ouParts, strings.Trim(value, " "))
 		case "CN":
 			details.CommonName = strings.Trim(value, " ")
