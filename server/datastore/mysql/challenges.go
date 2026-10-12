@@ -24,12 +24,12 @@ func newChallenge(ctx context.Context, exec sqlx.ExecerContext) (string, error) 
 	key := make([]byte, 24)
 	_, err := rand.Read(key)
 	if err != nil {
-		return "", err
+		return "", ctxerr.Wrap(ctx, err, "generate random challenge")
 	}
 	challenge := base64.URLEncoding.EncodeToString(key)
 	_, err = exec.ExecContext(ctx, `INSERT INTO challenges (challenge) VALUES (?)`, challenge)
 	if err != nil {
-		return "", err
+		return "", ctxerr.Wrap(ctx, err, "insert challenge")
 	}
 	return challenge, nil
 }
