@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"crypto/rsa"
-	"errors"
 	"log/slog"
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
@@ -66,7 +65,7 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, errors.New("private key not in RSA format")
+		return nil, ctxerr.New(ctx, "private key not in RSA format")
 	}
 
 	if err := msg.DecryptPKIEnvelope(cert.Leaf, pk); err != nil {
@@ -75,7 +74,7 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 
 	crt, err := svc.signer.SignCSRContext(ctx, msg.CSRReqMessage)
 	if err == nil && crt == nil {
-		err = errors.New("no signed certificate")
+		err = ctxerr.New(ctx, "no signed certificate")
 	}
 	if err != nil {
 		svc.debugLogger.ErrorContext(ctx, "failed to sign CSR", "err", err)
@@ -88,14 +87,14 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 }
 
 func (svc *service) GetNextCACert(ctx context.Context) ([]byte, error) {
-	return nil, errors.New("not implemented")
+	return nil, ctxerr.New(ctx, "not implemented")
 }
 
 // NewService creates a new scep service
 func NewSCEPService(ds fleet.MDMAssetRetriever, signer scepserver.CSRSignerContext, logger *slog.Logger) scepserver.Service {
 	return &service{
 		signer:      signer,
-		debugLogger: slog.New(slog.DiscardHandler),
+		debugLogger: logger,
 		ds:          ds,
 	}
 }
