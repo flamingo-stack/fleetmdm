@@ -119,7 +119,7 @@ func (t *Table) runFirmwarepasswd(ctx context.Context, subcommand string, output
 func modeValue(in string) (string, error) {
 	components := strings.SplitN(in, ":", 2)
 	if len(components) < 2 {
-		return "", fmt.Errorf("Can't tell mode from %s", in)
+		return "", fmt.Errorf("can't tell mode from %s", in)
 	}
 
 	return strings.TrimSpace(strings.ToLower(components[1])), nil
@@ -128,15 +128,18 @@ func modeValue(in string) (string, error) {
 func passwordValue(in string) (string, error) {
 	components := strings.SplitN(in, ":", 2)
 	if len(components) < 2 {
-		return "", fmt.Errorf("Can't tell value from %s", in)
+		return "", fmt.Errorf("can't tell value from %s", in)
 	}
 
 	t, err := discernValBool(components[1])
+	if err != nil {
+		return "0", fmt.Errorf("discern password value: %w", err)
+	}
 
 	if t {
-		return "1", err
+		return "1", nil
 	}
-	return "0", err
+	return "0", nil
 }
 
 func optionRomValue(in string) (string, error) {
@@ -146,7 +149,7 @@ func optionRomValue(in string) (string, error) {
 	case "allowed":
 		return "1", nil
 	}
-	return "", fmt.Errorf("Can't tell value from %s", in)
+	return "", fmt.Errorf("can't tell value from %s", in)
 }
 
 func discernValBool(in string) (bool, error) {
@@ -157,5 +160,5 @@ func discernValBool(in string) (bool, error) {
 		return false, nil
 	}
 
-	return false, fmt.Errorf("Can't discern boolean from string <%s>", in)
+	return false, fmt.Errorf("can't discern boolean from string <%s>", in)
 }
