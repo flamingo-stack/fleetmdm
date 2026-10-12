@@ -28,7 +28,11 @@ const EmailTokenRedirect = ({
           router.push(PATHS.ACCOUNT);
           renderFlash("success", "Email updated successfully.");
         } catch (error) {
-          console.log(error);
+          console.error(error);
+          renderFlash(
+            "error",
+            "Unable to confirm email change. Please log in and try again."
+          );
           router.push(PATHS.LOGIN);
         }
       }
@@ -41,3 +45,4 @@ const EmailTokenRedirect = ({
 };
 
 export default EmailTokenRedirect;
+
