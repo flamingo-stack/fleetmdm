@@ -191,7 +191,7 @@ func VerifyFromAppleIphoneDeviceCA(c *x509.Certificate) error {
 
 	key, ok := appleIphoneDeviceCA.PublicKey.(*rsa.PublicKey)
 	if !ok {
-		panic("appleIphoneDeviceCA: invalid key type")
+		return fmt.Errorf("appleIphoneDeviceCA: invalid key type")
 	}
 
 	if err := rsa.VerifyPKCS1v15(key, hashType, hashed, c.Signature); err != nil {
