@@ -85,9 +85,9 @@ func (p *ProxyClient) SignupURLsCreate(ctx context.Context, serverURL, callbackU
 	switch {
 	case isErrorCode(err, http.StatusConflict):
 		// The frontend looks for the text in this error. Please update the frontend code if modifying this error.
-		return nil, android.NewConflictError(fmt.Errorf("android enterprise already exists. For help, please contact Fleet support https://fleetdm.com/support: %w", err))
+		return nil, android.NewConflictError(ctxerr.Wrap(ctx, err, "android enterprise already exists. For help, please contact Fleet support https://fleetdm.com/support"))
 	case err != nil:
-		return nil, fmt.Errorf("creating signup url: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "creating signup url")
 	}
 	return &android.SignupDetails{
 		Url:  signupURL.Url,
@@ -120,27 +120,27 @@ func (p *ProxyClient) EnterprisesCreate(ctx context.Context, req EnterprisesCrea
 
 	reqBody, err := json.Marshal(pe)
 	if err != nil {
-		return EnterprisesCreateResponse{}, fmt.Errorf("marshaling enterprise request: %w", err)
+		return EnterprisesCreateResponse{}, ctxerr.Wrap(ctx, err, "marshaling enterprise request")
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.proxyEndpoint+"v1/enterprises", bytes.NewBuffer(reqBody))
 	if err != nil {
-		return EnterprisesCreateResponse{}, fmt.Errorf("creating enterprise request: %w", err)
+		return EnterprisesCreateResponse{}, ctxerr.Wrap(ctx, err, "creating enterprise request")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Origin", req.ServerURL)
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return EnterprisesCreateResponse{}, fmt.Errorf("sending enterprise request: %w", err)
+		return EnterprisesCreateResponse{}, ctxerr.Wrap(ctx, err, "sending enterprise request")
 	}
 	defer resp.Body.Close()
 
 	switch {
 	case resp.StatusCode == http.StatusNotModified:
-		return EnterprisesCreateResponse{}, fmt.Errorf("android enterprise %s was already created", req.SignupURLName)
+		return EnterprisesCreateResponse{}, ctxerr.New(ctx, fmt.Sprintf("android enterprise %s was already created", req.SignupURLName))
 	case resp.StatusCode != http.StatusOK:
-		return EnterprisesCreateResponse{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return EnterprisesCreateResponse{}, ctxerr.New(ctx, fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
 	}
 
 	type proxyEnterpriseResponse struct {
@@ -149,7 +149,7 @@ func (p *ProxyClient) EnterprisesCreate(ctx context.Context, req EnterprisesCrea
 	}
 	var per proxyEnterpriseResponse
 	if err := json.UnmarshalRead(resp.Body, &per); err != nil {
-		return EnterprisesCreateResponse{}, fmt.Errorf("decoding enterprise response: %w", err)
+		return EnterprisesCreateResponse{}, ctxerr.Wrap(ctx, err, "decoding enterprise response")
 	}
 	return EnterprisesCreateResponse{
 		EnterpriseName:    per.Name,
@@ -181,7 +181,7 @@ func (p *ProxyClient) EnterprisesPoliciesPatch(ctx context.Context, policyName s
 		p.logger.InfoContext(ctx, "Android policy not modified", "policy_name", policyName)
 		return nil, err
 	case err != nil:
-		return nil, fmt.Errorf("patching policy %s: %w", policyName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "patching policy %s", policyName)
 	}
 	return ret, nil
 }
@@ -195,7 +195,7 @@ func (p *ProxyClient) EnterprisesDevicesPatch(ctx context.Context, deviceName st
 		p.logger.InfoContext(ctx, "Android device not modified", "device_name", deviceName)
 		return nil, err
 	case err != nil:
-		return nil, fmt.Errorf("patching device %s: %w", deviceName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "patching device %s", deviceName)
 	}
 	return ret, nil
 }
@@ -205,7 +205,7 @@ func (p *ProxyClient) EnterprisesDevicesGet(ctx context.Context, deviceName stri
 	call.Header().Set("Authorization", "Bearer "+p.fleetServerSecret)
 	ret, err := call.Do()
 	if err != nil {
-		return nil, fmt.Errorf("getting device %s: %w", deviceName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "getting device %s", deviceName)
 	}
 	return ret, nil
 }
@@ -219,7 +219,7 @@ func (p *ProxyClient) EnterprisesDevicesDelete(ctx context.Context, deviceName s
 		p.logger.InfoContext(ctx, "Android device already deleted", "device_name", deviceName)
 		return nil
 	case err != nil:
-		return fmt.Errorf("deleting device %s: %w", deviceName, err)
+		return ctxerr.Wrapf(ctx, err, "deleting device %s", deviceName)
 	}
 	return nil
 }
@@ -229,7 +229,7 @@ func (p *ProxyClient) EnterprisesDevicesIssueCommand(ctx context.Context, device
 	call.Header().Set("Authorization", "Bearer "+p.fleetServerSecret)
 	op, err := call.Do()
 	if err != nil {
-		return nil, fmt.Errorf("issuing command to device %s: %w", deviceName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "issuing command to device %s", deviceName)
 	}
 	return op, nil
 }
@@ -239,7 +239,7 @@ func (p *ProxyClient) EnterprisesDevicesListPartial(ctx context.Context, enterpr
 	call.Header().Set("Authorization", "Bearer "+p.fleetServerSecret)
 	resp, err := call.Do()
 	if err != nil {
-		return nil, fmt.Errorf("listing devices: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "listing devices")
 	}
 	return resp, nil
 }
@@ -251,7 +251,7 @@ func (p *ProxyClient) EnterprisesEnrollmentTokensCreate(ctx context.Context, ent
 	call.Header().Set("Authorization", "Bearer "+p.fleetServerSecret)
 	token, err := call.Do()
 	if err != nil {
-		return nil, fmt.Errorf("creating enrollment token: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "creating enrollment token")
 	}
 	return token, nil
 }
@@ -265,7 +265,7 @@ func (p *ProxyClient) EnterpriseDelete(ctx context.Context, enterpriseName strin
 		p.logger.InfoContext(ctx, "enterprise was already deleted", "enterprise_name", enterpriseName)
 		return nil
 	case err != nil:
-		return fmt.Errorf("deleting enterprise %s: %w", enterpriseName, err)
+		return ctxerr.Wrapf(ctx, err, "deleting enterprise %s", enterpriseName)
 	}
 
 	return nil
@@ -293,7 +293,7 @@ func (p *ProxyClient) EnterprisesList(ctx context.Context, serverURL string) ([]
 				Message: "Enterprises list access forbidden",
 			}
 		default:
-			return nil, fmt.Errorf("listing enterprises: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "listing enterprises")
 		}
 	}
 	return resp.Enterprises, nil
@@ -320,7 +320,7 @@ func (p *ProxyClient) EnterprisesApplications(ctx context.Context, enterpriseNam
 			return nil, ctxerr.Wrap(ctx, appNotFoundError{})
 		}
 
-		return nil, fmt.Errorf("getting application %s: %w", packageName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "getting application %s", packageName)
 	}
 	return app, nil
 }
