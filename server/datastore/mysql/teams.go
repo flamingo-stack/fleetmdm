@@ -83,6 +83,15 @@ func (ds *Datastore) TeamLite(ctx context.Context, tid uint) (*fleet.TeamLite, e
 }
 
 func teamDB(ctx context.Context, q sqlx.QueryerContext, tid uint, withExtras bool) (*fleet.Team, error) {
+	// >>> OPENFRAME(mysql-multitenancy): scope every team-by-id read (TeamLite/Team, and the
+	// service-layer TeamLite guard used by ListTeamPolicies) to the pinned tenant; a foreign team
+	// is NotFound. This includes team ID 0 ("No team"), which is global/shared config and must not
+	// be returned to a tenant pinned to a different team. No-op when unpinned.
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok && tid != teamID {
+		return nil, ctxerr.Wrap(ctx, notFound("Fleet").WithID(tid))
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	if tid == 0 {
 		if withExtras {
 			return nil, ctxerr.Errorf(ctx, "withExtras argument not supported for team ID 0")
@@ -97,14 +106,6 @@ func teamDB(ctx context.Context, q sqlx.QueryerContext, tid uint, withExtras boo
 			Config: *config,
 		}, nil
 	}
-
-	// >>> OPENFRAME(mysql-multitenancy): scope every team-by-id read (TeamLite/Team, and the
-	// service-layer TeamLite guard used by ListTeamPolicies) to the pinned tenant; a foreign team
-	// is NotFound. No-op when unpinned.
-	if teamID, ok := fleet.OpenframeTeamID(ctx); ok && tid != teamID {
-		return nil, ctxerr.Wrap(ctx, notFound("Fleet").WithID(tid))
-	}
-	// <<< OPENFRAME(mysql-multitenancy)
 
 	stmt := `
 		SELECT ` + teamColumns + ` FROM teams
@@ -701,3 +702,4 @@ func (ds *Datastore) SaveDefaultTeamConfig(ctx context.Context, config *fleet.Te
 	)
 	return ctxerr.Wrap(ctx, err, "save default team config")
 }
+
