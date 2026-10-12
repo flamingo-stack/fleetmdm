@@ -116,7 +116,7 @@ module.exports = {
     if (csrEmail === '') {
       throw 'invalidCsr';
     }
-    if (!csrEmail.startsWith(csrUsername)) {
+    if (csrEmail.split('@')[0] !== csrUsername) {
       throw 'invalidCsr';
     }
 
@@ -151,3 +151,4 @@ module.exports = {
   }
 
 };
+
