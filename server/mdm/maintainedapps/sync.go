@@ -213,6 +213,9 @@ func Hydrate(ctx context.Context, app *fleet.MaintainedApp, version string, team
 	if err := json.Unmarshal(body, &manifest); err != nil {
 		return nil, ctxerr.Wrapf(ctx, err, "unmarshal FMA manifest for %s", app.Slug)
 	}
+	if len(manifest.Versions) == 0 {
+		return nil, ctxerr.Errorf(ctx, "FMA manifest for %s has no versions", app.Slug)
+	}
 	manifest.Versions[0].Slug = app.Slug
 
 	app.Version = manifest.Versions[0].Version
