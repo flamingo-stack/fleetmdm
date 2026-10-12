@@ -37,7 +37,7 @@ const ConfirmInvitePage = ({ router, params }: IConfirmInvitePageProps) => {
     error: validateInviteError,
     isLoading: isVerifyingInvite,
   } = useQuery<IValidateInviteResponse, AxiosError, IInvite>(
-    "invite",
+    ["invite", invite_token],
     () => inviteAPI.verify(invite_token),
     {
       ...DEFAULT_USE_QUERY_OPTIONS,
