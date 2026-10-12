@@ -44,6 +44,16 @@ func TestSmartVerCmp(t *testing.T) {
 		{"5.0", "08.0", -1},
 		{"10.0", "1.0", 1},
 		{"2023.02.13", "2023.2.13", 0},
+		// >>> OPENFRAME(vuln-version-trailing-zeros): trailing zero parts — upstream fleetdm/fleet#55051
+		{"1.0", "1.0.0", 0},
+		{"157.0.0", "157.0", 0},
+		{"157.0", "157.0.0.0", 0},
+		{"154.0", "154.0.00", 0},
+		{"1.0", "1.0.0.1", -1},
+		{"1.0.0.1", "1.0", 1},
+		{"1.0", "1.0.0a", -1},
+		{"1.0.0a", "1.0", 1},
+		// <<< OPENFRAME(vuln-version-trailing-zeros)
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%q vs %q", c.v1, c.v2), func(t *testing.T) {
