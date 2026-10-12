@@ -55,7 +55,7 @@ func VerifyHostMDMProfiles(ctx context.Context, ds fleet.ProfileVerificationStor
 
 	expectedByProfIdentifier, err := ds.GetHostMDMProfilesExpectedForVerification(ctx, host)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "getting expected MDM profiles for verification")
 	}
 
 	missing := make([]string, 0, len(expectedByProfIdentifier))
@@ -85,7 +85,7 @@ func VerifyHostMDMProfiles(ctx context.Context, ds fleet.ProfileVerificationStor
 	if len(missing) > 0 {
 		counts, err := ds.GetHostMDMProfilesRetryCounts(ctx, host)
 		if err != nil {
-			return err
+			return ctxerr.Wrap(ctx, err, "getting host MDM profile retry counts")
 		}
 		retriesByProfileIdentifier := make(map[string]uint, len(counts))
 		for _, r := range counts {
@@ -150,7 +150,7 @@ func HandleHostMDMProfileInstallResult(ctx context.Context, ds fleet.ProfileVeri
 			// for example, when the scep proxy profile is resent due to challenge expiration, we
 			// expect to see some error logs with "HostMDMCommand command uuid not found for host uuid".
 			// But it would be better to find a way to avoid that log noise while still logging unexpected errors.
-			return err
+			return ctxerr.Wrap(ctx, err, "getting host MDM profile retry count by command uuid")
 		}
 
 		if m.Retries < mdm.MaxAppleProfileRetries {
