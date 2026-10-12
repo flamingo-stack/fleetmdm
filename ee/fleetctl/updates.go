@@ -149,7 +149,7 @@ func updatesInitFunc(c *cli.Context) error {
 	for _, role := range []string{"root", "targets", "snapshot", "timestamp"} {
 		// TODO don't fatal here if passwords don't match
 		if err := updatesGenKey(repo, role); err != nil {
-			return err
+			return fmt.Errorf("generate key for role %s: %w", role, err)
 		}
 	}
 
@@ -399,11 +399,11 @@ func updatesRotateFunc(c *cli.Context) error {
 	repoPath := c.String("path")
 	repo, err := openRepo(repoPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("open repo: %w", err)
 	}
 	store, err := openLocalStore(repoPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("open local store: %w", err)
 	}
 
 	if err := checkKeys(repoPath,
@@ -412,7 +412,7 @@ func updatesRotateFunc(c *cli.Context) error {
 		"snapshot",
 		"timestamp",
 	); err != nil {
-		return err
+		return fmt.Errorf("check keys: %w", err)
 	}
 
 	// Get old keys for role
@@ -459,7 +459,7 @@ func updatesRotateFunc(c *cli.Context) error {
 
 	// Generate new key for role
 	if err := updatesGenKey(repo, role); err != nil {
-		return err
+		return fmt.Errorf("generate key for role %s: %w", role, err)
 	}
 
 	// Re-sign the root metadata
