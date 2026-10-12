@@ -296,7 +296,7 @@ func (v *SoftwareWorker) ensureHostSpecificPolicyIsApplied(ctx context.Context, 
 		policyName := fmt.Sprintf("%s/policies/%s", enterpriseName, hostUUID)
 		_, err := v.AndroidModule.PatchPolicy(ctx, hostUUID, policyName, &policy, nil)
 		if err != nil {
-			return err
+			return ctxerr.Wrapf(ctx, err, "patch android policy for host %s", hostUUID)
 		}
 
 		err = v.AndroidModule.BuildAndSendFleetAgentConfig(ctx, enterpriseName, []string{hostUUID}, false)
@@ -324,7 +324,7 @@ func (v *SoftwareWorker) ensureHostSpecificPolicyIsApplied(ctx context.Context, 
 		deviceName := fmt.Sprintf("%s/devices/%s", enterpriseName, androidHost.DeviceID)
 		_, err = v.AndroidModule.PatchDevice(ctx, hostUUID, deviceName, device)
 		if err != nil {
-			return err
+			return ctxerr.Wrapf(ctx, err, "patch android device for host %s", hostUUID)
 		}
 	}
 	return nil
