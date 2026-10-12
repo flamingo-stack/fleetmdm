@@ -28,6 +28,9 @@ type EnrollOrbitRequest struct {
 	// OsqueryIdentifier holds the identifier used by osquery.
 	// If not set, then the hardware UUID is used to match orbit and osquery.
 	OsqueryIdentifier string `json:"osquery_identifier"`
+	// >>> OPENFRAME(agent-openframe-mode): osquery instance id, diagnostics only — openframe/docs/agent-openframe-mode.md
+	InstanceID string `json:"instance_id,omitempty"`
+	// <<< OPENFRAME(agent-openframe-mode)
 	// ComputerName is the device's friendly name (optional).
 	ComputerName string `json:"computer_name"`
 	// HardwareModel is the device's hardware model.

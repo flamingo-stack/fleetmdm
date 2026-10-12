@@ -23,6 +23,9 @@ const (
 	OrbitNodeKeyFileName = "secret-orbit-node-key.txt"
 	// HardwareUUIDFileName is the filename on disk where we store the hardware UUID for migration detection
 	HardwareUUIDFileName = "hardware-uuid.txt"
+	// >>> OPENFRAME(agent-openframe-mode): identifier reported by `orbit uuid` — openframe/docs/agent-openframe-mode.md
+	OsqueryIdentifierFileName = "osquery-identifier.txt"
+	// <<< OPENFRAME(agent-openframe-mode)
 	// OrbitEnrollMaxRetries is the max number of retries when doing an enroll request.
 	// We set it to 6 to allow the retry backoff to take effect.
 	OrbitEnrollMaxRetries = 6
