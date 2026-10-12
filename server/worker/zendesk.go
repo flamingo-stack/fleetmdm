@@ -300,7 +300,7 @@ func (z *Zendesk) runVuln(ctx context.Context, cli ZendeskClient, args zendeskAr
 
 	createdTicket, err := z.createTemplatedTicket(ctx, cli, zendeskTemplates.VulnSummary, zendeskTemplates.VulnDescription, tplArgs)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "create templated ticket for vulnerability")
 	}
 	z.Log.DebugContext(ctx, "created zendesk ticket for cve",
 		"cve", vargs.CVE,
@@ -314,7 +314,7 @@ func (z *Zendesk) runFailingPolicy(ctx context.Context, cli ZendeskClient, args 
 
 	createdTicket, err := z.createTemplatedTicket(ctx, cli, zendeskTemplates.FailingPolicySummary, zendeskTemplates.FailingPolicyDescription, tplArgs)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "create templated ticket for failing policy")
 	}
 
 	attrs := []any{
