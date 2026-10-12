@@ -3,14 +3,13 @@ package httpsig
 import (
 	"context"
 	"crypto/elliptic"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/fleetdm/fleet/v4/ee/pkg/hostidentity/types"
 	"github.com/fleetdm/fleet/v4/pkg/fleethttpsig"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/remitly-oss/httpsig-go"
 )
@@ -49,22 +48,22 @@ func (h *HTTPSig) Verifier() (*httpsig.Verifier, error) {
 func (h *HTTPSig) FetchByKeyID(ctx context.Context, _ http.Header, keyID string) (httpsig.KeySpecer, error) {
 	keyIDInt, err := strconv.ParseUint(keyID, 16, 64)
 	if err != nil {
-		err = fmt.Errorf("invalid hex key ID: %w", err)
+		err = ctxerr.Wrap(ctx, err, "invalid hex key ID")
 		h.logger.InfoContext(ctx, "FetchByKeyID error", "err", err)
 		return nil, err
 	}
 	identityCert, err := h.ds.GetHostIdentityCertBySerialNumber(ctx, keyIDInt)
 	switch {
 	case fleet.IsNotFound(err):
-		return nil, fmt.Errorf("certificate not found with keyID: %d", keyIDInt)
+		return nil, ctxerr.Errorf(ctx, "certificate not found with keyID: %d", keyIDInt)
 	case err != nil:
-		err = fmt.Errorf("loading certificate: %w", err)
+		err = ctxerr.Wrap(ctx, err, "loading certificate")
 		h.logger.ErrorContext(ctx, "FetchByKeyID error", "err", err)
 		return nil, err
 	}
 	publicKey, err := identityCert.UnmarshalPublicKey()
 	if err != nil {
-		err = fmt.Errorf("unmarshaling public key: %w", err)
+		err = ctxerr.Wrap(ctx, err, "unmarshaling public key")
 		h.logger.ErrorContext(ctx, "FetchByKeyID error", "err", err)
 		return nil, err
 	}
@@ -76,7 +75,7 @@ func (h *HTTPSig) FetchByKeyID(ctx context.Context, _ http.Header, keyID string)
 	case elliptic.P384():
 		algo = httpsig.Algo_ECDSA_P384_SHA384
 	default:
-		err = fmt.Errorf("unsupported elliptic curve: %s", publicKey.Curve.Params().Name)
+		err = ctxerr.Errorf(ctx, "unsupported elliptic curve: %s", publicKey.Curve.Params().Name)
 		h.logger.InfoContext(ctx, "FetchByKeyID error", "err", err)
 		return nil, err
 	}
@@ -91,8 +90,8 @@ func (h *HTTPSig) FetchByKeyID(ctx context.Context, _ http.Header, keyID string)
 	}, nil
 }
 
-func (h *HTTPSig) Fetch(_ context.Context, _ http.Header, _ httpsig.MetadataProvider) (httpsig.KeySpecer, error) {
-	return nil, errors.New("not implemented")
+func (h *HTTPSig) Fetch(ctx context.Context, _ http.Header, _ httpsig.MetadataProvider) (httpsig.KeySpecer, error) {
+	return nil, ctxerr.New(ctx, "not implemented")
 }
 
 // VerifyHostIdentity checks that host identity certificate matches the node key and host ID.
@@ -102,18 +101,18 @@ func (h *HTTPSig) Fetch(_ context.Context, _ http.Header, _ httpsig.MetadataProv
 func VerifyHostIdentity(ctx context.Context, ds fleet.Datastore, host *fleet.Host) error {
 	hostIdentityCert, ok := FromContext(ctx)
 	if !ok {
-		return errors.New("authentication error: missing host identity certificate")
+		return ctxerr.New(ctx, "authentication error: missing host identity certificate")
 	}
 	if host.OsqueryHostID == nil || *host.OsqueryHostID != hostIdentityCert.CommonName {
-		return errors.New("authentication error: http message signature does not match node key")
+		return ctxerr.New(ctx, "authentication error: http message signature does not match node key")
 	}
 	if hostIdentityCert.HostID == nil {
-		return fmt.Errorf("authentication error: found host identity certificate without host ID. "+
+		return ctxerr.Errorf(ctx, "authentication error: found host identity certificate without host ID. "+
 			"This should not happen since host ID for a certificate should be set at enrollment. identifier/CN: %s host ID: %d",
 			hostIdentityCert.CommonName, host.ID)
 	}
 	if *hostIdentityCert.HostID != host.ID {
-		return errors.New("authentication error: http message signature does not match host ID")
+		return ctxerr.New(ctx, "authentication error: http message signature does not match host ID")
 	}
 	return nil
 }
