@@ -107,7 +107,7 @@ func (t *Task) collectHostsLastSeen(ctx context.Context, ds fleet.Datastore, poo
 
 	hostIDs, err := t.loadSeenHostsIDs(ctx, pool)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "load seen host ids")
 	}
 	stats.RedisCmds++ // the script to load seen hosts
 	stats.Keys = 2    // the reported and processing set keys
@@ -126,7 +126,7 @@ func (t *Task) collectHostsLastSeen(ctx context.Context, ds fleet.Datastore, poo
 				break
 			}
 			if err := ds.MarkHostsSeen(ctx, batch[:n], ts); err != nil {
-				return err
+				return ctxerr.Wrap(ctx, err, "mark hosts seen")
 			}
 			stats.Inserts++
 			hostIDs = hostIDs[n:]
