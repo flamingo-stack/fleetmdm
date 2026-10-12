@@ -69,7 +69,7 @@ func NewGoogleClient(ctx context.Context, logger *slog.Logger, getenv dev_mode.G
 func (g *GoogleClient) SignupURLsCreate(ctx context.Context, _, callbackURL string) (*android.SignupDetails, error) {
 	signupURL, err := g.mgmt.SignupUrls.Create().ProjectId(g.androidProjectID).CallbackUrl(callbackURL).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("creating signup url: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "creating signup url")
 	}
 	return &android.SignupDetails{
 		Url:  signupURL.Url,
@@ -82,7 +82,7 @@ func (g *GoogleClient) EnterprisesCreate(ctx context.Context, req EnterprisesCre
 
 	topicName, err := g.createPubSub(ctx, req.PubSubPushURL)
 	if err != nil {
-		return res, fmt.Errorf("creating PubSub topic: %w", err)
+		return res, ctxerr.Wrap(ctx, err, "creating PubSub topic")
 	}
 
 	enterprise, err := g.mgmt.Enterprises.Create(&androidmanagement.Enterprise{
@@ -96,9 +96,9 @@ func (g *GoogleClient) EnterprisesCreate(ctx context.Context, req EnterprisesCre
 		Do()
 	switch {
 	case googleapi.IsNotModified(err):
-		return res, fmt.Errorf("android enterprise %s was already created", req.SignupURLName)
+		return res, ctxerr.Errorf(ctx, "android enterprise %s was already created", req.SignupURLName)
 	case err != nil:
-		return res, fmt.Errorf("creating enterprise: %w", err)
+		return res, ctxerr.Wrap(ctx, err, "creating enterprise")
 	}
 	res.EnterpriseName = enterprise.Name
 	res.TopicName = topicName
@@ -109,7 +109,7 @@ func (g *GoogleClient) EnterprisesCreate(ctx context.Context, req EnterprisesCre
 func (g *GoogleClient) createPubSub(ctx context.Context, pushURL string) (string, error) {
 	pubSubClient, err := pubsub.NewClient(ctx, g.androidProjectID, option.WithCredentialsJSON([]byte(g.androidServiceCredentials)))
 	if err != nil {
-		return "", fmt.Errorf("creating PubSub client: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "creating PubSub client")
 	}
 	defer pubSubClient.Close()
 	pubSubTopicAndSubscriptionID := "a" + uuid.NewString() // PubSub topic names must start with a letter
@@ -121,18 +121,18 @@ func (g *GoogleClient) createPubSub(ctx context.Context, pushURL string) (string
 	}
 	topic, err := pubSubClient.CreateTopicWithConfig(ctx, pubSubTopicAndSubscriptionID, &topicConfig)
 	if err != nil {
-		return "", fmt.Errorf("creating PubSub topic: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "creating PubSub topic")
 	}
 
 	// Grant Android device policy the right to publish
 	// See: https://developers.google.com/android/management/notifications
 	policy, err := topic.IAM().Policy(ctx) // Ensure the topic exists before creating the subscription
 	if err != nil {
-		return "", fmt.Errorf("getting PubSub topic policy: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "getting PubSub topic policy")
 	}
 	policy.Add("serviceAccount:android-cloud-policy@system.gserviceaccount.com", "roles/pubsub.publisher")
 	if err := topic.IAM().SetPolicy(ctx, policy); err != nil {
-		return "", fmt.Errorf("setting PubSub subscription policy: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "setting PubSub subscription policy")
 	}
 
 	// Note: We could add a second level of authentication for the subscription, where, upon receiving a message,
@@ -147,7 +147,7 @@ func (g *GoogleClient) createPubSub(ctx context.Context, pushURL string) (string
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("creating PubSub subscription: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "creating PubSub subscription")
 	}
 
 	// Note: Currently, we do not clean up the PubSub topic/subscription if the enterprise creation fails. This would be a nice enhancement.
@@ -201,7 +201,7 @@ func (g *GoogleClient) EnterprisesPoliciesPatch(ctx context.Context, policyName 
 		g.logger.InfoContext(ctx, "Android policy not modified", "policy_name", policyName)
 		return nil, err
 	case err != nil:
-		return nil, fmt.Errorf("patching policy %s: %w", policyName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "patching policy %s", policyName)
 	}
 	return ret, nil
 }
@@ -213,7 +213,7 @@ func (g *GoogleClient) EnterprisesDevicesPatch(ctx context.Context, deviceName s
 		g.logger.InfoContext(ctx, "Android device not modified", "device_name", deviceName)
 		return nil, err
 	case err != nil:
-		return nil, fmt.Errorf("patching device %s: %w", deviceName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "patching device %s", deviceName)
 	}
 	return ret, nil
 }
@@ -221,7 +221,7 @@ func (g *GoogleClient) EnterprisesDevicesPatch(ctx context.Context, deviceName s
 func (g *GoogleClient) EnterprisesDevicesGet(ctx context.Context, deviceName string) (*androidmanagement.Device, error) {
 	ret, err := g.mgmt.Enterprises.Devices.Get(deviceName).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("getting device %s: %w", deviceName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "getting device %s", deviceName)
 	}
 	return ret, nil
 }
@@ -233,7 +233,7 @@ func (g *GoogleClient) EnterprisesDevicesDelete(ctx context.Context, deviceName 
 		g.logger.InfoContext(ctx, "Android device already deleted", "device_name", deviceName)
 		return nil
 	case err != nil:
-		return fmt.Errorf("deleting device %s: %w", deviceName, err)
+		return ctxerr.Wrapf(ctx, err, "deleting device %s", deviceName)
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (g *GoogleClient) EnterprisesDevicesDelete(ctx context.Context, deviceName 
 func (g *GoogleClient) EnterprisesDevicesIssueCommand(ctx context.Context, deviceName string, command *androidmanagement.Command) (*androidmanagement.Operation, error) {
 	op, err := g.mgmt.Enterprises.Devices.IssueCommand(deviceName, command).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("issuing command to device %s: %w", deviceName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "issuing command to device %s", deviceName)
 	}
 	return op, nil
 }
@@ -249,7 +249,7 @@ func (g *GoogleClient) EnterprisesDevicesIssueCommand(ctx context.Context, devic
 func (g *GoogleClient) EnterprisesDevicesListPartial(ctx context.Context, enterpriseName string, pageToken string) (*androidmanagement.ListDevicesResponse, error) {
 	ret, err := g.mgmt.Enterprises.Devices.List(enterpriseName).Context(ctx).PageToken(pageToken).PageSize(100).Fields("nextPageToken", "devices/name").Do()
 	if err != nil {
-		return nil, fmt.Errorf("listing devices: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "listing devices")
 	}
 	return ret, nil
 }
@@ -258,7 +258,7 @@ func (g *GoogleClient) EnterprisesEnrollmentTokensCreate(ctx context.Context, en
 ) (*androidmanagement.EnrollmentToken, error) {
 	token, err := g.mgmt.Enterprises.EnrollmentTokens.Create(enterpriseName, token).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("creating enrollment token: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "creating enrollment token")
 	}
 	return token, nil
 }
@@ -278,7 +278,7 @@ func (g *GoogleClient) EnterpriseDelete(ctx context.Context, enterpriseName stri
 		g.logger.InfoContext(ctx, "enterprise was already deleted", "enterprise_name", enterpriseName)
 		return nil
 	case err != nil:
-		return fmt.Errorf("deleting enterprise %s: %w", enterpriseName, err)
+		return ctxerr.Wrapf(ctx, err, "deleting enterprise %s", enterpriseName)
 	}
 
 	// Delete the PubSub topic if it exists
@@ -294,17 +294,17 @@ func (g *GoogleClient) EnterpriseDelete(ctx context.Context, enterpriseName stri
 
 	pubSubClient, err := pubsub.NewClient(ctx, g.androidProjectID, option.WithCredentialsJSON([]byte(g.androidServiceCredentials)))
 	if err != nil {
-		return fmt.Errorf("creating PubSub client: %w", err)
+		return ctxerr.Wrap(ctx, err, "creating PubSub client")
 	}
 	defer pubSubClient.Close()
 	// Try to delete both the topic and subscription before checking for errors in case one fails but the other succeeds.
 	errTopic := pubSubClient.Topic(topicAndSubscriptionID).Delete(ctx)
 	errSub := pubSubClient.Subscription(topicAndSubscriptionID).Delete(ctx)
 	if errTopic != nil {
-		return fmt.Errorf("deleting PubSub topic %s: %w", enterprise.PubsubTopic, errTopic)
+		return ctxerr.Wrapf(ctx, errTopic, "deleting PubSub topic %s", enterprise.PubsubTopic)
 	}
 	if errSub != nil {
-		return fmt.Errorf("deleting PubSub subscription %s: %w", topicAndSubscriptionID, errSub)
+		return ctxerr.Wrapf(ctx, errSub, "deleting PubSub subscription %s", topicAndSubscriptionID)
 	}
 
 	return nil
@@ -317,7 +317,7 @@ func (g *GoogleClient) EnterprisesList(ctx context.Context, serverURL string) ([
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing enterprises: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "listing enterprises")
 	}
 	return enterprises, nil
 }
@@ -360,7 +360,7 @@ func (g *GoogleClient) EnterprisesApplications(ctx context.Context, enterpriseNa
 			return nil, ctxerr.Wrap(ctx, appNotFoundError{})
 		}
 
-		return nil, fmt.Errorf("getting application %s: %w", packageName, err)
+		return nil, ctxerr.Wrapf(ctx, err, "getting application %s", packageName)
 	}
 	return app, nil
 }
