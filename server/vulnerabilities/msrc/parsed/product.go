@@ -31,6 +31,11 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 	// (e.g. "22H2") matches the host's. matchByBuildNumber is the fallback for
 	// hosts that lack a display version (legacy builds 22000/10240 only).
 	var matchByDisplayVersion, matchByBuildNumber string
+	// matchByDisplayVersionIsCore and matchByBuildNumberIsCore track whether the
+	// currently selected match is a Server Core product, so that a full desktop
+	// product match can always take precedence deterministically, regardless of
+	// map iteration order.
+	var matchByDisplayVersionIsCore, matchByBuildNumberIsCore bool
 
 	for pID, product := range p {
 		normalizedOS := NewProductFromOS(os)
@@ -64,8 +69,9 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 				dv = extractDisplayVersionFromName(os.Name)
 			}
 			if dv != "" && strings.Contains(string(product), dv) {
-				if matchByDisplayVersion == "" || !isCore {
+				if matchByDisplayVersion == "" || (matchByDisplayVersionIsCore && !isCore) {
 					matchByDisplayVersion = pID
+					matchByDisplayVersionIsCore = isCore
 				}
 				if installationTypeKnown {
 					break
@@ -85,8 +91,9 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 				build = parts[2]
 			}
 			if build == "22000" || build == "10240" {
-				if matchByBuildNumber == "" || !isCore {
+				if matchByBuildNumber == "" || (matchByBuildNumberIsCore && !isCore) {
 					matchByBuildNumber = pID
+					matchByBuildNumberIsCore = isCore
 				}
 			}
 		}
