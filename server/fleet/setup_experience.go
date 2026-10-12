@@ -87,7 +87,7 @@ func (s *SetupExperienceStatusResult) IsValid() error {
 	if s.SetupExperienceScriptID != nil {
 		colsSet++
 		if s.HostSoftwareInstallsExecutionID != nil || s.NanoCommandUUID != nil {
-			return fmt.Errorf("invalid setup experience status row, setip_experience_script_id set with incorrect secondary value column: %d", s.ID)
+			return fmt.Errorf("invalid setup experience status row, setup_experience_script_id set with incorrect secondary value column: %d", s.ID)
 		}
 	}
 	if colsSet > 1 {
