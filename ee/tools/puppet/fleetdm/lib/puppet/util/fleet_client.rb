@@ -175,7 +175,7 @@ module Puppet::Util
           end
         end
       rescue => e
-        out['error'] = e
+        out['error'] = e.message
       end
 
       out
