@@ -87,6 +87,7 @@ WHERE
 			hs2.software_id = ?
 			AND hs2.host_id = hs1.host_id)`
 	updateHostSoftwareInstalledPathsStmt := `UPDATE host_software_installed_paths SET software_id = ? WHERE software_id IN (?)`
+	mergeSoftwareCVEStmt := `INSERT IGNORE INTO software_cve (cve, software_id, source, resolved_in_version) SELECT cve, ?, source, resolved_in_version FROM software_cve WHERE software_id IN (?)`
 
 	var allExcludedIDs []uint64
 	if !indexExistsTx(tx, "host_software_installed_paths", "software_id") {
@@ -154,6 +155,17 @@ WHERE
 		if _, err := tx.Exec(stmt, args...); err != nil {
 			return fmt.Errorf("updating host software installed paths records for old software IDs %v: %w", idsToMerge, err)
 		}
+
+		// merge software_cve rows from the excluded IDs into the selected ID before the excluded
+		// IDs' rows are deleted below
+		stmt, args, err = sqlx.In(mergeSoftwareCVEStmt, selectedID, idsToMerge)
+		if err != nil {
+			return fmt.Errorf("sqlx.In for merging software_cve records for old software IDs %v: %w", idsToMerge, err)
+		}
+
+		if _, err := tx.Exec(stmt, args...); err != nil {
+			return fmt.Errorf("merging software_cve records for old software IDs %v: %w", idsToMerge, err)
+		}
 	}
 
 	if indexExistsTx(tx, "host_software_installed_paths", "software_id") {
@@ -165,7 +177,8 @@ WHERE
 	// at this point, every host that needs one has a pointer to the selected ID, so we can delete
 	// all the records with the excluded IDs.
 	if len(allExcludedIDs) > 0 {
-		// First delete from software_cve
+		// First delete from software_cve (any CVEs that needed to survive were already merged into
+		// the selected IDs above)
 		deleteSoftwareCVEStmt := `DELETE FROM software_cve WHERE software_id IN (?)`
 		deleteSoftwareCVEStmt, args, err := sqlx.In(deleteSoftwareCVEStmt, allExcludedIDs)
 		if err != nil {
