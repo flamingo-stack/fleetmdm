@@ -157,7 +157,9 @@ func WithLogPath(path string) Option {
 // process may not be restarted after exit. Instead create a new one with
 // NewRunner.
 func (r *Runner) Execute() error {
-	log.Info().Str("cmd", r.cmd.String()).Msg("start osqueryd")
+	// >>> OPENFRAME(agent-openframe-mode): mask the --openframe-secret value in the logged command — openframe/docs/agent-openframe-mode.md
+	log.Info().Str("cmd", r.loggableCommand()).Msg("start osqueryd")
+	// <<< OPENFRAME(agent-openframe-mode)
 
 	if r.singleQuery {
 		// When running in "SQL STATEMENT" mode, start osqueryd
@@ -210,11 +212,3 @@ func (r *Runner) getContextAndCancel() (context.Context, func()) {
 	r.cancel = cancel
 	return r.ctx, r.cancel
 }
-
-// >>> OPENFRAME(agent-openframe-mode): expose full osqueryd command string for openframe logging — openframe/docs/agent-openframe-mode.md
-// GetCommand returns the full command string that will be executed
-func (r *Runner) GetCommand() string {
-	return r.cmd.String()
-}
-
-// <<< OPENFRAME(agent-openframe-mode)

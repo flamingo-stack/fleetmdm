@@ -164,9 +164,12 @@ options = append(options, osquery.WithFlags([]string{"--openframe-token-path", c
 > does not recognize them. This is why OpenFrame mode requires a custom osquery
 > binary and disables orbit's auto-update path.
 
-A small helper, `Runner.GetCommand()` in
-[`orbit/pkg/osquery/osquery.go`](../../orbit/pkg/osquery/osquery.go), returns the
-fully assembled osqueryd command string (added for logging/diagnostics).
+`--openframe-secret` is the AES key for the token file, so it must never reach
+orbit's log: orbit's stderr is copied into the OpenFrame client log and shipped to
+Loki. Upstream's `start osqueryd` line logs the osqueryd command through
+`Runner.loggableCommand()` in
+[`orbit/pkg/osquery/openframe_command.go`](../../orbit/pkg/osquery/openframe_command.go),
+which masks the secret's value as `***`.
 
 ## `orbit uuid` subcommand
 
@@ -206,7 +209,8 @@ host API (see [api-expose-osquery-host-id.md](api-expose-osquery-host-id.md)).
 | File | Purpose |
 |------|---------|
 | `orbit/cmd/orbit/orbit.go` | OpenFrame CLI flags, custom osqueryd path, token-refresher startup + subsystem, `orbit uuid` command, osquery flag forwarding |
-| `orbit/pkg/osquery/osquery.go` | `Runner.GetCommand()` helper |
+| `orbit/pkg/osquery/osquery.go` | `start osqueryd` log line uses the masked command |
+| `orbit/pkg/osquery/openframe_command.go` | `Runner.loggableCommand()`: osqueryd command with `--openframe-secret` masked (+ `openframe_command_test.go`) |
 | `server/service/orbit_client.go` | `openFrameMode` / `authManager` fields, `/tools/agent/fleetmdm-server` URL prefix, bearer-header injection |
 | `server/service/openframe/openframe-encryption-service.go` | AES-GCM decryption |
 | `server/service/openframe/openframe-token-extractor.go` | Read + decrypt token file |
