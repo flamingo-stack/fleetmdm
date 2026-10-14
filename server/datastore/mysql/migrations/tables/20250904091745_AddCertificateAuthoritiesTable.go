@@ -3,7 +3,6 @@ package tables
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/fleetdm/fleet/v4/pkg/optjson"
@@ -136,7 +135,7 @@ FROM
 		for _, customSCEPProxyCA := range integrations.CustomSCEPProxy.Value {
 			customSCEPChallenge := getCAConfigAsset(customSCEPProxyCA.Name, fleet.CAConfigCustomSCEPProxy)
 			if customSCEPChallenge == nil || len(customSCEPChallenge.Value) == 0 {
-				return errors.New("Custom SCEP Proxy challenge not found in ca_config_assets")
+				return fmt.Errorf("custom SCEP proxy challenge not found in ca_config_assets for %q", customSCEPProxyCA.Name)
 			}
 			casToInsert = append(casToInsert, dbCertificateAuthority{
 				CertificateAuthority: fleet.CertificateAuthority{
@@ -152,7 +151,7 @@ FROM
 		for _, digicertCA := range integrations.DigiCert.Value {
 			digicertAPIToken := getCAConfigAsset(digicertCA.Name, fleet.CAConfigDigiCert)
 			if digicertAPIToken == nil || len(digicertAPIToken.Value) == 0 {
-				return errors.New("DigiCert API token not found in ca_config_assets")
+				return fmt.Errorf("DigiCert API token not found in ca_config_assets for %q", digicertCA.Name)
 			}
 			casToInsert = append(casToInsert, dbCertificateAuthority{
 				CertificateAuthority: fleet.CertificateAuthority{
@@ -176,7 +175,7 @@ FROM
 			return fmt.Errorf("failed to get NDES SCEP Proxy password: %w", err)
 		}
 		if len(ndesCAPassword) == 0 {
-			return errors.New("NDES SCEP Proxy password not found in mdm_config_assets")
+			return fmt.Errorf("NDES SCEP Proxy password not found in mdm_config_assets for asset %q", fleet.MDMAssetNDESPassword)
 		}
 
 		// Insert NDES SCEP Proxy data

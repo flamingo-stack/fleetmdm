@@ -32,7 +32,10 @@ func extractCertSerialFromHeader(ctx context.Context, r *http.Request) context.C
 
 	serial, err := strconv.ParseUint(serialStr, 10, 64)
 	if err != nil {
-		// Force cert auth on parse error instead of falling back to token auth.
+		// Force cert auth on parse error instead of falling back to token auth,
+		// but log the original parse error so operators can distinguish a
+		// malformed load-balancer header from a genuine bad-certificate failure.
+		logging.WithErr(ctx, ctxerr.Wrap(ctx, err, "parse X-Client-Cert-Serial header"))
 		return certserial.NewContext(ctx, 0)
 	}
 
@@ -85,8 +88,10 @@ func authenticatedDevice(svc fleet.Service, logger *slog.Logger, next endpoint.E
 			host, debug, err = svc.AuthenticateDevice(ctx, identifier)
 			if err == nil {
 				authnMethod = authz_ctx.AuthnDeviceToken
-			} else {
-				// Fallback to UUID auth for iOS/iPadOS self-service via URL.
+			} else if fleet.IsNotFound(err) {
+				// Fallback to UUID auth for iOS/iPadOS self-service via URL, but
+				// only when the token genuinely wasn't found -- not for other
+				// (e.g. transient datastore) errors, which should propagate as-is.
 				// The identifier (from {token}) is treated as the device UUID.
 				host, debug, err = svc.AuthenticateIDeviceByURL(ctx, identifier)
 				authnMethod = authz_ctx.AuthnDeviceURL
