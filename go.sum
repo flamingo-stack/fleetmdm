@@ -725,6 +725,8 @@ github.com/oschwald/maxminddb-golang v1.10.0 h1:Xp1u0ZhqkSuopaKmk1WwHtjF0H9Hd918
 github.com/oschwald/maxminddb-golang v1.10.0/go.mod h1:Y2ELenReaLAZ0b400URyGwvYxHV1dLIxBuyOsyYjHK0=
 github.com/osquery/osquery-go v0.0.0-20250131154556-629f995b6947 h1:EDgVELFaHiQXln+fZs9Ib9aXJwBEfa2qBZMVpSUYbYM=
 github.com/osquery/osquery-go v0.0.0-20250131154556-629f995b6947/go.mod h1:4cBOmXSmmDULG4bTOq0EFvIy5NUMNJMKbLDBMg6lhJE=
+github.com/osquery/osquery-go v0.0.0-20260630173615-eb39ad3443df h1:GEa8SFf/OXRXSHU5EtjUxs4yPz8caf9UlHN/F89/OJA=
+github.com/osquery/osquery-go v0.0.0-20260630173615-eb39ad3443df/go.mod h1:/Nxgn14on72pNnpjn9Fbw9WQc8JKY1sVv5K+SRZknEk=
 github.com/pandatix/nvdapi v0.6.4 h1:gix57FcQtOklCUgFrJzJhRblYj+2DN9jxZP6oqtme+A=
 github.com/pandatix/nvdapi v0.6.4/go.mod h1:DVYxPq0JRERgYzFmwTMknAtH4kB8v9KG+z40JWFRClk=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
