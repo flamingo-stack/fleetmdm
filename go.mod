@@ -89,7 +89,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hectane/go-acl v0.0.0-20190604041725-da78bae5fc95
-	github.com/hillu/go-ntdll v0.0.0-20220801201350-0d23f057ef1f
+	github.com/hillu/go-ntdll v0.0.0-20240418173803-69345773b582
 	github.com/igm/sockjs-go/v3 v3.0.2
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/josephspurrier/goversioninfo v1.4.0

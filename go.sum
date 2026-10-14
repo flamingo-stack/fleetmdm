@@ -543,6 +543,8 @@ github.com/hectane/go-acl v0.0.0-20190604041725-da78bae5fc95 h1:S4qyfL2sEm5Budr4
 github.com/hectane/go-acl v0.0.0-20190604041725-da78bae5fc95/go.mod h1:QiyDdbZLaJ/mZP4Zwc9g2QsfaEA4o7XvvgZegSci5/E=
 github.com/hillu/go-ntdll v0.0.0-20220801201350-0d23f057ef1f h1:es0IoL1/OOoGYUuvRtSzbtG3STd7Fm5LIniUWsfzMHE=
 github.com/hillu/go-ntdll v0.0.0-20220801201350-0d23f057ef1f/go.mod h1:cHjYsnAnSckPDx8/H01Y+owD1hf2adLA6VRiw4guEbA=
+github.com/hillu/go-ntdll v0.0.0-20240418173803-69345773b582 h1:msYGLGTxozPDUlpoVgYS6CrFw/PCRBOds5PGwo2XXuk=
+github.com/hillu/go-ntdll v0.0.0-20240418173803-69345773b582/go.mod h1:cHjYsnAnSckPDx8/H01Y+owD1hf2adLA6VRiw4guEbA=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/huandu/xstrings v1.5.0 h1:2ag3IFq9ZDANvthTwTiqSSZLjDc+BedvHPAp5tJy2TI=
 github.com/huandu/xstrings v1.5.0/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
