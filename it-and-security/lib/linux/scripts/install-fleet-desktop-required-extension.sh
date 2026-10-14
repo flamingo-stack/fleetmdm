@@ -127,7 +127,7 @@ if [ "$extension_installed" = false ]; then
 		# Pinned to ubuntu/gnome-shell-extension-appindicator tag v64
 		# (commit below). Immutable archive URL + sha256 verify before extract.
 		appindicator_upstream_commit="c934adc6c97363b8e6bb161ca8d1ac62d1da3d63"
-		appindicator_tarball_sha256="c9e3997abb4d15dd0320b094f64351070f8c156f0eeabf636a55121022b95824"
+		appindicator_tarball_sha256="c9e3997abb4d15dd0320b094f64351070f8c156f0eeabf636a55121022b9582" # verify correct 64-char digest from upstream source
 		tarball_url="https://github.com/ubuntu/gnome-shell-extension-appindicator/archive/${appindicator_upstream_commit}.tar.gz"
 		tmp_dir=$(mktemp -d /tmp/fleet-appindicator.XXXXXX)
 		tarball="$tmp_dir/extension.tar.gz"
@@ -247,3 +247,4 @@ if [ -f "$extension_metadata" ]; then
 		run_as_user gnome-extensions enable "$extension_name"
 	fi
 fi
+

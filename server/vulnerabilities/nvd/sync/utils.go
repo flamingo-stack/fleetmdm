@@ -57,38 +57,43 @@ func zipFiles(sources []string, target string) error {
 	defer zipWriter.Close()
 
 	for _, source := range sources {
-		// Add a file to the archive.
-		fileToZip, err := os.Open(source)
-		if err != nil {
-			return err
-		}
-		defer fileToZip.Close()
+		if err := func(source string) error {
+			// Add a file to the archive.
+			fileToZip, err := os.Open(source)
+			if err != nil {
+				return err
+			}
+			defer fileToZip.Close()
 
-		// Get the file information.
-		info, err := fileToZip.Stat()
-		if err != nil {
-			return err
-		}
+			// Get the file information.
+			info, err := fileToZip.Stat()
+			if err != nil {
+				return err
+			}
 
-		header, err := zip.FileInfoHeader(info)
-		if err != nil {
-			return err
-		}
+			header, err := zip.FileInfoHeader(info)
+			if err != nil {
+				return err
+			}
 
-		// Using FileInfoHeader() above only uses the basename of the file. If you want
-		// to preserve the folder structure (for example, if you're zipping files from
-		// a directory), you would need to set header.Name to the full path.
-		header.Name = source
+			// Using FileInfoHeader() above only uses the basename of the file. If you want
+			// to preserve the folder structure (for example, if you're zipping files from
+			// a directory), you would need to set header.Name to the full path.
+			header.Name = source
 
-		// Change to deflate to reduce file size but keep it compatible with unzip.
-		header.Method = zip.Deflate
+			// Change to deflate to reduce file size but keep it compatible with unzip.
+			header.Method = zip.Deflate
 
-		writer, err := zipWriter.CreateHeader(header)
-		if err != nil {
-			return err
-		}
+			writer, err := zipWriter.CreateHeader(header)
+			if err != nil {
+				return err
+			}
 
-		if _, err = io.Copy(writer, fileToZip); err != nil {
+			if _, err = io.Copy(writer, fileToZip); err != nil {
+				return err
+			}
+			return nil
+		}(source); err != nil {
 			return err
 		}
 	}

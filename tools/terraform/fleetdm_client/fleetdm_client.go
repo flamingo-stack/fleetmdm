@@ -132,8 +132,7 @@ func (c *FleetDMClient) CreateTeam(name string, description string) (*TeamGetRes
 	}
 	req, err := http.NewRequest(http.MethodPost, teamPrefix, bytes.NewReader(nameJson))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create POST request for %s name %s: %w",
-			req.URL.String(), name, err)
+		return nil, fmt.Errorf("failed to create POST request for %s name %s: %w", teamPrefix, name, err)
 	}
 	resp, err := c.do(req, nil)
 	if err != nil {

@@ -156,7 +156,6 @@ const SoftwareTable = ({
   let generateTableConfig: ITableConfigGenerator;
 
   if (data === undefined) {
-    tableData;
     generateTableConfig = () => [];
   } else if (isSoftwareTitles(data)) {
     tableData = data.software_titles;

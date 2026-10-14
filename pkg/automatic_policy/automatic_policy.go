@@ -118,9 +118,9 @@ func (m FullInstallerMetadata) PolicyDescription() (string, error) {
 	}
 	description := fmt.Sprintf("Policy triggers automatic install of %s on each host that's missing this software.", m.Title)
 	if m.Extension == "deb" || m.Extension == "rpm" {
-		basedPrefix := "RPM"
+		basedPrefix := "Debian"
 		if m.Extension == "rpm" {
-			basedPrefix = "Debian"
+			basedPrefix = "RPM"
 		}
 		description += fmt.Sprintf(
 			"\nSoftware won't be installed on Linux hosts with %s-based distributions because this policy's query is written to always pass on these hosts.",

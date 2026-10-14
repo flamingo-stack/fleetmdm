@@ -4,7 +4,11 @@ import valid_url from "components/forms/validators/valid_url";
 
 import { ISmallstepFormData } from "./SmallstepForm";
 
-// TODO: create a validator abstraction for this and the other form validation files
+// NOTE: This validation pattern (generateFormValidations/validateFormData/
+// getErrorMessage) is duplicated across HydrantForm, SmallstepForm and
+// NDESForm helpers. A shared generic form-validation utility should be
+// extracted to consolidate this logic and avoid fixes (e.g. permission
+// error handling) being applied to only one copy.
 
 export interface ISmallstepFormValidation {
   isValid: boolean;

@@ -120,7 +120,7 @@ func SystemDriveRequiresStartupAuthCmd(spec SystemDriveRequiresStartupAuthSpec) 
 
 	var contents bytes.Buffer
 	if err := systemDriveRequiresStartupAuthTmpl.Execute(&contents, spec); err != nil {
-		return nil, errors.New("failed to execute SystemDrRequiresStartupAuthCmd template")
+		return nil, errors.New("failed to execute SystemDriveRequiresStartupAuthCmd template")
 	}
 
 	return &fleet.MDMWindowsCommand{

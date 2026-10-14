@@ -161,11 +161,12 @@ func Up_20210818151828(tx *sql.Tx) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling config")
 	}
-	//nolint
-	_, err = tx.Exec(
+	if _, err = tx.Exec(
 		`INSERT INTO app_config_json(json_value) VALUES(?) ON DUPLICATE KEY UPDATE json_value = VALUES(json_value)`,
 		configBytes,
-	)
+	); err != nil {
+		return errors.Wrap(err, "insert app_config_json")
+	}
 	return nil
 }
 
