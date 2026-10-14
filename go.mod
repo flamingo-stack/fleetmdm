@@ -69,7 +69,7 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/go-ole/go-ole v1.2.6
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/gocarina/gocsv v0.0.0-20220310154401-d4df709ca055
+	github.com/gocarina/gocsv v0.0.0-20260628180327-50907998929c
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/gofrs/flock v0.12.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
