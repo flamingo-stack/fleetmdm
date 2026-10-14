@@ -81,7 +81,7 @@ module.exports = {
       } else {
         // If an error was logged for a entra tenant, log the error, and increment the numberOfLoggedErrors
         numberOfLoggedErrors++;
-        sails.log.warn('p1: An error occurred while sending a heartbeat request for a Microsfot entra compliance tenant with the id'+connectionIdAsString+'. Logged error:\n'+errorReportById[connectionIdAsString]);
+        sails.log.warn('p1: An error occurred while sending a heartbeat request for a Microsoft entra compliance tenant with the id'+connectionIdAsString+'. Logged error:\n'+errorReportById[connectionIdAsString]);
       }
     }//∞
 

@@ -18,7 +18,7 @@ type KeyInfo struct {
 type kiDataNames string
 
 const (
-	kiCaCertificate kiDataNames = "certificate"
+	kiCaCertificate kiDataNames = "ca_certificate"
 	kiCertificate   kiDataNames = "certificate"
 	kiKey           kiDataNames = "key"
 )
@@ -117,3 +117,4 @@ func (ki *KeyInfo) MarshalJSON() ([]byte, error) {
 
 	return json.Marshal(ret)
 }
+

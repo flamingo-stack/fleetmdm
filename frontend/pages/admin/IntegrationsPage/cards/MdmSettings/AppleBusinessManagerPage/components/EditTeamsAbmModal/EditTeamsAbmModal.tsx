@@ -93,14 +93,7 @@ const EditTeamsAbmModal = ({
     }
   );
 
-  const options = useMemo(() => {
-    return availableTeams
-      ?.filter((t) => t.name !== "All fleets")
-      .map((t) => ({
-        value: t.name,
-        label: t.name,
-      }));
-  }, [availableTeams]);
+  const options = useMemo(() => getOptions(availableTeams), [availableTeams]);
 
   const onSave = useCallback(
     async (evt: React.MouseEvent<HTMLFormElement>) => {

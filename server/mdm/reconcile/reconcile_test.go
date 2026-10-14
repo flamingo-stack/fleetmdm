@@ -37,7 +37,7 @@ func (e *testEntity) HasBrokenLabel() bool {
 }
 
 func labelRef(id uint) fleet.MDMProfileLabelRef {
-	return fleet.MDMProfileLabelRef{LabelID: new(id)}
+	return fleet.MDMProfileLabelRef{LabelID: &id}
 }
 
 func TestHandlerIncludeAll(t *testing.T) {

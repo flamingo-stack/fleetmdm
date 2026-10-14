@@ -29,7 +29,7 @@ const DeleteBootstrapPackageModal = ({
         <p>
           Option to install Fleet&apos;s agent (fleetd) manually will be
           disabled, so agent will be installed automatically during automatic
-          enollment of macOS hosts.
+          enrollment of macOS hosts.
         </p>
         <div className="modal-cta-wrap">
           <Button type="button" onClick={() => onDelete()} variant="alert">
@@ -45,3 +45,4 @@ const DeleteBootstrapPackageModal = ({
 };
 
 export default DeleteBootstrapPackageModal;
+

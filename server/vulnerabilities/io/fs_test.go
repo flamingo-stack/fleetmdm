@@ -23,7 +23,7 @@ func TestFSClient(t *testing.T) {
 	t.Run("MacOfficeReleaseNotes", func(t *testing.T) {
 		t.Run("directory does not exists", func(t *testing.T) {
 			sut := NewFSClient("asdf")
-			_, err := sut.MSRCBulletins()
+			_, err := sut.MacOfficeReleaseNotes()
 			require.Error(t, err)
 		})
 

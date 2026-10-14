@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useId } from "react";
 import classnames from "classnames";
 
 import Button from "components/buttons/Button";
@@ -114,6 +114,7 @@ export const FileUploader = ({
 }: IFileUploaderProps) => {
   const [isFileSelected, setIsFileSelected] = useState(!!fileDetails);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = useId();
 
   const classes = classnames(baseClass, className, {
     [`${baseClass}__file-preview`]: isFileSelected,
@@ -176,7 +177,7 @@ export const FileUploader = ({
     // If we want to actual do file uploading, wrap in a label that
     // references the hidden file input. Otherwise just use a span.
     if (!onButtonClick) {
-      buttonMarkup = <label htmlFor="upload-file">{buttonMarkup}</label>;
+      buttonMarkup = <label htmlFor={fileInputId}>{buttonMarkup}</label>;
     } else {
       buttonMarkup = <span>{buttonMarkup}</span>;
     }
@@ -268,7 +269,7 @@ export const FileUploader = ({
             <input
               ref={fileInputRef}
               accept={accept}
-              id="upload-file"
+              id={fileInputId}
               type="file"
               onChange={onFileSelect}
               className="file-input-visually-hidden"
