@@ -6,7 +6,7 @@ RUN cargo install --locked --version 0.28.0 apple-codesign \
   && curl -sSf $transporter_url -o transporter_install.sh \
   && sh transporter_install.sh --target transporter --accept --noexec
 
-FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba
+FROM debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 
 LABEL maintainer="Fleet Developers"
 LABEL org.opencontainers.image.vendor="Fleet Device Management Inc."

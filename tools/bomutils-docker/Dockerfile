@@ -1,4 +1,4 @@
-FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba AS builder
+FROM debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2 AS builder
 
 RUN apt-get update
 RUN apt-get install -y build-essential autoconf libxml2-dev libssl-dev zlib1g-dev curl git
@@ -20,7 +20,7 @@ RUN curl -L https://github.com/mackyle/xar/archive/refs/tags/xar-1.6.1.tar.gz > 
 COPY patch.txt .
 RUN cd xar-xar-1.6.1/xar && patch < ../../patch.txt && autoconf && ./configure && make && make install
 
-FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba
+FROM debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 
 LABEL maintainer="Fleet Developers"
 LABEL org.opencontainers.image.vendor="Fleet Device Management Inc."
