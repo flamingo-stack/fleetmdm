@@ -9,6 +9,9 @@ on:
       clients_matrix:
         description: "Clients matrix configuration for all components"
         value: ${{ jobs.collect.outputs.clients_matrix }}
+      scan_matrix:
+        description: "Code scan targets"
+        value: ${{ jobs.collect.outputs.scan_matrix }}
       changes:
         description: "JSON object mapping each component key to true/false"
         value: ${{ jobs.collect.outputs.changes }}
@@ -22,6 +25,7 @@ jobs:
     outputs:
       images_matrix: ${{ steps.define.outputs.images_matrix }}
       clients_matrix: ${{ steps.define.outputs.clients_matrix }}
+      scan_matrix: ${{ steps.define.outputs.scan_matrix }}
       changes: ${{ steps.changes.outputs.changes }}
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +75,10 @@ jobs:
 
           images_matrix=$(jq -c '[ .[] | { name } ]' <<< "$IMAGES")
           clients_matrix=$(jq -c '[ .[] | { name, os, go_os, go_arch, artifact_name } ]' <<< "$CLIENTS")
+          scan_matrix=$(jq -nc '[
+            { name: "backend", path: ".", paths: "**/{go.mod,go.sum,Dockerfile*}", skip_files: "**/package.json,**/package-lock.json,**/yarn.lock" },
+            { name: "frontend", path: ".", paths: "**/{package.json,package-lock.json,yarn.lock}", skip_files: "**/go.mod,**/go.sum,**/Dockerfile*" }
+          ]')
 
           filters=$(jq -nc \
             --argjson images "$IMAGES" \
@@ -93,6 +101,7 @@ jobs:
           {
             echo "images_matrix=$images_matrix"
             echo "clients_matrix=$clients_matrix"
+            echo "scan_matrix=$scan_matrix"
             echo "filters=$filters"
             echo "keys=$keys"
           } >> "$GITHUB_OUTPUT"
