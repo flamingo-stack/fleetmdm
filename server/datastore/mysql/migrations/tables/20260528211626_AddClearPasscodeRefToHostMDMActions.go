@@ -9,7 +9,7 @@ func init() {
 	MigrationClient.AddMigration(Up_20260528211626, Down_20260528211626)
 }
 
-// Up_20260528163657 adds clear_passcode_ref to host_mdm_actions, mirroring lock_ref and wipe_ref. For Android hosts the column
+// Up_20260528211626 adds clear_passcode_ref to host_mdm_actions, mirroring lock_ref and wipe_ref. For Android hosts the column
 // points at mdm_android_commands.command_uuid for a RESET_PASSWORD command and is the signal
 // HostLockWipeStatus.IsPendingClearPasscode reads to flip a host into the "clearing passcode" device status while the AMAPI
 // command is in flight.
@@ -31,3 +31,4 @@ ALTER TABLE host_mdm_actions
 func Down_20260528211626(tx *sql.Tx) error {
 	return nil
 }
+

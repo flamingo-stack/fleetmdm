@@ -50,7 +50,7 @@ func (c *Client) runMigration(db *sql.DB, m *Migration, direction bool) error {
 
 		tx, err := db.Begin()
 		if err != nil {
-			log.Fatal("db.Begin: ", err)
+			return fmt.Errorf("db.Begin: %w", err)
 		}
 
 		fn := m.UpFn
@@ -60,8 +60,7 @@ func (c *Client) runMigration(db *sql.DB, m *Migration, direction bool) error {
 		if fn != nil {
 			if err := fn(tx); err != nil {
 				tx.Rollback() //nolint:errcheck
-				log.Fatalf("FAIL %s (%v), quitting migration.", filepath.Base(m.Source), err)
-				return err
+				return fmt.Errorf("FAIL %s: %w", filepath.Base(m.Source), err)
 			}
 		}
 

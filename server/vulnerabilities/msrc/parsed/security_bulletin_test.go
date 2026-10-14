@@ -54,7 +54,7 @@ func TestSecurityBulletin(t *testing.T) {
 
 			cve4 := NewVulnerability(ptr.Int64(777))
 			cve4.ProductIDs = map[string]bool{"ccc": true, "ddd": true}
-			cve3.RemediatedBy = map[uint]bool{4: true}
+			cve4.RemediatedBy = map[uint]bool{4: true}
 
 			a := NewSecurityBulletin("Windows 10")
 			a.Vulnerabilities["cve-1"] = cve1

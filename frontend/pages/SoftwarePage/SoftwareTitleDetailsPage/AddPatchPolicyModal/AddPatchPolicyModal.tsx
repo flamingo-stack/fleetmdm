@@ -43,8 +43,9 @@ const AddPatchPolicyModal = ({
       const reason = getErrorReason(error);
       if (reason.includes("already has a policy")) {
         renderFlash("error", EXISTING_PATCH_POLICY_ERROR_MSG);
+      } else {
+        renderFlash("error", "Couldn't add patch policy. Please try again.");
       }
-      renderFlash("error", "Couldn't add patch policy. Please try again.");
     }
     setIsAddingPatchPolicy(false);
     onExit();

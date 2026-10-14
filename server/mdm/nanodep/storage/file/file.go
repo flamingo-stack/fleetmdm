@@ -155,7 +155,7 @@ func (s *FileStorage) RetrieveCursor(_ context.Context, name string) (string, ti
 	modTime := time.Time{}
 	if err == nil {
 		var stat fs.FileInfo
-		stat, err = os.Stat(s.profileFilename(name))
+		stat, err = os.Stat(s.cursorFilename(name))
 		if err == nil {
 			modTime = stat.ModTime()
 		}

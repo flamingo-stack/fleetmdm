@@ -57,6 +57,7 @@ func CheckinHandler(svc service.Checkin, logger log.Logger) http.HandlerFunc {
 				httpStatus = statusErr.Status
 			}
 			http.Error(w, http.StatusText(httpStatus), httpStatus)
+			return
 		}
 		_, _ = w.Write(respBytes)
 	}
@@ -86,6 +87,7 @@ func CommandAndReportResultsHandler(svc service.CommandAndReportResults, logger 
 				httpStatus = statusErr.Status
 			}
 			http.Error(w, http.StatusText(httpStatus), httpStatus)
+			return
 		}
 		_, _ = w.Write(respBytes)
 	}
@@ -103,3 +105,4 @@ func CheckinAndCommandHandler(service service.CheckinAndCommandService, logger l
 		CommandAndReportResultsHandler(service, logger).ServeHTTP(w, r)
 	}
 }
+
