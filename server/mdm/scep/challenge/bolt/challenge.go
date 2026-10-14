@@ -58,6 +58,7 @@ func (db *Depot) HasChallenge(pw string) (bool, error) {
 	}
 	bkt := tx.Bucket([]byte(challengeBucket))
 	if bkt == nil {
+		tx.Rollback()
 		return false, fmt.Errorf("bucket %q not found!", challengeBucket)
 	}
 
@@ -65,6 +66,7 @@ func (db *Depot) HasChallenge(pw string) (bool, error) {
 	var matches bool
 	if chal := bkt.Get(key); chal != nil {
 		if err := bkt.Delete(key); err != nil {
+			tx.Rollback()
 			return false, err
 		}
 		matches = true

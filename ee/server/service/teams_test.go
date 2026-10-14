@@ -418,10 +418,10 @@ func TestNewTeamCollationEqualConflict(t *testing.T) {
 		authz: authorizer,
 	}
 
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
-	_, err = svc.NewTeam(ctx, fleet.TeamPayload{Name: new("abc")})
+	_, err = svc.NewTeam(ctx, fleet.TeamPayload{Name: ptr.String("abc")})
 	require.Error(t, err)
 	var conflict *fleet.ConflictError
 	require.ErrorAs(t, err, &conflict)
@@ -463,7 +463,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 		authz: authorizer,
 	}
 
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
 	t.Run("case-only self rename succeeds", func(t *testing.T) {
@@ -472,7 +472,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 			return nil, nil
 		}
 
-		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: new("abc")})
+		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: ptr.String("abc")})
 		require.NoError(t, err)
 		require.NotNil(t, team)
 		require.Equal(t, "abc", team.Name)
@@ -484,7 +484,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 			return &fleet.Team{ID: 6, Name: "def"}, nil
 		}
 
-		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: new("DEF")})
+		team, err := svc.ModifyTeam(ctx, 5, fleet.TeamPayload{Name: ptr.String("DEF")})
 		require.Error(t, err)
 		require.Nil(t, team)
 		var conflict *fleet.ConflictError
@@ -503,7 +503,7 @@ func TestModifyTeamCaseOnlyRenameAndConflict(t *testing.T) {
 func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 	authorizer, err := authz.NewAuthorizer()
 	require.NoError(t, err)
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
 	newSvc := func() (*Service, *mock.Store) {
@@ -543,7 +543,7 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 	t.Run("case-only rename of existing team succeeds and persists new name", func(t *testing.T) {
 		svc, ds := newSvc()
 		filename := "abc.yml"
-		existing := &fleet.Team{ID: 7, Name: "ABC", Filename: new(filename)}
+		existing := &fleet.Team{ID: 7, Name: "ABC", Filename: ptr.String(filename)}
 		ds.TeamByFilenameFunc = func(ctx context.Context, f string) (*fleet.Team, error) {
 			require.Equal(t, filename, f)
 			return existing, nil
@@ -565,7 +565,7 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 		// and SaveTeam is called — otherwise we'd only be asserting that the
 		// conflict check didn't trip.
 		_, err := svc.ApplyTeamSpecs(ctx, []*fleet.TeamSpec{
-			{Name: "abc", Filename: new(filename)},
+			{Name: "abc", Filename: ptr.String(filename)},
 		}, fleet.ApplyTeamSpecOptions{})
 		require.NoError(t, err)
 		require.Equal(t, 1, conflictCalls, "TeamConflictsWithName must be called once per spec")
@@ -580,7 +580,7 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 		// rename it to "DEF" via the same file, but another team "def"
 		// already exists under a different file. This must 409.
 		svc, ds := newSvc()
-		existing := &fleet.Team{ID: 7, Name: "ABC", Filename: new("abc.yml")}
+		existing := &fleet.Team{ID: 7, Name: "ABC", Filename: ptr.String("abc.yml")}
 		ds.TeamByFilenameFunc = func(ctx context.Context, filename string) (*fleet.Team, error) {
 			return existing, nil
 		}
@@ -594,7 +594,7 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 		}
 
 		_, err := svc.ApplyTeamSpecs(ctx, []*fleet.TeamSpec{
-			{Name: "DEF", Filename: new("abc.yml")},
+			{Name: "DEF", Filename: ptr.String("abc.yml")},
 		}, fleet.ApplyTeamSpecOptions{ApplySpecOptions: fleet.ApplySpecOptions{DryRun: true}})
 		require.Error(t, err)
 		var conflict *fleet.ConflictError
@@ -609,7 +609,7 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 		// (possibly taking over management from another YAML file). The
 		// pre-fix behavior was adoption; the fix must not break it.
 		svc, ds := newSvc()
-		existing := &fleet.Team{ID: 12, Name: "Adoptable", Filename: new("old.yml")}
+		existing := &fleet.Team{ID: 12, Name: "Adoptable", Filename: ptr.String("old.yml")}
 		ds.TeamByNameFunc = func(ctx context.Context, name string) (*fleet.Team, error) {
 			return existing, nil
 		}
@@ -620,7 +620,7 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 		}
 
 		_, err := svc.ApplyTeamSpecs(ctx, []*fleet.TeamSpec{
-			{Name: "Adoptable", Filename: new("new.yml")},
+			{Name: "Adoptable", Filename: ptr.String("new.yml")},
 		}, fleet.ApplyTeamSpecOptions{})
 		require.NoError(t, err)
 		require.True(t, ds.SaveTeamFuncInvoked, "SaveTeam must be called to adopt the team")
@@ -638,8 +638,8 @@ func TestApplyTeamSpecsCollationEqualConflict(t *testing.T) {
 		}
 
 		_, err := svc.ApplyTeamSpecs(ctx, []*fleet.TeamSpec{
-			{Name: "ABC", Filename: new("foo.yml")},
-			{Name: "abc", Filename: new("bar.yml")},
+			{Name: "ABC", Filename: ptr.String("foo.yml")},
+			{Name: "abc", Filename: ptr.String("bar.yml")},
 		}, fleet.ApplyTeamSpecOptions{ApplySpecOptions: fleet.ApplySpecOptions{DryRun: true}})
 		require.Error(t, err)
 		var conflict *fleet.ConflictError
@@ -1123,7 +1123,7 @@ func TestUpdateTeamMDMAppleSetupManualAgent(t *testing.T) {
 func TestApplyTeamSpecsCustomSettingsWithoutMDMConfigured(t *testing.T) {
 	authorizer, err := authz.NewAuthorizer()
 	require.NoError(t, err)
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
 	const teamName = "Mobile"
@@ -1242,7 +1242,7 @@ func TestApplyTeamSpecsCustomSettingsWithoutMDMConfigured(t *testing.T) {
 func TestApplyTeamSpecsClearBootstrapPackageAlreadyDeleted(t *testing.T) {
 	authorizer, err := authz.NewAuthorizer()
 	require.NoError(t, err)
-	adminUser := &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}
+	adminUser := &fleet.User{ID: 1, GlobalRole: ptr.String(fleet.RoleAdmin)}
 	ctx := test.UserContext(context.Background(), adminUser)
 
 	const teamName = "TestTeam"
@@ -1312,3 +1312,4 @@ func TestApplyTeamSpecsClearBootstrapPackageAlreadyDeleted(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ds.SaveTeamFuncInvoked)
 }
+

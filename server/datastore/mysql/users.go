@@ -471,7 +471,14 @@ func (ds *Datastore) DeleteUserIfNotLastAdmin(ctx context.Context, id uint) erro
 			`SELECT COUNT(*) FROM users WHERE global_role = 'admin' FOR UPDATE`); err != nil {
 			return ctxerr.Wrap(ctx, err, "count global admins for delete")
 		}
-		if count <= 1 {
+
+		var isAdmin bool
+		if err := sqlx.GetContext(ctx, tx, &isAdmin,
+			`SELECT EXISTS(SELECT 1 FROM users WHERE id = ? AND global_role = 'admin')`, id); err != nil {
+			return ctxerr.Wrap(ctx, err, "check if user being deleted is global admin")
+		}
+
+		if isAdmin && count <= 1 {
 			return fleet.ErrLastGlobalAdmin
 		}
 

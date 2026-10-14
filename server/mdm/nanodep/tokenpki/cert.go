@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 )
@@ -52,10 +53,17 @@ func PEMRSAPrivateKey(key *rsa.PrivateKey) []byte {
 // RSAKeyFromPEM decodes a PEM RSA private key.
 func RSAKeyFromPEM(key []byte) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode(key)
+	if block == nil {
+		return nil, errors.New("PEM decode failed for RSA private key")
+	}
 	if block.Type != "RSA PRIVATE KEY" {
 		return nil, errors.New("PEM type is not RSA PRIVATE KEY")
 	}
-	return x509.ParsePKCS1PrivateKey(block.Bytes)
+	key2, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse rsa key: %w", err)
+	}
+	return key2, nil
 }
 
 // PEMCertificate returns derBytes encoded as a PEM block.
@@ -70,8 +78,15 @@ func PEMCertificate(derBytes []byte) []byte {
 // CertificateFromPEM decodes a PEM certificate.
 func CertificateFromPEM(cert []byte) (*x509.Certificate, error) {
 	block, _ := pem.Decode(cert)
+	if block == nil {
+		return nil, errors.New("PEM decode failed for certificate")
+	}
 	if block.Type != "CERTIFICATE" {
 		return nil, errors.New("PEM type is not CERTIFICATE")
 	}
-	return x509.ParseCertificate(block.Bytes)
+	parsedCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse certificate: %w", err)
+	}
+	return parsedCert, nil
 }

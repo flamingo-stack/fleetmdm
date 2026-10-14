@@ -256,10 +256,10 @@ func createBulkUsersCommand() *cli.Command {
 				globalRoleString := record[4]
 				teamStrings := strings.Split(record[5], " ")
 				if ssoErr != nil {
-					return fmt.Errorf("SSO is not a vailed Boolean value: %w", ssoErr)
+					return fmt.Errorf("SSO is not a valid Boolean value: %w", ssoErr)
 				}
 				if apiErr != nil {
-					return fmt.Errorf("API Only is not a vailed Boolean value: %w", apiErr)
+					return fmt.Errorf("API Only is not a valid Boolean value: %w", apiErr)
 				}
 				if passErr != nil {
 					return fmt.Errorf("not able to generate a random password: %w", passErr)
@@ -274,7 +274,7 @@ func createBulkUsersCommand() *cli.Command {
 					globalRole = ptr.String(fleet.RoleObserver)
 				} else if globalRoleString != "" {
 					if !fleet.ValidGlobalRole(globalRoleString) {
-						return fmt.Errorf("'%s' is not a valid team role", globalRoleString)
+						return fmt.Errorf("'%s' is not a valid global role", globalRoleString)
 					}
 					globalRole = ptr.String(globalRoleString)
 				} else {
@@ -299,7 +299,7 @@ func createBulkUsersCommand() *cli.Command {
 				if sso && len(password) > 0 {
 					password = ""
 				}
-				force_reset := !sso
+				force_reset := !sso && !apiOnly
 				users = append(users, fleet.UserPayload{
 					Password:                 &password,
 					Email:                    &email,
