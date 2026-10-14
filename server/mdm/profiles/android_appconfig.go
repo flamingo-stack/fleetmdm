@@ -73,10 +73,10 @@ func SubstituteFleetVarsInAndroidAppConfig(
 
 		case fleet.FleetVarHostHardwareSerial:
 			if host.HardwareSerial == "" {
-				return nil, &UnresolvableAndroidAppConfigVarError{
+				return nil, ctxerr.New(ctx, (&UnresolvableAndroidAppConfigVarError{
 					FleetVar: name,
 					Detail:   fmt.Sprintf("There is no serial number for this host. Fleet couldn't populate $FLEET_VAR_%s.", name),
-				}
+				}).Error())
 			}
 			contents = replaceJSONSafe(contents, name, host.HardwareSerial)
 
@@ -89,10 +89,10 @@ func SubstituteFleetVarsInAndroidAppConfig(
 				return nil, ctxerr.Wrap(ctx, err, "get host idp email for android app config")
 			}
 			if len(emails) == 0 {
-				return nil, &UnresolvableAndroidAppConfigVarError{
+				return nil, ctxerr.New(ctx, (&UnresolvableAndroidAppConfigVarError{
 					FleetVar: name,
 					Detail:   fmt.Sprintf("There is no IdP email for this host. Fleet couldn't populate $FLEET_VAR_%s.", name),
-				}
+				}).Error())
 			}
 			contents = replaceJSONSafe(contents, name, emails[0])
 
@@ -110,12 +110,12 @@ func SubstituteFleetVarsInAndroidAppConfig(
 				return nil, ctxerr.Wrap(ctx, err, "resolve host idp variable for android app config")
 			}
 			if !ok {
-				return nil, &UnresolvableAndroidAppConfigVarError{FleetVar: name, Detail: detail}
+				return nil, ctxerr.New(ctx, (&UnresolvableAndroidAppConfigVarError{FleetVar: name, Detail: detail}).Error())
 			}
 			contents = replaceJSONSafe(contents, name, value)
 
 		default:
-			return nil, &UnresolvableAndroidAppConfigVarError{FleetVar: name}
+			return nil, ctxerr.New(ctx, (&UnresolvableAndroidAppConfigVarError{FleetVar: name}).Error())
 		}
 	}
 

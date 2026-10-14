@@ -71,7 +71,7 @@ func (s *Service) GetChartData(ctx context.Context, metric string, opts api.Requ
 	// viewer — the authenticated middleware should have placed one in ctx.
 	isGlobal, viewerTeamIDs, err := s.viewer.ViewerScope(ctx)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "resolve viewer scope for chart data")
 	}
 
 	// Build the authz subject + action. Two distinct cases:
@@ -94,18 +94,18 @@ func (s *Service) GetChartData(ctx context.Context, metric string, opts api.Requ
 
 	dataset, ok := s.datasets[metric]
 	if !ok {
-		return nil, &platform_http.BadRequestError{Message: fmt.Sprintf("unknown chart metric: %s", metric)}
+		return nil, &platform_http.BadRequestError{Message: ctxerr.New(ctx, fmt.Sprintf("unknown chart metric: %s", metric)).Error()}
 	}
 
 	// Don't allow requesting more days than the charts are designed to handle.
 	// This mostly prevents expensive queries for large day ranges.
 	if opts.Days < 1 || opts.Days > 31 {
-		return nil, &platform_http.BadRequestError{Message: fmt.Sprintf("invalid days value: %d (must be between 1 and 31)", opts.Days)}
+		return nil, &platform_http.BadRequestError{Message: ctxerr.New(ctx, fmt.Sprintf("invalid days value: %d (must be between 1 and 31)", opts.Days)).Error()}
 	}
 
 	// Resolution must be 0 or a positive divisor of 24.
 	if opts.Resolution < 0 || (opts.Resolution != 0 && 24%opts.Resolution != 0) {
-		return nil, &platform_http.BadRequestError{Message: fmt.Sprintf("invalid resolution value: %d (must be 0 or a positive divisor of 24)", opts.Resolution)}
+		return nil, &platform_http.BadRequestError{Message: ctxerr.New(ctx, fmt.Sprintf("invalid resolution value: %d (must be 0 or a positive divisor of 24)", opts.Resolution)).Error()}
 	}
 
 	hours := opts.Resolution

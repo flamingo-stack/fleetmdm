@@ -117,13 +117,13 @@ func ApplyStarterLibrary(
 	// Create an authenticated client to fetch app config.
 	client, err := NewClient(serverURL, true, "", "")
 	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to create client")
 	}
 	client.SetToken(token)
 
 	appConfig, err := client.GetAppConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get app config: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to get app config")
 	}
 
 	orgName := appConfig.OrgInfo.OrgName
@@ -134,7 +134,7 @@ func ApplyStarterLibrary(
 	// Create a temp directory for the rendered templates.
 	tempDir, err := os.MkdirTemp("", "fleet-starter-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to create temp directory")
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -142,7 +142,7 @@ func ApplyStarterLibrary(
 
 	// Render templates using `fleetctl new`.
 	if err := runFleetctl([]string{"new", "--org-name", orgName, "--dir", outDir}); err != nil {
-		return fmt.Errorf("fleetctl new: %w", err)
+		return ctxerr.Wrap(ctx, err, "fleetctl new")
 	}
 
 	// Set env overrides so GitOpsFromFile can expand $FLEET_URL without
@@ -155,7 +155,7 @@ func ApplyStarterLibrary(
 	// Write a temporary fleetctl config file with auth credentials.
 	configFile, err := os.CreateTemp(tempDir, "fleetctl-config-*.yml")
 	if err != nil {
-		return fmt.Errorf("failed to create fleetctl config: %w", err)
+		return ctxerr.Wrap(ctx, err, "failed to create fleetctl config")
 	}
 	fmt.Fprintf(configFile, "contexts:\n  default:\n    address: %s\n    tls-skip-verify: true\n    token: %s\n",
 		serverURL, token)
@@ -168,7 +168,7 @@ func ApplyStarterLibrary(
 		fleetDir := filepath.Join(outDir, "fleets")
 		entries, err := os.ReadDir(fleetDir)
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read fleets directory: %w", err)
+			return ctxerr.Wrap(ctx, err, "failed to read fleets directory")
 		}
 		for _, entry := range entries {
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".yml" {
@@ -179,7 +179,7 @@ func ApplyStarterLibrary(
 	}
 
 	if err := runFleetctl(args); err != nil {
-		return fmt.Errorf("fleetctl gitops: %w", err)
+		return ctxerr.Wrap(ctx, err, "fleetctl gitops")
 	}
 
 	logger.DebugContext(ctx, "Starter library applied successfully")

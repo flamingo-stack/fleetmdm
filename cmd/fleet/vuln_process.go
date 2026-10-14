@@ -2,14 +2,13 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/WatchBeam/clock"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/contexts/license"
 	"github.com/fleetdm/fleet/v4/server/datastore/mysql"
 	"github.com/fleetdm/fleet/v4/server/dev_mode"
@@ -65,16 +64,16 @@ by an exit code of zero.`,
 			case fleet.AllMigrationsCompleted:
 				// only continue if db is considered up-to-date
 			case fleet.NeedsFleetv4732Fix, fleet.UnknownFleetv4732State:
-				migrationError = errors.New("database has misnumbered migrations from v4.73.2")
+				migrationError = ctxerr.New(cmd.Context(), "database has misnumbered migrations from v4.73.2")
 			case fleet.NoMigrationsCompleted:
-				migrationError = errors.New("no migrations completed")
+				migrationError = ctxerr.New(cmd.Context(), "no migrations completed")
 			case fleet.SomeMigrationsCompleted:
-				migrationError = errors.New("partial migrations completed")
+				migrationError = ctxerr.New(cmd.Context(), "partial migrations completed")
 			case fleet.UnknownMigrations:
-				migrationError = errors.New("database migrations incompatible with current version")
+				migrationError = ctxerr.New(cmd.Context(), "database migrations incompatible with current version")
 			}
 			if migrationError != nil {
-				return fmt.Errorf("refusing to continue processing vulnerabilities err: %w", migrationError)
+				return ctxerr.Wrap(cmd.Context(), migrationError, "refusing to continue processing vulnerabilities")
 			}
 
 			ctx, cancel := context.WithTimeout(cmd.Context(), lockDuration)
@@ -84,16 +83,16 @@ by an exit code of zero.`,
 			// it's most likely due to vulnerabilities.disable_schedule=false but still trying to run external vuln processing command
 			lock, err := ds.Lock(ctx, string(fleet.CronVulnerabilities), "vuln_processing_command", lockDuration)
 			if err != nil {
-				return fmt.Errorf("failed to obtain vuln processing lock: %w", err)
+				return ctxerr.Wrap(ctx, err, "failed to obtain vuln processing lock")
 			}
 			if !lock {
-				return errors.New("vulnerabilities processing locked")
+				return ctxerr.New(ctx, "vulnerabilities processing locked")
 			}
 
 			defer func() {
 				uerr := ds.Unlock(ctx, string(fleet.CronVulnerabilities), "vuln_processing_command")
 				if uerr != nil {
-					err = fmt.Errorf("failed to release vulnerability processing lock: %w", uerr)
+					err = ctxerr.Wrap(ctx, uerr, "failed to release vulnerability processing lock")
 				}
 			}()
 			appConfig, err := ds.AppConfig(ctx)
@@ -105,7 +104,7 @@ by an exit code of zero.`,
 			// this really shouldn't ever be empty string since it's defaulted, but could be due to some misconfiguration
 			// we'll throw an error here since the entire point of this command is to process vulnerabilities
 			if vulnPath == "" {
-				return errors.New("vuln path empty, check environment variables or app config yml")
+				return ctxerr.New(ctx, "vuln path empty, check environment variables or app config yml")
 			}
 			logger.InfoContext(ctx, "scanning vulnerabilities")
 			start := time.Now()

@@ -7,8 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -93,9 +91,12 @@ func (svc *Service) RequestCertificate(ctx context.Context, p fleet.RequestCerti
 
 		idpUsername = *introspectionResponse.Username
 
-		// the email should either equal the username or include it as a prefix, i.e.
+		// the email should either equal the username or include it as a prefix followed by '@', i.e.
 		// email=username@example.com and username=username
-		if !strings.HasPrefix(csrEmail, csrUsername) {
+		// >>> OPENFRAME(request-certificate-upn-match): exact segment match (up to '@') instead of
+		// bare HasPrefix to prevent CSR email spoofing (e.g. username "bob" matching "bobby@evil.com") — openframe/docs/security-fixes.md
+		if csrEmail != csrUsername && !strings.HasPrefix(csrEmail, csrUsername+"@") {
+			// <<< OPENFRAME(request-certificate-upn-match)
 			svc.logger.ErrorContext(ctx, "Failing Certificate Request due to mismatch between CSR email and UPN", "csr_email", csrEmail, "csr_upn", csrUsername)
 			return nil, InvalidCSRError{}
 		}
@@ -138,14 +139,17 @@ func (svc *Service) RequestCertificate(ctx context.Context, p fleet.RequestCerti
 	}
 	svc.logger.InfoContext(ctx, "Successfully retrieved a certificate from EST", "ca_id", ca.ID, "idp_username", idpUsername)
 
+	// >>> OPENFRAME(request-certificate-pem-output): support returning the issued certificate as a
+	// single PEM CERTIFICATE block instead of the raw PKCS7 envelope — openframe/docs/certificates.md
 	if p.ReturnPEMCertificate {
-		pemCert, err := pkcs7EnvelopeToPEM(certificate.Certificate)
+		pemCert, err := pkcs7EnvelopeToPEM(ctx, certificate.Certificate)
 		if err != nil {
 			svc.logger.ErrorContext(ctx, "Failed to convert PKCS7 envelope to PEM certificate", "ca_id", ca.ID, "err", err)
 			return nil, ctxerr.Wrap(ctx, err, "converting PKCS7 envelope to PEM certificate")
 		}
 		return new(pemCert), nil
 	}
+	// <<< OPENFRAME(request-certificate-pem-output)
 
 	// Wrap the certificate in a PEM block for easier consumption by the client. TODO: If we ever
 	// support CAs other than Hydrant/EST in this API, this may need to be modified to be aware of
@@ -153,10 +157,12 @@ func (svc *Service) RequestCertificate(ctx context.Context, p fleet.RequestCerti
 	return new("-----BEGIN PKCS7-----\n" + string(certificate.Certificate) + "\n-----END PKCS7-----\n"), nil
 }
 
+// >>> OPENFRAME(request-certificate-pem-output): new helper added to convert EST PKCS7 responses
+// to PEM — openframe/docs/certificates.md
 // pkcs7EnvelopeToPEM converts a base64-encoded PKCS7 envelope (as returned by an EST
 // /simpleenroll response, per RFC 7030) into a single PEM-encoded CERTIFICATE block.
 // It returns an error unless the envelope contains exactly one certificate.
-func pkcs7EnvelopeToPEM(envelope []byte) (string, error) {
+func pkcs7EnvelopeToPEM(ctx context.Context, envelope []byte) (string, error) {
 	// EST returns base64-encoded PKCS7 with potential whitespace; strip it before decoding.
 	stripped := strings.Map(func(r rune) rune {
 		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
@@ -167,26 +173,28 @@ func pkcs7EnvelopeToPEM(envelope []byte) (string, error) {
 
 	derBytes, err := base64.StdEncoding.DecodeString(stripped)
 	if err != nil {
-		return "", fmt.Errorf("decoding base64 PKCS7 envelope: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "decoding base64 PKCS7 envelope")
 	}
 
 	p7, err := pkcs7.Parse(derBytes)
 	if err != nil {
-		return "", fmt.Errorf("parsing PKCS7 envelope: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "parsing PKCS7 envelope")
 	}
 	// Per RFC 7030 §4.2.3, the EST /simpleenroll SimplePKIResponse carries the single
 	// issued certificate. Reject anything else so callers don't have to guess which cert
 	// is the leaf.
 	if len(p7.Certificates) != 1 {
-		return "", fmt.Errorf("expected exactly 1 certificate in EST PKCS7 envelope, got %d", len(p7.Certificates))
+		return "", ctxerr.Errorf(ctx, "expected exactly 1 certificate in EST PKCS7 envelope, got %d", len(p7.Certificates))
 	}
 
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: p7.Certificates[0].Raw})
 	if pemBytes == nil {
-		return "", errors.New("encoding certificate to PEM")
+		return "", ctxerr.New(ctx, "encoding certificate to PEM")
 	}
 	return string(pemBytes), nil
 }
+
+// <<< OPENFRAME(request-certificate-pem-output)
 
 func (svc *Service) introspectIDPToken(ctx context.Context, idpClientID, idpToken, idpOauthURL string) (*oauthIntrospectionResponse, error) {
 	httpClient := fleethttp.NewClient(fleethttp.WithTimeout(20 * time.Second))
@@ -244,7 +252,7 @@ func (svc *Service) extractCSRUserInfo(ctx context.Context, req *x509.Certificat
 	}
 	csrEmail := req.EmailAddresses[0]
 
-	upn, err := extractCSRUPN(req)
+	upn, err := extractCSRUPN(ctx, req)
 	if err != nil {
 		return "", "", ctxerr.Wrap(ctx, err, "failed to extract UPN from CSR")
 	}
@@ -257,14 +265,14 @@ func (svc *Service) extractCSRUserInfo(ctx context.Context, req *x509.Certificat
 
 // The go standard library does not provide a way to extract the UPN from a CSR, so we must do it
 // manually by first finding the SAN extension then looking in othernames for the UPN and parsing it.
-func extractCSRUPN(csr *x509.CertificateRequest) (*string, error) {
+func extractCSRUPN(ctx context.Context, csr *x509.CertificateRequest) (*string, error) {
 	sanOID := asn1.ObjectIdentifier{2, 5, 29, 17}
 	upnOID := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 20, 2, 3}
 	for _, ext := range csr.Extensions {
 		if ext.Id.Equal(sanOID) {
 			nameValues := []asn1.RawValue{}
 			if _, err := asn1.Unmarshal(ext.Value, &nameValues); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal SAN extension: %w", err)
+				return nil, ctxerr.Wrap(ctx, err, "failed to unmarshal SAN extension")
 			}
 			for _, names := range nameValues {
 				// We are looking for the othernames(tag 0) in the SAN extension
@@ -277,21 +285,21 @@ func extractCSRUPN(csr *x509.CertificateRequest) (*string, error) {
 					for len(remainingBytes) > 0 {
 						remainingBytes, err = asn1.Unmarshal(names.Bytes, &oid)
 						if err != nil {
-							return nil, fmt.Errorf("failed to unmarshal othername OID: %w", err)
+							return nil, ctxerr.Wrap(ctx, err, "failed to unmarshal othername OID")
 						}
 						// I am not sure what this would indicate. Perhaps a malformed CSR?
 						if len(remainingBytes) == 0 {
-							return nil, fmt.Errorf("unexpected end of input bytes after unmarshalling othername OID %s but before unmarshaling value", oid.String())
+							return nil, ctxerr.Errorf(ctx, "unexpected end of input bytes after unmarshalling othername OID %s but before unmarshaling value", oid.String())
 						}
 						remainingBytes, err = asn1.Unmarshal(remainingBytes, &rawValue)
 						if err != nil {
-							return nil, fmt.Errorf("failed to unmarshal othername value: %w", err)
+							return nil, ctxerr.Wrap(ctx, err, "failed to unmarshal othername value")
 						}
 						if oid.Equal(upnOID) {
 							// Unmarshal the raw value into a string
 							var upn asn1.RawValue
 							if _, err := asn1.Unmarshal(rawValue.Bytes, &upn); err != nil {
-								return nil, fmt.Errorf("failed to unmarshal UPN value: %w", err)
+								return nil, ctxerr.Wrap(ctx, err, "failed to unmarshal UPN value")
 							}
 							upnString := string(upn.Bytes)
 							return &upnString, nil
