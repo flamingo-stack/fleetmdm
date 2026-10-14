@@ -85,7 +85,7 @@ module.exports = {
       // If we didn't receive a URL in the response from the cloud provisioner API, we'll throw an error before we save the new user record and the user will need to try to sign up again.
       throw new Error(
         `The response data from the cloud provisioner API was malformed. It did not contain a valid Fleet Sandbox instance URL in its expected "URL" property.
-        Here is the malformed response data (parsed response body) from the cloud provisioner API: ${cloudProvisionerResponseData}`
+        Here is the malformed response data (parsed response body) from the cloud provisioner API: ${JSON.stringify(cloudProvisionerResponseData)}`
       );
     }
 
@@ -114,4 +114,5 @@ module.exports = {
 
 
 };
+
 

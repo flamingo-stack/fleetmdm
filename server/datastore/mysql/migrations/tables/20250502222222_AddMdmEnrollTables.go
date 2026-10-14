@@ -189,8 +189,11 @@ FROM
 		refMatchByHostUUID[match.HostUUID] = match
 	}
 
-	// Log any conflicts we found. We don't want to fail the migration, but
-	// we do want to surface potential issues for investigation.
+	// Log any conflicts we found via the migration logger. We don't fail the
+	// migration outright, but we do surface these as warnings so they are
+	// captured in structured logs (rather than stdout) for investigation,
+	// since silently ignoring conflicting duplicate accounts could result in
+	// devices being mis-enrolled to the wrong IDP account.
 	msg := ""
 	if len(ignored) > 0 {
 		msg += fmt.Sprintf("ignoring %d host email records because no matching account or conflicting acount information\n", len(ignored))
@@ -205,9 +208,7 @@ FROM
 		}
 	}
 	if msg != "" {
-		// // TODO: return or log error?
-		// return errors.New(msg)
-		fmt.Println(msg)
+		logger.Warn.Log("msg", "conflicts encountered while migrating legacy MDM enroll/host email data to host_mdm_idp_accounts", "details", msg)
 	}
 
 	// Finally, we populate the new host_mdm_idp_accounts table with the deduped results.

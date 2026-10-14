@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,7 +101,15 @@ func runLastMinorReleases(releaseVersions []string, n int) []string {
 		}
 		lastMinorPart := strings.Split(lastMinor, ".")[1]
 		minor := strings.Split(version, ".")[1]
-		if minor < lastMinorPart {
+		lastMinorPartNum, err := strconv.Atoi(lastMinorPart)
+		if err != nil {
+			log.Fatal(err)
+		}
+		minorNum, err := strconv.Atoi(minor)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if minorNum < lastMinorPartNum {
 			outputReleases = append(outputReleases, version)
 			lastMinor = version
 		}

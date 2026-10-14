@@ -159,7 +159,7 @@ func insertScheduledQueryDB(ctx context.Context, q sqlx.ExtContext, sq *fleet.Sc
 	}
 
 	if len(metadata) != 1 {
-		return nil, ctxerr.Wrap(ctx, err, "wrong number of results returned from database")
+		return nil, ctxerr.New(ctx, fmt.Sprintf("wrong number of results returned from database: %d", len(metadata)))
 	}
 
 	sq.Query = metadata[0].Query
