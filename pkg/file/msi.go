@@ -124,6 +124,17 @@ const (
 	msiUnknown         msiType = 0
 )
 
+// msiStringPoolIndex validates that idx (a 1-based string-pool reference read
+// from an untrusted .msi table) is within bounds of strings, and returns the
+// referenced string. This guards against malformed/truncated tables causing
+// an out-of-range panic.
+func msiStringPoolIndex(strings []string, idx uint16) (string, error) {
+	if idx == 0 || int(idx) > len(strings) {
+		return "", fmt.Errorf("string pool index %d out of range (pool size %d)", idx, len(strings))
+	}
+	return strings[idx-1], nil
+}
+
 func decodePropertyTable(propReader io.Reader, table *msiTable, strings []string) (map[string]string, error) {
 	// The Property table is a table of key-value pairs. Ensure the table has the
 	// expected format, otherwise we cannot extract the information.
@@ -157,7 +168,15 @@ func decodePropertyTable(propReader io.Reader, table *msiTable, strings []string
 
 	kv := make(map[string]string, rowCount)
 	for i := 0; i < rowCount; i++ {
-		kv[strings[cols[0][i]-1]] = strings[cols[1][i]-1]
+		key, err := msiStringPoolIndex(strings, cols[0][i])
+		if err != nil {
+			return nil, fmt.Errorf("decoding Property table key at row %d: %w", i, err)
+		}
+		val, err := msiStringPoolIndex(strings, cols[1][i])
+		if err != nil {
+			return nil, fmt.Errorf("decoding Property table value at row %d: %w", i, err)
+		}
+		kv[key] = val
 	}
 	return kv, nil
 }
@@ -203,12 +222,19 @@ func decodePropertyTableColumns(colReader io.Reader, strings []string) (*msiTabl
 	for i := 0; i < rowCount; i++ {
 		tblID, colNum, colNameID, colAttr := cols[0][i], cols[1][i], cols[2][i], cols[3][i]
 
-		tableName := strings[tblID-1]
+		tableName, err := msiStringPoolIndex(strings, tblID)
+		if err != nil {
+			return nil, fmt.Errorf("decoding columns table name at row %d: %w", i, err)
+		}
 		if tableName == "Property" {
+			colName, err := msiStringPoolIndex(strings, colNameID)
+			if err != nil {
+				return nil, fmt.Errorf("decoding columns table column name at row %d: %w", i, err)
+			}
 			tbl.Name = tableName
 			tbl.Cols = append(tbl.Cols, msiColumn{
 				Number:     int(colNum),
-				Name:       strings[colNameID-1],
+				Name:       colName,
 				Attributes: colAttr,
 			})
 		}

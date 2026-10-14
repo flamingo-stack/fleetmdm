@@ -115,8 +115,13 @@ func parseOpenframeTeamID(raw string) (uint, bool) {
 
 // OpenframeTenantUUID returns the Flamingo tenant UUID this process is pinned to
 // (FLEET_OPENFRAME_TENANT_UUID), if set. This is the platform's stable, UUID-format tenant
-// identity; it is resolved to Fleet's integer team_id at startup via EnsureOpenframeTeamID (the
-// teams.openframe_tenant_uuid bridge).
+// identity. NOTE: as of this writing, resolving this UUID to Fleet's integer team_id
+// (server/datastore/mysql.Datastore.EnsureOpenframeTeamID, the teams.openframe_tenant_uuid
+// bridge) is NOT wired into cmd/fleet/serve.go — the method has no callers. Until that startup
+// call is added and SetOpenframeTeamID is invoked with its result, setting only
+// FLEET_OPENFRAME_TENANT_UUID does NOT pin this process; OpenframeTeamID falls through to the
+// FLEET_OPENFRAME_TEAM_ID env fallback instead. Deployments that need a pinned process today
+// must set FLEET_OPENFRAME_TEAM_ID directly.
 func OpenframeTenantUUID() (string, bool) {
 	u := strings.TrimSpace(os.Getenv("FLEET_OPENFRAME_TENANT_UUID"))
 	if u == "" {
@@ -127,11 +132,14 @@ func OpenframeTenantUUID() (string, bool) {
 
 // openframePinnedTeamID holds the team id resolved from the tenant UUID at startup
 // (0 = not resolved). It takes precedence over the FLEET_OPENFRAME_TEAM_ID env fallback.
-// It is only ever set from the flag-gated startup path in cmd/fleet/serve.go (and tests).
+// It is only ever set from the flag-gated startup path in cmd/fleet/serve.go (and tests) —
+// see the caveat on OpenframeTenantUUID: that startup wiring does not currently exist, so in
+// practice this stays zero and the env fallback (FLEET_OPENFRAME_TEAM_ID) governs.
 var openframePinnedTeamID atomic.Uint64
 
-// SetOpenframeTeamID pins this process to the given Fleet team id. Called once at startup after the
-// tenant UUID is resolved to its team (EnsureOpenframeTeamID). A zero id is ignored.
+// SetOpenframeTeamID pins this process to the given Fleet team id. Intended to be called once at
+// startup after the tenant UUID is resolved to its team (EnsureOpenframeTeamID) — see the caveat
+// above: that startup call is not currently wired into cmd/fleet/serve.go. A zero id is ignored.
 func SetOpenframeTeamID(teamID uint) {
 	if teamID != 0 {
 		openframePinnedTeamID.Store(uint64(teamID))
@@ -141,9 +149,11 @@ func SetOpenframeTeamID(teamID uint) {
 // OpenframeTeamID returns the tenant team this request/process is pinned to under OpenFrame
 // shared-database multitenancy, in precedence order: the context value if present
 // (per-request pin — shared mode middleware, or tests); else the team resolved from
-// FLEET_OPENFRAME_TENANT_UUID at startup (SetOpenframeTeamID); else the FLEET_OPENFRAME_TEAM_ID
-// env fallback (inert unless FLEET_OPENFRAME_MULTI_TENANCY_ENABLED is on). ok is false when none
-// yields a valid (non-zero) team, in which case callers must not assume a tenant scope.
+// FLEET_OPENFRAME_TENANT_UUID at startup (SetOpenframeTeamID — see the caveat on
+// OpenframeTenantUUID: this path is not currently wired up, so this is normally unset); else the
+// FLEET_OPENFRAME_TEAM_ID env fallback (inert unless FLEET_OPENFRAME_MULTI_TENANCY_ENABLED is
+// on). ok is false when none yields a valid (non-zero) team, in which case callers must not
+// assume a tenant scope.
 func OpenframeTeamID(ctx context.Context) (uint, bool) {
 	if ctx != nil {
 		if v, ok := ctx.Value(openframeTeamIDCtxKey{}).(uint); ok && v != 0 {
@@ -161,9 +171,12 @@ func OpenframeTeamID(ctx context.Context) (uint, bool) {
 // (FLEET_OPENFRAME_TENANT_UUID or FLEET_OPENFRAME_TEAM_ID set — one Fleet per tenant) and an
 // unpinned process (shared mode — every request is pinned individually, fail closed) are valid.
 // A set-but-malformed pin is rejected — an unparsable FLEET_OPENFRAME_TEAM_ID (silently ignoring
-// it would boot the wrong mode), or a non-UUID FLEET_OPENFRAME_TENANT_UUID (which would otherwise
-// reach EnsureOpenframeTeamID and create a garbage `openframe-<junk>` team + seed a secret; the
-// shared-mode X-Tenant-Id path already rejects non-UUIDs, so this keeps pinned mode symmetric).
+// it would boot the wrong mode), or a non-UUID FLEET_OPENFRAME_TENANT_UUID (which, once the
+// EnsureOpenframeTeamID startup resolution described on OpenframeTenantUUID is wired up, would
+// otherwise create a garbage `openframe-<junk>` team + seed a secret; the shared-mode
+// X-Tenant-Id path already rejects non-UUIDs, so this keeps pinned mode symmetric). NOTE: today
+// FLEET_OPENFRAME_TENANT_UUID is validated here for shape only — see OpenframeTenantUUID for why
+// it does not yet actually pin the process to a team.
 func ValidateOpenframeMultitenancy() error {
 	return openframeMultitenancyConfigError(
 		IsOpenframeMultitenancy(),

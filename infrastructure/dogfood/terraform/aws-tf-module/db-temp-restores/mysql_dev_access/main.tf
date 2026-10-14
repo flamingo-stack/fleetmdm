@@ -78,7 +78,7 @@ locals {
 # Strategy:
 # - Create per-host accounts explicitly (no reliance on implicit GRANT account creation)
 # - Ensure password is set (ALTER USER after CREATE IF NOT EXISTS)
-# - Grant ALL on <db>.*
+# - Grant scoped DML privileges on <db>.* (no superuser role, no ALL PRIVILEGES)
 # - One FLUSH PRIVILEGES at end
 locals {
   sql = <<-SQL
@@ -89,8 +89,7 @@ locals {
       %{~for host in local.vpn_host_patterns~}
     CREATE USER IF NOT EXISTS '${dev}'@'${host}' IDENTIFIED BY '${local.dev_pw_escaped[dev]}';
     ALTER USER '${dev}'@'${host}' IDENTIFIED BY '${local.dev_pw_escaped[dev]}';
-    GRANT rds_superuser_role TO '${dev}'@'${host}';
-    GRANT ALL PRIVILEGES ON `${var.database_name}`.* TO '${dev}'@'${host}';
+    GRANT SELECT, INSERT, UPDATE, DELETE ON `${var.database_name}`.* TO '${dev}'@'${host}';
       %{~endfor~}
     %{~endfor~}
 
@@ -137,4 +136,5 @@ output "developer_passwords" {
   value       = { for u in var.developers : u => random_password.dev_pw[u].result }
   sensitive   = true
 }
+
 

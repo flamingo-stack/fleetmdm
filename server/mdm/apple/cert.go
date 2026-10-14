@@ -99,10 +99,10 @@ type FleetWebsiteError struct {
 
 func (e FleetWebsiteError) Error() string {
 	if e.message != "" {
-		return e.message
+		return fmt.Sprintf("status %d: %s", e.Status, e.message)
 	}
 
-	return "Unknown Error"
+	return fmt.Sprintf("status %d: unknown error", e.Status)
 }
 
 type getSignedAPNSCSRRequest struct {

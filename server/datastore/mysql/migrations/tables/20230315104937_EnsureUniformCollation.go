@@ -65,6 +65,7 @@ func fixupSoftware(tx *sql.Tx, collation string) error {
 	}
 
 	for _, ids := range idGroups {
+		keptID := ids[0]
 		for i := 1; i < len(ids); i++ {
 			if _, err := tx.Exec("DELETE FROM software_cve WHERE software_id = ?", ids[i]); err != nil {
 				return fmt.Errorf("deleting duplicated software with id %d from software_cve: %w", ids[i], err)
@@ -72,8 +73,20 @@ func fixupSoftware(tx *sql.Tx, collation string) error {
 			if _, err := tx.Exec("DELETE FROM software_host_counts WHERE software_id = ?", ids[i]); err != nil {
 				return fmt.Errorf("deleting duplicate software with id %d from software_host_counts: %w", ids[i], err)
 			}
-			if _, err := tx.Exec("DELETE FROM host_software WHERE software_id = ?", ids[i]); err != nil {
-				return fmt.Errorf("deleting duplicate software with id %d from host_software: %w", ids[i], err)
+			// re-point host_software rows referencing the duplicate id to the
+			// surviving (kept) id instead of deleting them, to avoid losing
+			// host/software associations. Any rows that would violate the
+			// (host_id, software_id) uniqueness constraint after the update
+			// are removed, since the host is already associated with the
+			// kept id.
+			if _, err := tx.Exec(
+				"DELETE hs_dup FROM host_software hs_dup INNER JOIN host_software hs_kept ON hs_dup.host_id = hs_kept.host_id AND hs_kept.software_id = ? WHERE hs_dup.software_id = ?",
+				keptID, ids[i],
+			); err != nil {
+				return fmt.Errorf("removing duplicate host_software rows for id %d: %w", ids[i], err)
+			}
+			if _, err := tx.Exec("UPDATE host_software SET software_id = ? WHERE software_id = ?", keptID, ids[i]); err != nil {
+				return fmt.Errorf("re-pointing duplicate software with id %d to %d in host_software: %w", ids[i], keptID, err)
 			}
 			if _, err := tx.Exec("DELETE FROM software WHERE id = ?", ids[i]); err != nil {
 				return fmt.Errorf("deleting duplicate software with id %d: %w", ids[i], err)

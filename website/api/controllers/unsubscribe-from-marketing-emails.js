@@ -45,29 +45,33 @@ module.exports = {
 
     // Update the contact record in salesforce for this email address to indicate that they have opted out of marketing emails.
     if(sails.config.environment === 'production'){
-      require('assert')(sails.config.custom.salesforceIntegrationUsername);
-      require('assert')(sails.config.custom.salesforceIntegrationPasskey);
+      try {
+        require('assert')(sails.config.custom.salesforceIntegrationUsername);
+        require('assert')(sails.config.custom.salesforceIntegrationPasskey);
 
-      // Log in to Salesforce.
-      let jsforce = require('jsforce');
-      let salesforceConnection = new jsforce.Connection({
-        loginUrl : 'https://fleetdm.my.salesforce.com'
-      });
-      await salesforceConnection.login(sails.config.custom.salesforceIntegrationUsername, sails.config.custom.salesforceIntegrationPasskey);
-
-      let existingContactRecord = await salesforceConnection.sobject('Contact')
-      .findOne({
-        Email:  emailAddress,
-      });
-
-      if(existingContactRecord) {
-        //If we found an existing contact record in salesforce, update its status to be "Do not contact"
-        let salesforceContactId = existingContactRecord.Id;
-        await salesforceConnection.sobject('Contact')
-        .update({
-          Id: salesforceContactId,
-          Unsubscribed_from_email_contact__c: true,// eslint-disable-line camelcase
+        // Log in to Salesforce.
+        let jsforce = require('jsforce');
+        let salesforceConnection = new jsforce.Connection({
+          loginUrl : 'https://fleetdm.my.salesforce.com'
         });
+        await salesforceConnection.login(sails.config.custom.salesforceIntegrationUsername, sails.config.custom.salesforceIntegrationPasskey);
+
+        let existingContactRecord = await salesforceConnection.sobject('Contact')
+        .findOne({
+          Email:  emailAddress,
+        });
+
+        if(existingContactRecord) {
+          //If we found an existing contact record in salesforce, update its status to be "Do not contact"
+          let salesforceContactId = existingContactRecord.Id;
+          await salesforceConnection.sobject('Contact')
+          .update({
+            Id: salesforceContactId,
+            Unsubscribed_from_email_contact__c: true,// eslint-disable-line camelcase
+          });
+        }
+      } catch (err) {
+        sails.log.warn(`When a user (${emailAddress}) unsubscribed from marketing emails, an error occured updating their contact record in the Salesforce API. Full error: ${require('util').inspect(err)}`);
       }
     }
     // Redirect the user to the homepage with a #unsubscribe hash link.

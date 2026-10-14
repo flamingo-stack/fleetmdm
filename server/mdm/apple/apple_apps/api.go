@@ -66,6 +66,11 @@ type metadataResp struct {
 
 const appleHostAndScheme = "https://api.ent.apple.com"
 
+// maxWaitForRetryAfter caps how long we will synchronously block waiting on
+// a server-supplied Retry-After value, guarding against an attacker or
+// misbehaving upstream returning an unbounded/huge value.
+const maxWaitForRetryAfter = 10 * time.Second
+
 // authenticator returns a bearer token for the VPP metadata service (proxied or direct), or an error if once can't be
 // retrieved. If forceRenew is true, bypasses the database bearer token cache if it would've otherwise been used.
 type authenticator func(forceRenew bool) (string, error)
@@ -205,7 +210,12 @@ func do(req *http.Request, getBearerToken authenticator, forceRenew bool, dest *
 				return fmt.Errorf("parsing retry-after header: %w", err)
 			}
 
-			ticker := time.NewTicker(time.Duration(seconds) * time.Second)
+			wait := time.Duration(seconds) * time.Second
+			if wait > maxWaitForRetryAfter || wait < 0 {
+				wait = maxWaitForRetryAfter
+			}
+
+			ticker := time.NewTicker(wait)
 			defer ticker.Stop()
 			<-ticker.C
 			return do(req, getBearerToken, false, dest)
