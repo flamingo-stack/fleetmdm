@@ -16,13 +16,6 @@
     labels: [":help-marketing"]
     repo: fleet
 - 
-  task: "Review CTRs of recently boosted posts"
-  startedOn: "2026-03-23"
-  frequency: "Weekly"
-  description: "Review CTR for recently boosted posts to understand performance and inform future content decisions. The CEO will attend the first few monthly sessions to help understand what ads are working. After that, the Content Specialist and the CMO will continue running the ritual."
-  moreInfoUrl: "https://fleetdm.com/handbook/marketing/socialmedia"
-  dri: "irenareedy"
-- 
   task: "Settle event strategy"
   startedOn: "2024-01-02"
   frequency: "Quarterly (first Tuesday)"

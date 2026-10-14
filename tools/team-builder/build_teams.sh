@@ -9,16 +9,16 @@ run(){
 	flags+="--disable-open-folder"
 
   #Read flags
-	while getopts s:p:u:f:d:o:x flag
+	while getopts s:p:u:f:a:d:o:x flag
 	 do
 		case "${flag}" in
-			f) #path to file containing team names. Must end with newline char.
+			s) #path to file containing team names. Must end with newline char.
 				source=($OPTARG);;
 			p) #types of installers to create. Pass an individual flag for each type
 				types+=($OPTARG);;
 			u) #Fleet server url
 				url=($OPTARG);;
-			f) #Additional flags to apply to `fleetctl package`
+			a) #Additional flags to apply to `fleetctl package`
 				flags+=($OPTARG);;
 			d) #include Fleet Desktop
 				flags+="--desktop";;
@@ -114,5 +114,6 @@ generate_packages(){
 }
 
 run "$@"
+
 
 

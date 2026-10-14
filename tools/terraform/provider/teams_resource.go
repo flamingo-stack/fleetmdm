@@ -234,6 +234,12 @@ func (r *teamsResource) Update(ctx context.Context, req resource.UpdateRequest, 
 					fmt.Sprintf("Failed to update agent options: %s", err)))
 				return
 			}
+		} else {
+			resp.Diagnostics.Append(diag.NewWarningDiagnostic(
+				"Empty agent options ignored",
+				"agent_options changed to an empty string, but this is not a valid "+
+					"value and the update was skipped. The previous agent options "+
+					"will be retained in state."))
 		}
 	}
 
@@ -245,6 +251,12 @@ func (r *teamsResource) Update(ctx context.Context, req resource.UpdateRequest, 
 				fmt.Sprintf("Failed to update team: %s", err)))
 			return
 		}
+	}
+
+	if upTeam == nil {
+		// Nothing was actually updated (e.g. only an empty agent_options was
+		// requested), so there's nothing further to refresh in state.
+		return
 	}
 
 	err = teamModelToTF(ctx, upTeam, &state)
