@@ -176,6 +176,87 @@ func checkVersionMatch(expectedVersion, foundVersion, foundBundledVersion string
 	return false
 }
 
+// appVersionMatcher is a strategy for determining whether a found app result
+// satisfies the version requirement for a specific bundle identifier. Each
+// matcher encapsulates one vendor-specific quirk so that new quirks can be
+// added, tested, and reasoned about independently of appExists' main loop.
+type appVersionMatcher func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool
+
+// appVersionMatchers maps bundle identifiers to their special-case version
+// matching strategy. Bundle identifiers not present here fall back to the
+// default checkVersionMatch behavior in appExists.
+var appVersionMatchers = map[string]appVersionMatcher{
+	// OneDrive auto-updates immediately after installation, so the installed version
+	// might be newer than the installer version. For OneDrive, we only verify that
+	// the app exists rather than checking the version.
+	"com.microsoft.OneDrive": func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool {
+		logger.InfoContext(ctx, "OneDrive detected - skipping version check due to auto-update behavior")
+		return true
+	},
+
+	// GPG Suite's installer version (e.g., "2023.3") doesn't match the app bundle version
+	// (e.g., "1.12" with bundled version "1800"). We only verify that the app exists
+	// rather than checking the version.
+	"org.gpgtools.gpgkeychain": func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool {
+		logger.InfoContext(ctx, "GPG Suite detected - skipping version check due to version mismatch between installer and app bundle")
+		return true
+	},
+
+	// Adobe DNG Converter's version format includes build number in parentheses
+	// (e.g., "18.0 (2389)") which doesn't match the installer version (e.g., "18.0")
+	// Check if the version starts with the expected version to handle this case
+	"com.adobe.DNGConverter": func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool {
+		if strings.HasPrefix(result.Version, appVersion+" ") || strings.HasPrefix(result.Version, appVersion+"(") {
+			logger.InfoContext(ctx, "Adobe DNG Converter detected - version matches with build number")
+			return true
+		}
+		return false
+	},
+
+	// Ableton Live's version format includes a build identifier in parentheses
+	// (e.g., "12.4.1 (2026-05-20_fbe5fe99c9)") which doesn't match the installer
+	// version (e.g., "12.4.1"). Check if the version starts with the expected
+	// version to handle this case.
+	"com.ableton.live": func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool {
+		if strings.HasPrefix(result.Version, appVersion+" ") || strings.HasPrefix(result.Version, appVersion+"(") {
+			logger.InfoContext(ctx, "Ableton Live detected - version matches with build identifier")
+			return true
+		}
+		return false
+	},
+
+	// WhatsApp: Homebrew sometimes reports a newer version than what's actually available.
+	// If version doesn't match but app is installed, fall back to existence-only validation.
+	"net.whatsapp.WhatsApp": func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool {
+		if !checkVersionMatch(appVersion, result.Version, result.BundledVersion) {
+			logger.InfoContext(ctx, "WhatsApp detected - version mismatch but app is installed, falling back to existence-only validation")
+			return true
+		}
+		return false
+	},
+
+	// Logi Tune: the installer URL always serves the latest release, while the Homebrew
+	// cask version lags behind (its livecheck scrapes a Logitech support article that is
+	// updated less often than the download). The installed version is therefore newer
+	// than the manifest version. If version doesn't match but app is installed, fall
+	// back to existence-only validation.
+	"com.logitech.logitune": func(ctx context.Context, logger *slog.Logger, appVersion string, result AppResult) bool {
+		if !checkVersionMatch(appVersion, result.Version, result.BundledVersion) {
+			logger.InfoContext(ctx, "Logi Tune detected - version mismatch but app is installed, falling back to existence-only validation")
+			return true
+		}
+		return false
+	},
+}
+
+// AppResult represents a single row returned by the osquery apps query in appExists.
+type AppResult struct {
+	Name           string `json:"name"`
+	Path           string `json:"path"`
+	Version        string `json:"bundle_short_version"`
+	BundledVersion string `json:"bundle_version"`
+}
+
 func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueAppIdentifier, appVersion, appPath string) (bool, error) {
 	execTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -211,18 +292,13 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueAppIdent
 		return false, fmt.Errorf("executing osquery command: %w", err)
 	}
 
-	type AppResult struct {
-		Name           string `json:"name"`
-		Path           string `json:"path"`
-		Version        string `json:"bundle_short_version"`
-		BundledVersion string `json:"bundle_version"`
-	}
 	var results []AppResult
 	if err := json.Unmarshal(output, &results); err != nil {
 		return false, fmt.Errorf("parsing osquery JSON output: %w", err)
 	}
 
 	if len(results) > 0 {
+		matcher := appVersionMatchers[uniqueAppIdentifier]
 		for _, result := range results {
 			software := &fleet.Software{
 				Name:             result.Name,
@@ -236,62 +312,8 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueAppIdent
 
 			logger.InfoContext(ctx, fmt.Sprintf("Found app: '%s' at %s, Version: %s, Bundled Version: %s", result.Name, result.Path, result.Version, result.BundledVersion))
 
-			// OneDrive auto-updates immediately after installation, so the installed version
-			// might be newer than the installer version. For OneDrive, we only verify that
-			// the app exists rather than checking the version.
-			if uniqueAppIdentifier == "com.microsoft.OneDrive" {
-				logger.InfoContext(ctx, "OneDrive detected - skipping version check due to auto-update behavior")
+			if matcher != nil && matcher(ctx, logger, appVersion, result) {
 				return true, nil
-			}
-
-			// GPG Suite's installer version (e.g., "2023.3") doesn't match the app bundle version
-			// (e.g., "1.12" with bundled version "1800"). We only verify that the app exists
-			// rather than checking the version.
-			if uniqueAppIdentifier == "org.gpgtools.gpgkeychain" {
-				logger.InfoContext(ctx, "GPG Suite detected - skipping version check due to version mismatch between installer and app bundle")
-				return true, nil
-			}
-
-			// Adobe DNG Converter's version format includes build number in parentheses
-			// (e.g., "18.0 (2389)") which doesn't match the installer version (e.g., "18.0")
-			// Check if the version starts with the expected version to handle this case
-			if uniqueAppIdentifier == "com.adobe.DNGConverter" {
-				if strings.HasPrefix(result.Version, appVersion+" ") || strings.HasPrefix(result.Version, appVersion+"(") {
-					logger.InfoContext(ctx, "Adobe DNG Converter detected - version matches with build number")
-					return true, nil
-				}
-			}
-
-			// Ableton Live's version format includes a build identifier in parentheses
-			// (e.g., "12.4.1 (2026-05-20_fbe5fe99c9)") which doesn't match the installer
-			// version (e.g., "12.4.1"). Check if the version starts with the expected
-			// version to handle this case.
-			if uniqueAppIdentifier == "com.ableton.live" {
-				if strings.HasPrefix(result.Version, appVersion+" ") || strings.HasPrefix(result.Version, appVersion+"(") {
-					logger.InfoContext(ctx, "Ableton Live detected - version matches with build identifier")
-					return true, nil
-				}
-			}
-
-			// WhatsApp: Homebrew sometimes reports a newer version than what's actually available.
-			// If version doesn't match but app is installed, fall back to existence-only validation.
-			if uniqueAppIdentifier == "net.whatsapp.WhatsApp" {
-				if !checkVersionMatch(appVersion, result.Version, result.BundledVersion) {
-					logger.InfoContext(ctx, "WhatsApp detected - version mismatch but app is installed, falling back to existence-only validation")
-					return true, nil
-				}
-			}
-
-			// Logi Tune: the installer URL always serves the latest release, while the Homebrew
-			// cask version lags behind (its livecheck scrapes a Logitech support article that is
-			// updated less often than the download). The installed version is therefore newer
-			// than the manifest version. If version doesn't match but app is installed, fall
-			// back to existence-only validation.
-			if uniqueAppIdentifier == "com.logitech.logitune" {
-				if !checkVersionMatch(appVersion, result.Version, result.BundledVersion) {
-					logger.InfoContext(ctx, "Logi Tune detected - version mismatch but app is installed, falling back to existence-only validation")
-					return true, nil
-				}
 			}
 
 			// Check various version matching strategies

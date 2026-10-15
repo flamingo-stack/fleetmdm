@@ -35,8 +35,8 @@ module.exports = {
     let authHeader = this.req.get('authorization');
     let fleetServerSecret;
 
-    if (authHeader && authHeader.startsWith('Bearer')) {
-      fleetServerSecret = authHeader.replace('Bearer', '').trim();
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      fleetServerSecret = authHeader.slice('Bearer '.length).trim();
     } else {
       throw 'missingAuthHeader';
     }

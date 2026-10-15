@@ -46,43 +46,66 @@ func dumpProf(rootDir string) error {
 	// We can't use ISO 8601/RFC 3339 because NTFS and FAT do not allow colons in filenames
 	timestamp := now.UTC().Format("2006-01-02T15-04-05")
 
-	out, err := os.Create(path.Join(rootDir, "profiles", fmt.Sprintf("profiles-%s.tar.gz", timestamp)))
+	outPath := path.Join(rootDir, "profiles", fmt.Sprintf("profiles-%s.tar.gz", timestamp))
+	out, err := os.Create(outPath)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
 	gw := gzip.NewWriter(out)
-	defer gw.Close()
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
 
 	buf := new(bytes.Buffer)
 
-	for _, profile := range pprof.Profiles() {
-		err = profile.WriteTo(buf, 0)
-		if err != nil {
-			return err
-		}
+	writeErr := func() error {
+		for _, profile := range pprof.Profiles() {
+			if err := profile.WriteTo(buf, 0); err != nil {
+				return err
+			}
 
-		header := tar.Header{
-			Typeflag:   tar.TypeReg,
-			Name:       fmt.Sprintf("%s.pprof", profile.Name()),
-			Size:       int64(buf.Len()),
-			Mode:       0o664,
-			ModTime:    now,
-			AccessTime: now,
-			ChangeTime: now,
+			header := tar.Header{
+				Typeflag:   tar.TypeReg,
+				Name:       fmt.Sprintf("%s.pprof", profile.Name()),
+				Size:       int64(buf.Len()),
+				Mode:       0o664,
+				ModTime:    now,
+				AccessTime: now,
+				ChangeTime: now,
+			}
+			if err := tw.WriteHeader(&header); err != nil {
+				return err
+			}
+			if _, err := buf.WriteTo(tw); err != nil {
+				return err
+			}
+			buf.Reset()
 		}
-		err = tw.WriteHeader(&header)
-		if err != nil {
-			return err
-		}
-		_, err = buf.WriteTo(tw)
-		if err != nil {
-			return err
-		}
-		buf.Reset()
+		return nil
+	}()
+
+	if writeErr != nil {
+		tw.Close()
+		gw.Close()
+		out.Close()
+		os.Remove(outPath)
+		return writeErr
+	}
+
+	if err := tw.Close(); err != nil {
+		gw.Close()
+		out.Close()
+		os.Remove(outPath)
+		return err
+	}
+	if err := gw.Close(); err != nil {
+		out.Close()
+		os.Remove(outPath)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(outPath)
+		return err
 	}
 	return nil
 }

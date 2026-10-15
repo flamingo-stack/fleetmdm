@@ -154,8 +154,8 @@ describe("Custom variables", () => {
     );
     const deleteVariableHandler = http.delete(
       baseUrl("/custom_variables/:id"),
-      async ({ request }) => {
-        const id = request.url.split("/").pop();
+      async ({ params }) => {
+        const id = params.id as string;
         if (!id) {
           throw new Error("Variable ID not found in request URL");
         }

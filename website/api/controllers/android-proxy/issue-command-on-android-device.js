@@ -26,12 +26,13 @@ module.exports = {
       isIn: ['issueCommand'],
     },
     // AMAPI Command fields. Inputs are declared explicitly (rather than forwarding req.body) so the
-    // proxy's accepted surface is visible. `type` is not constrained via isIn so the Fleet server can
-    // issue any AMAPI command type without a proxy change. Adding entirely new Command FIELDS (e.g. a
-    // future *Params sibling Google adds to AMAPI) does still require updating this list.
+    // proxy's accepted surface is visible. `type` is restricted via isIn to the documented set of AMAPI
+    // command types that Fleet's product surface issues. Adding a new AMAPI command type (or a new
+    // Command FIELD, e.g. a future *Params sibling Google adds to AMAPI) requires updating this list.
     type: {
       type: 'string',
       required: true,
+      isIn: ['LOCK', 'RESET_PASSWORD', 'REBOOT', 'RELINQUISH_OWNERSHIP', 'CLEAR_APP_DATA', 'START_LOST_MODE', 'STOP_LOST_MODE', 'ADD_ESIM', 'REMOVE_ESIM', 'REQUEST_DEVICE_INFO', 'WIPE'],
       description: 'The AMAPI command type (e.g. LOCK, RESET_PASSWORD, REBOOT, RELINQUISH_OWNERSHIP, CLEAR_APP_DATA, START_LOST_MODE, STOP_LOST_MODE, ADD_ESIM, REMOVE_ESIM, REQUEST_DEVICE_INFO, WIPE).',
     },
     duration: {
@@ -199,3 +200,4 @@ module.exports = {
 
 
 };
+
