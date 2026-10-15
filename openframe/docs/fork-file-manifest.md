@@ -83,7 +83,7 @@ server/datastore/mysql/migrations/openframe/        # separate goose client
 server/datastore/redis/keyprefix.go                 # per-tenant Redis prefix
 server/fleet/openframe.go                           # IsOpenframeMode() gate
 orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-file tests
-orbit/pkg/osquery/openframe_command.go              # osqueryd command with --openframe-secret masked, for logging
+orbit/pkg/osquery/openframe_command.go              # osqueryd command without --openframe-secret, for logging
 orbit/pkg/osquery/openframe_command_test.go
 ```
 

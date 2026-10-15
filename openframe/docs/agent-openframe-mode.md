@@ -169,7 +169,7 @@ orbit's log: orbit's stderr is copied into the OpenFrame client log and shipped 
 Loki. Upstream's `start osqueryd` line logs the osqueryd command through
 `Runner.loggableCommand()` in
 [`orbit/pkg/osquery/openframe_command.go`](../../orbit/pkg/osquery/openframe_command.go),
-which masks the secret's value as `***`.
+which leaves `--openframe-secret` and its value out of the logged command.
 
 ## `orbit uuid` subcommand
 
@@ -209,8 +209,8 @@ host API (see [api-expose-osquery-host-id.md](api-expose-osquery-host-id.md)).
 | File | Purpose |
 |------|---------|
 | `orbit/cmd/orbit/orbit.go` | OpenFrame CLI flags, custom osqueryd path, token-refresher startup + subsystem, `orbit uuid` command, osquery flag forwarding |
-| `orbit/pkg/osquery/osquery.go` | `start osqueryd` log line uses the masked command |
-| `orbit/pkg/osquery/openframe_command.go` | `Runner.loggableCommand()`: osqueryd command with `--openframe-secret` masked (+ `openframe_command_test.go`) |
+| `orbit/pkg/osquery/osquery.go` | `start osqueryd` log line uses the command without the secret |
+| `orbit/pkg/osquery/openframe_command.go` | `Runner.loggableCommand()`: osqueryd command without `--openframe-secret` and its value (+ `openframe_command_test.go`) |
 | `server/service/orbit_client.go` | `openFrameMode` / `authManager` fields, `/tools/agent/fleetmdm-server` URL prefix, bearer-header injection |
 | `server/service/openframe/openframe-encryption-service.go` | AES-GCM decryption |
 | `server/service/openframe/openframe-token-extractor.go` | Read + decrypt token file |

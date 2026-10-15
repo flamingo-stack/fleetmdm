@@ -157,7 +157,7 @@ func WithLogPath(path string) Option {
 // process may not be restarted after exit. Instead create a new one with
 // NewRunner.
 func (r *Runner) Execute() error {
-	// >>> OPENFRAME(agent-openframe-mode): mask the --openframe-secret value in the logged command — openframe/docs/agent-openframe-mode.md
+	// >>> OPENFRAME(agent-openframe-mode): leave --openframe-secret and its value out of the logged command — openframe/docs/agent-openframe-mode.md
 	log.Info().Str("cmd", r.loggableCommand()).Msg("start osqueryd")
 	// <<< OPENFRAME(agent-openframe-mode)
 

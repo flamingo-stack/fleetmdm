@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRedactOpenframeSecret(t *testing.T) {
+func TestOmitOpenframeSecret(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -18,17 +18,17 @@ func TestRedactOpenframeSecret(t *testing.T) {
 		{
 			name: "separate value",
 			args: []string{"osqueryd", "--openframe-mode", "true", "--openframe-secret", "k3y", "--openframe-token-path", "/p"},
-			want: "/bin/osqueryd --openframe-mode true --openframe-secret *** --openframe-token-path /p",
+			want: "/bin/osqueryd --openframe-mode true --openframe-token-path /p",
 		},
 		{
 			name: "equals value",
 			args: []string{"osqueryd", "--openframe-secret=k3y", "--verbose"},
-			want: "/bin/osqueryd --openframe-secret=*** --verbose",
+			want: "/bin/osqueryd --verbose",
 		},
 		{
 			name: "flag without value",
-			args: []string{"osqueryd", "--openframe-secret"},
-			want: "/bin/osqueryd --openframe-secret",
+			args: []string{"osqueryd", "--verbose", "--openframe-secret"},
+			want: "/bin/osqueryd --verbose",
 		},
 		{
 			name: "no secret",
@@ -38,12 +38,12 @@ func TestRedactOpenframeSecret(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, redactOpenframeSecret("/bin/osqueryd", tt.args))
+			assert.Equal(t, tt.want, omitOpenframeSecret("/bin/osqueryd", tt.args))
 		})
 	}
 }
 
-func TestLoggableCommandMasksSecretAndKeepsArgs(t *testing.T) {
+func TestLoggableCommandOmitsSecretAndKeepsArgs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "osqueryd")
 	require.NoError(t, os.WriteFile(path, nil, 0o600))
 
@@ -51,6 +51,7 @@ func TestLoggableCommandMasksSecretAndKeepsArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotContains(t, r.loggableCommand(), "k3y")
-	assert.Contains(t, r.loggableCommand(), "--openframe-secret ***")
+	assert.NotContains(t, r.loggableCommand(), "--openframe-secret")
+	assert.Contains(t, r.loggableCommand(), "--openframe-mode true")
 	assert.Equal(t, []string{"--openframe-mode", "true", "--openframe-secret", "k3y"}, r.cmd.Args[len(r.cmd.Args)-4:])
 }

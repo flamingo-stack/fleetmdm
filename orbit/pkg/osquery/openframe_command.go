@@ -2,27 +2,21 @@ package osquery
 
 import "strings"
 
-const (
-	openframeSecretFlag     = "--openframe-secret"
-	openframeSecretRedacted = "***"
-)
+const openframeSecretFlag = "--openframe-secret"
 
 func (r *Runner) loggableCommand() string {
-	return redactOpenframeSecret(r.cmd.Path, r.cmd.Args)
+	return omitOpenframeSecret(r.cmd.Path, r.cmd.Args)
 }
 
-func redactOpenframeSecret(path string, args []string) string {
+func omitOpenframeSecret(path string, args []string) string {
 	parts := []string{path}
-	if len(args) > 1 {
-		parts = append(parts, args[1:]...)
-	}
-	for i := 1; i < len(parts); i++ {
+	for i := 1; i < len(args); i++ {
 		switch {
-		case parts[i] == openframeSecretFlag && i+1 < len(parts):
-			parts[i+1] = openframeSecretRedacted
+		case args[i] == openframeSecretFlag:
 			i++
-		case strings.HasPrefix(parts[i], openframeSecretFlag+"="):
-			parts[i] = openframeSecretFlag + "=" + openframeSecretRedacted
+		case strings.HasPrefix(args[i], openframeSecretFlag+"="):
+		default:
+			parts = append(parts, args[i])
 		}
 	}
 	return strings.Join(parts, " ")
