@@ -45,7 +45,15 @@ quit_application() {
 
 # extract contents
 MOUNT_POINT=$(mktemp -d /tmp/dmg_mount_XXXXXX)
-hdiutil attach -plist -nobrowse -readonly -mountpoint "$MOUNT_POINT" "$INSTALLER_PATH"
+if ! hdiutil attach -plist -nobrowse -readonly -mountpoint "$MOUNT_POINT" "$INSTALLER_PATH"; then
+	echo "Error: failed to mount $INSTALLER_PATH"
+	exit 1
+fi
+if [ -z "$(ls -A "$MOUNT_POINT" 2>/dev/null)" ]; then
+	echo "Error: mount point $MOUNT_POINT is empty after mounting $INSTALLER_PATH"
+	hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1
+	exit 1
+fi
 sudo cp -R "$MOUNT_POINT"/* "$TMPDIR"
 hdiutil detach "$MOUNT_POINT"
 
