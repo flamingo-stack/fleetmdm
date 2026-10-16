@@ -12,6 +12,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/assets"
 	scepdepot "github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
@@ -94,12 +95,12 @@ func challengeMiddleware(ds fleet.Datastore, next scepserver.CSRSignerContext) s
 		// Always require a valid challenge password
 
 		if m.ChallengePassword == "" {
-			return nil, errors.New("missing challenge")
+			return nil, ctxerr.New(ctx, "missing challenge")
 		}
 		_, err := ds.VerifyEnrollSecret(ctx, m.ChallengePassword)
 		switch {
 		case fleet.IsNotFound(err):
-			return nil, errors.New("invalid challenge")
+			return nil, ctxerr.New(ctx, "invalid challenge")
 		case err != nil:
 			return nil, fmt.Errorf("verifying enrollment secret: %w", err)
 		}
@@ -192,18 +193,24 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 			return nil, &RateLimitError{Message: err.Error()}
 		}
 
-		certRep, err := msg.Fail(cert.Leaf, pk, scep.BadRequest)
-		if certRep == nil {
-			return nil, err
+		certRep, failErr := msg.Fail(cert.Leaf, pk, scep.BadRequest)
+		if failErr != nil {
+			return nil, failErr
 		}
-		return certRep.Raw, err
+		if certRep == nil {
+			return nil, failErr
+		}
+		return certRep.Raw, nil
 	}
 
 	certRep, err := msg.Success(cert.Leaf, pk, crt)
+	if err != nil {
+		return nil, err
+	}
 	if certRep == nil {
 		return nil, err
 	}
-	return certRep.Raw, err
+	return certRep.Raw, nil
 }
 
 // GetNextCACert is not implemented for conditional access SCEP.

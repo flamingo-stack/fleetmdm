@@ -33,7 +33,7 @@ var subjectAlternativeNameAllowedKeys = map[string]struct{}{
 	"URI":   {},
 }
 
-func validateCertificateTemplateFleetVariables(subjectName string) error {
+func validateCertificateTemplateFleetVariables(ctx context.Context, subjectName string) error {
 	fleetVars := variables.Find(subjectName)
 	if len(fleetVars) == 0 {
 		return nil
@@ -41,7 +41,7 @@ func validateCertificateTemplateFleetVariables(subjectName string) error {
 
 	for _, fleetVar := range fleetVars {
 		if !slices.Contains(fleetVarsSupportedInCertificateTemplates, fleet.FleetVarName(fleetVar)) {
-			return fmt.Errorf("Fleet variable $FLEET_VAR_%s is not supported in certificate templates", fleetVar)
+			return ctxerr.Errorf(ctx, "Fleet variable $FLEET_VAR_%s is not supported in certificate templates", fleetVar)
 		}
 	}
 
@@ -193,3 +193,4 @@ func (svc *Service) expandCertVar(
 	certificate.FleetChallenge = nil
 	return "", false, nil
 }
+

@@ -106,7 +106,7 @@ func (svc *Service) RunHostScript(ctx context.Context, request *fleet.HostScript
 
 	if cfg.ServerSettings.ScriptsDisabled {
 		svc.authz.SkipAuthorization(ctx)
-		return nil, fleet.NewUserMessageError(errors.New(fleet.RunScriptScriptsDisabledGloballyErrMsg), http.StatusForbidden)
+		return nil, fleet.NewUserMessageError(ctxerr.New(ctx, fleet.RunScriptScriptsDisabledGloballyErrMsg), http.StatusForbidden)
 	}
 
 	// Must check for presence of mutually exclusive parameters before
@@ -163,14 +163,14 @@ func (svc *Service) RunHostScript(ctx context.Context, request *fleet.HostScript
 		// fleetd is required to run scripts so if the host is enrolled via plain osquery we return
 		// an error
 		svc.authz.SkipAuthorization(ctx)
-		return nil, fleet.NewUserMessageError(errors.New(fleet.RunScriptDisabledErrMsg), http.StatusUnprocessableEntity)
+		return nil, fleet.NewUserMessageError(ctxerr.New(ctx, fleet.RunScriptDisabledErrMsg), http.StatusUnprocessableEntity)
 	}
 
 	// If scripts are disabled (according to the last detail query), we return an error.
 	// host.ScriptsEnabled may be nil for older orbit versions.
 	if host.ScriptsEnabled != nil && !*host.ScriptsEnabled {
 		svc.authz.SkipAuthorization(ctx)
-		return nil, fleet.NewUserMessageError(errors.New(fleet.RunScriptsOrbitDisabledErrMsg), http.StatusUnprocessableEntity)
+		return nil, fleet.NewUserMessageError(ctxerr.New(ctx, fleet.RunScriptsOrbitDisabledErrMsg), http.StatusUnprocessableEntity)
 	}
 
 	maxPending := maxPendingScripts
@@ -1099,7 +1099,7 @@ func (svc *Service) BatchScriptExecute(ctx context.Context, scriptID uint, hostI
 
 	if cfg.ServerSettings.ScriptsDisabled {
 		svc.authz.SkipAuthorization(ctx)
-		return "", fleet.NewUserMessageError(errors.New(fleet.RunScriptScriptsDisabledGloballyErrMsg), http.StatusForbidden)
+		return "", fleet.NewUserMessageError(ctxerr.New(ctx, fleet.RunScriptScriptsDisabledGloballyErrMsg), http.StatusForbidden)
 	}
 
 	// Use the authorize script by ID to handle authz

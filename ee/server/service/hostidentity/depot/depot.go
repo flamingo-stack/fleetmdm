@@ -5,8 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
-	"fmt"
 	"log/slog"
 	"math/big"
 	"time"
@@ -50,14 +48,15 @@ func NewHostIdentitySCEPDepot(db *sqlx.DB, ds fleet.Datastore, logger *slog.Logg
 
 // CA returns the CA's certificate and private key.
 func (d *HostIdentitySCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
-	cert, err := assets.KeyPair(context.Background(), d.ds, fleet.MDMAssetHostIdentityCACert, fleet.MDMAssetHostIdentityCAKey)
+	ctx := context.Background()
+	cert, err := assets.KeyPair(ctx, d.ds, fleet.MDMAssetHostIdentityCACert, fleet.MDMAssetHostIdentityCAKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting assets: %w", err)
+		return nil, nil, ctxerr.Wrap(ctx, err, "getting assets")
 	}
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(ctx, "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -68,16 +67,20 @@ func (d *HostIdentitySCEPDepot) Serial() (*big.Int, error) {
 	// Insert an empty row to generate a new auto-incremented serial number
 	result, err := d.db.Exec(`INSERT INTO host_identity_scep_serials () VALUES ();`)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(context.Background(), err, "inserting host identity scep serial")
 	}
 	lid, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(context.Background(), err, "getting last insert id for host identity scep serial")
 	}
 	return big.NewInt(lid), nil
 }
 
 // HasCN returns whether the given certificate exists in the depot.
+// NOTE: This is currently a stub that always returns false. It is not used for
+// renewal decisions right now, but may be implemented in the future to support
+// SCEP renewal semantics. Until then, SCEP clients relying on HasCN for renewal
+// will always be told the certificate does not exist.
 func (d *HostIdentitySCEPDepot) HasCN(cn string, allowTime int, cert *x509.Certificate, revokeOldCertificate bool) (bool, error) {
 	// Not used right now. May be used for renewal in the future.
 	return false, nil
@@ -85,11 +88,12 @@ func (d *HostIdentitySCEPDepot) HasCN(cn string, allowTime int, cert *x509.Certi
 
 // Put stores a certificate under the given name.
 func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
+	ctx := context.Background()
 	if crt.Subject.CommonName == "" || len(crt.Subject.CommonName) > maxCommonNameLength {
-		return errors.New("common name empty or too long")
+		return ctxerr.New(ctx, "common name empty or too long")
 	}
 	if !crt.SerialNumber.IsInt64() {
-		return errors.New("cannot represent serial number as int64")
+		return ctxerr.New(ctx, "cannot represent serial number as int64")
 	}
 
 	// Extract the ECC uncompressed point (04-prefixed X || Y); 0x04 means this is the raw representation
@@ -98,30 +102,35 @@ func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
 	//   - P-384: 97 bytes
 	key, ok := crt.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
-		return errors.New("public key not in ECDSA format")
+		return ctxerr.New(ctx, "public key not in ECDSA format")
 	}
 	pubKeyRaw, err := types.CreateECDSAPublicKeyRaw(key)
 	if err != nil {
-		return fmt.Errorf("creating public key raw: %w", err)
+		return ctxerr.Wrap(ctx, err, "creating public key raw")
 	}
 	certPEM := certificate.EncodeCertPEM(crt)
 
 	// Apply rate limiting if configured
 	cooldown := d.config.Osquery.EnrollCooldown
 	if cooldown > 0 {
-		existingCert, err := d.ds.GetHostIdentityCertByName(context.Background(), name)
+		existingCert, err := d.ds.GetHostIdentityCertByName(ctx, name)
 		switch {
 		case err != nil && !fleet.IsNotFound(err):
-			return fmt.Errorf("checking existing certificate: %w", err)
+			return ctxerr.Wrap(ctx, err, "checking existing certificate")
 		case err == nil:
 			// Certificate exists, check if rate limit applies
 			if time.Since(existingCert.CreatedAt) < cooldown {
-				return backoff.Permanent(ctxerr.Errorf(context.Background(), "host identified by %s requesting certificates too often", name))
+				return backoff.Permanent(ctxerr.Errorf(ctx, "host identified by %s requesting certificates too often", name))
 			}
 		}
 		// If certificate doesn't exist or rate limit doesn't apply, continue
 	}
 
+	// NOTE: the rate-limit check above runs outside of the transaction below,
+	// so it is check-then-act and not fully race-safe against concurrent
+	// enrollments for the same name. A complete fix would move the cooldown
+	// check inside this transaction using a locking read (e.g. SELECT ... FOR
+	// UPDATE) prior to the revoke/insert below.
 	return common_mysql.WithRetryTxx(context.Background(), d.db, func(tx sqlx.ExtContext) error {
 		// Revoke existing certs for this host id.
 		// Note: Because the challenge is shared, it is possible for a bad actor to revoke a cert for an existing host

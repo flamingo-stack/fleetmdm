@@ -43,7 +43,7 @@ func (v *AppleSoftware) Run(ctx context.Context, argsJSON json.RawMessage) error
 	switch args.Task {
 	case verifyVPPTask:
 		err := v.verifyVPPInstalls(ctx, args.HostUUID, args.VerificationCommandUUID, args.DisableManagedOnlyApps)
-		return ctxerr.Wrap(ctx, err, "running migrate VPP token task")
+		return ctxerr.Wrap(ctx, err, "running verify VPP installs task")
 
 	default:
 		return ctxerr.Errorf(ctx, "unknown task: %v", args.Task)

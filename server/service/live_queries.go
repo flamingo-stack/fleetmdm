@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -184,12 +183,12 @@ func runLiveQueryOnHost(svc fleet.Service, ctx context.Context, host *fleet.Host
 		} else if len(queryResults[0].Results) > 0 {
 			queryResult := queryResults[0].Results[0]
 			if queryResult.Error != nil {
-				err = errors.New(*queryResult.Error)
+				err = ctxerr.New(ctx, *queryResult.Error)
 			}
 			res.Rows = queryResult.Rows
 			res.HostID = queryResult.HostID
 		} else {
-			err = errors.New("timeout waiting for results")
+			err = ctxerr.New(ctx, "timeout waiting for results")
 		}
 		if err != nil {
 			res.Err = err.Error()
@@ -383,7 +382,7 @@ func (svc *Service) GetCampaignReader(ctx context.Context, campaign *fleet.Distr
 	readChan, err := svc.resultStore.ReadChannel(cancelCtx, *campaign)
 	if err != nil {
 		cancelFunc()
-		return nil, nil, fmt.Errorf("cannot open read channel for campaign %d ", campaign.ID)
+		return nil, nil, fmt.Errorf("cannot open read channel for campaign %d: %w", campaign.ID, err)
 	}
 
 	campaign.Status = fleet.QueryRunning

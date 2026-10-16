@@ -36,7 +36,7 @@ func (ds *Datastore) GetAuthorizationByID(ctx context.Context, accountID uint, a
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, types.AuthorizationDoesNotExistError(fmt.Sprintf("ACME authorization with ID %d not found for account ID %d", authorizationID, accountID))
 		}
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get acme authorization by id")
 	}
 
 	return &types.Authorization{

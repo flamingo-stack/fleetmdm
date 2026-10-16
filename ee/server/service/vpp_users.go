@@ -41,7 +41,7 @@ func (svc *Service) ensureVPPClientUser(ctx context.Context, host *fleet.Host, t
 		return "", ctxerr.Wrapf(ctx, err, "looking up managed apple id for host %d", host.ID)
 	}
 	if managedAppleID == "" {
-		return "", errMissingManagedAppleID
+		return "", ctxerr.Wrap(ctx, errMissingManagedAppleID)
 	}
 
 	// Cache hit on (vpp_token_id, managed_apple_id): a previous successful call

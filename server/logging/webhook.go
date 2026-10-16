@@ -3,12 +3,12 @@ package logging
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 )
 
 type webhookLogWriter struct {
@@ -18,7 +18,7 @@ type webhookLogWriter struct {
 
 func NewWebhookLogWriter(webhookURL string, logger *slog.Logger) (*webhookLogWriter, error) {
 	if webhookURL == "" {
-		return nil, errors.New("webhook URL missing")
+		return nil, ctxerr.New(context.Background(), "webhook URL missing")
 	}
 
 	return &webhookLogWriter{
@@ -47,6 +47,7 @@ func (w *webhookLogWriter) Write(ctx context.Context, logs []json.RawMessage) er
 		w.logger.ErrorContext(ctx, fmt.Sprintf("failed to send automation webhook to %s", server.MaskSecretURLParams(w.url)),
 			"err", server.MaskURLError(err).Error(),
 		)
+		return ctxerr.Wrap(ctx, err, "send automation webhook")
 	}
 
 	return nil

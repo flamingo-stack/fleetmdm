@@ -24,7 +24,7 @@ func (svc *Service) CalendarWebhook(ctx context.Context, eventUUID string, chann
 	appConfig, err := svc.ds.AppConfig(ctx)
 	if err != nil {
 		svc.authz.SkipAuthorization(ctx)
-		return fmt.Errorf("load app config: %w", err)
+		return ctxerr.New(ctx, fmt.Sprintf("load app config: %s", err))
 	}
 
 	if len(appConfig.Integrations.GoogleCalendar) == 0 {
@@ -341,6 +341,9 @@ func (svc *Service) getCalendarLock(ctx context.Context, eventUUID string, addTo
 
 func (svc *Service) processCalendarAsync(ctx context.Context, eventIDs []string) {
 	defer func() {
+		if r := recover(); r != nil {
+			svc.logger.ErrorContext(ctx, "Recovered from panic in async calendar processing", "err", r)
+		}
 		asyncMutex.Lock()
 		asyncCalendarProcessing = false
 		asyncMutex.Unlock()
@@ -452,3 +455,4 @@ func (svc *Service) processCalendarEventAsync(ctx context.Context, eventUUID str
 	}
 	return true
 }
+

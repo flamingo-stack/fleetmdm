@@ -423,6 +423,12 @@ func TestCarveCarveBlockGetCarveError(t *testing.T) {
 // TestCarveBlockHostOwnershipMismatch verifies that when the HTTP pre-auth
 // has stashed an authenticated host in ctx, CarveBlock rejects the request
 // if the carve's HostId doesn't match.
+//
+// >>> OPENFRAME(carve-host-ownership): fork-only host-ownership validation
+// for CarveBlock not present in upstream fleetdm/fleet — see
+// openframe/docs/carve-host-ownership.md for the design rationale (the
+// production-code sentinel and the ctxerr.Wrap exception are documented at
+// the CarveBlock handler in carves.go).
 func TestCarveBlockHostOwnershipMismatch(t *testing.T) {
 	sessionId := "sess"
 	metadata := &fleet.CarveMetadata{
@@ -461,9 +467,14 @@ func TestCarveBlockHostOwnershipMismatch(t *testing.T) {
 	// 401 status — top-level (no ctxerr.Wrap) is required because
 	// FleetErrorEncoder uses a type switch on err that does not unwrap.
 	// Wrapping would cause the encoder to fall through to the generic
-	// JSON error shape instead of the osquery-style response.
+	// JSON error shape instead of the osquery-style response. This
+	// exception to FLEETMDM-002 (server-layer errors must use
+	// ctxerr.New/ctxerr.Wrap) is intentional and documented at the
+	// production code site (CarveBlock in carves.go) via an
+	// OPENFRAME sentinel — do not "fix" this by adding ctxerr.Wrap here
+	// or there without reading that comment first.
 	ose, ok := err.(*OsqueryError)
-	require.True(t, ok, "ownership-failure must be returned as *OsqueryError directly, not wrapped via ctxerr.Wrap (else FleetErrorEncoder type switch can't see it)")
+	require.True(t, ok, "ownership-failure must be returned as *OsqueryError directly, not wrapped via ctxerr.Wrap (else FleetErrorEncoder type switch can't see it) — see OPENFRAME sentinel on CarveBlock in carves.go")
 	assert.Equal(t, http.StatusUnauthorized, ose.Status())
 	assert.False(t, ose.NodeInvalid(), "node_invalid must be false on ownership failure — the node_key is valid")
 	// The response body uses a generic message to avoid disclosing carve
@@ -476,6 +487,10 @@ func TestCarveBlockHostOwnershipMismatch(t *testing.T) {
 
 // TestCarveBlockHostOwnershipMatch verifies the happy path where the
 // pre-authed host in ctx matches the carve's HostId.
+//
+// >>> OPENFRAME(carve-host-ownership): fork-only host-ownership validation
+// for CarveBlock not present in upstream fleetdm/fleet — see
+// openframe/docs/carve-host-ownership.md.
 func TestCarveBlockHostOwnershipMatch(t *testing.T) {
 	sessionId := "sess"
 	metadata := &fleet.CarveMetadata{
@@ -514,10 +529,22 @@ func TestCarveBlockHostOwnershipMatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ms.NewBlockFuncInvoked)
 }
+// <<< OPENFRAME(carve-host-ownership)
 
 // TestCarveBlockNoHostInCtxSkipsOwnershipCheck verifies that when no host is
 // in ctx (header-absent path), CarveBlock does NOT perform the ownership
 // check — session_id + request_id alone is the auth.
+//
+// SECURITY NOTE: this is a meaningful security-relevant design point. If the
+// transport/middleware layer for this endpoint ever fails to mandatorily set
+// the host in ctx (e.g. header-absent path, or a route that forgets to wire
+// up the pre-auth middleware), an attacker who knows/guesses a valid
+// session_id + request_id can carve-block using another host's session
+// without triggering the ownership check exercised in
+// TestCarveBlockHostOwnershipMismatch above. This should be reviewed to
+// confirm the header/context is always mandatorily populated at the
+// transport layer for this endpoint; see the OPENFRAME sentinel on
+// CarveBlock in carves.go.
 func TestCarveBlockNoHostInCtxSkipsOwnershipCheck(t *testing.T) {
 	sessionId := "sess"
 	metadata := &fleet.CarveMetadata{
