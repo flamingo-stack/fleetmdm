@@ -23,6 +23,10 @@ func ReconcileProfiles(ctx context.Context, ds fleet.Datastore, logger *slog.Log
 	return ReconcileProfilesWithClient(ctx, ds, logger, licenseKey, nil, androidAgentConfig, batchSize)
 }
 
+// >>> OPENFRAME(profiles-reconciler): fork-specific cursor-based reconciliation,
+// policy-gating logic, and certificate alias/status batching additions below.
+// See FLEETMDM-001. Preserve this logic across upstream syncs.
+
 // ReconcileProfilesWithClient is like ReconcileProfiles but allows injecting a custom client for testing.
 // If client is nil, a new AMAPI client will be created.
 func ReconcileProfilesWithClient(ctx context.Context, ds fleet.Datastore, logger *slog.Logger, licenseKey string, client androidmgmt.Client, androidAgentConfig config.AndroidAgentConfig, batchSize int) (err error) {
@@ -143,19 +147,30 @@ func (r *profileReconciler) ReconcileProfiles(ctx context.Context, cursor string
 		toRemoveByHostUUID[prof.HostUUID] = append(toRemoveByHostUUID[prof.HostUUID], prof)
 	}
 
-	// Collect all distinct host UUIDs for cursor advancement.
-	allHostUUIDs := make(map[string]struct{}, len(profilesByHostUUID)+len(toRemoveByHostUUID))
-	for uuid := range profilesByHostUUID {
-		allHostUUIDs[uuid] = struct{}{}
+	// Collect all distinct host UUIDs for cursor advancement, preserving the
+	// order in which hosts were returned by ListMDMAndroidProfilesToSend so we
+	// can track the last-processed host in result order rather than by an
+	// arbitrary lexicographic comparison of UUID strings (which has no
+	// relationship to the underlying pagination order).
+	var hostUUIDOrder []string
+	seenHostUUIDs := make(map[string]struct{}, len(profilesByHostUUID)+len(toRemoveByHostUUID))
+	addHostUUID := func(uuid string) {
+		if _, ok := seenHostUUIDs[uuid]; !ok {
+			seenHostUUIDs[uuid] = struct{}{}
+			hostUUIDOrder = append(hostUUIDOrder, uuid)
+		}
 	}
-	for uuid := range toRemoveByHostUUID {
-		allHostUUIDs[uuid] = struct{}{}
+	for _, hostProf := range hostsApplicableProfiles {
+		addHostUUID(hostProf.HostUUID)
 	}
-	hostCount := len(allHostUUIDs)
+	for _, prof := range hostsProfsToRemove {
+		addHostUUID(prof.HostUUID)
+	}
+	hostCount := len(hostUUIDOrder)
 
-	// Track the last (lexicographically greatest) host UUID for cursor.
+	// Track the last host UUID in result order for cursor continuation.
 	if hostCount > 0 {
-		r.lastHostUUID = slices.Max(slices.Collect(maps.Keys(allHostUUIDs)))
+		r.lastHostUUID = hostUUIDOrder[hostCount-1]
 	}
 
 	// Extract ONC cert aliases once for all hosts (profile contents are shared),
@@ -638,3 +653,5 @@ func (r *profileReconciler) reconcileCertificateTemplates(ctx context.Context) e
 
 	return nil
 }
+
+// <<< OPENFRAME(profiles-reconciler)

@@ -1,3 +1,7 @@
+// OPENFRAME: fork-specific file — not present upstream in fleetdm/fleet.
+// This entire file adds OpenFrame-specific trace sampler settings storage
+// on top of the shared upstream server/datastore/mysql package.
+// Preserve this file as-is during upstream syncs.
 package mysql
 
 import (
@@ -50,7 +54,8 @@ func (ds *Datastore) SetTraceSamplerSettings(ctx context.Context, settings *trac
 	}
 	// The singleton row is seeded by the migration. A missing row means the invariant is broken.
 	if rows != 1 {
-		return ctxerr.Wrap(ctx, fmt.Errorf("set trace_sampler_settings: expected 1 row updated, got %d", rows))
+		return ctxerr.Wrap(ctx, ctxerr.New(ctx, fmt.Sprintf("set trace_sampler_settings: expected 1 row updated, got %d", rows)))
 	}
 	return nil
 }
+// OPENFRAME: end fork-specific file.

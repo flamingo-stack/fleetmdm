@@ -45,16 +45,20 @@ type CertManager interface {
 	// NewSTSAuthToken returns an STS auth token for the given UPN claim.
 	NewSTSAuthToken(upn string) (string, error)
 
+	// >>> OPENFRAME(eua-azure-token): Fork-specific EUA/Azure AD token support — openframe/docs/eua-azure-token.md
 	// NewEUAToken returns a Fleet-signed JWT for the given UPN and Windows MDM
 	// device ID. Used to pass end-user authentication context to the orbit
 	// installer so the user is not prompted twice.
 	NewEUAToken(upn string, deviceID string) (string, error)
+	// <<< OPENFRAME(eua-azure-token)
 
 	// GetSTSAuthTokenUPNClaim validates the given token and returns the UPN claim
 	GetSTSAuthTokenUPNClaim(token string) (string, error)
 
+	// >>> OPENFRAME(eua-azure-token): Fork-specific EUA/Azure AD token support — openframe/docs/eua-azure-token.md
 	// GetEUATokenClaims validates the given EUA token and returns the parsed claims.
 	GetEUATokenClaims(token string) (*EUATokenClaims, error)
+	// <<< OPENFRAME(eua-azure-token)
 
 	// TODO: implement other methods as needed:
 	// - verify certificate-device association
@@ -74,6 +78,7 @@ type STSClaims struct {
 	jwt.RegisteredClaims
 }
 
+// >>> OPENFRAME(eua-azure-token): Fork-specific EUA/Azure AD token support — openframe/docs/eua-azure-token.md
 // euaJWTClaims is the internal JWT struct for signing/parsing EUA tokens.
 type euaJWTClaims struct {
 	UPN      string `json:"upn"`
@@ -94,6 +99,8 @@ type AzureData struct {
 	UniqueName string
 	SCP        string
 }
+
+// <<< OPENFRAME(eua-azure-token)
 
 type manager struct {
 	store CertStore
@@ -226,6 +233,8 @@ func (m *manager) NewSTSAuthToken(upn string) (string, error) {
 	return signedToken, nil
 }
 
+// >>> OPENFRAME(eua-azure-token): Fork-specific EUA/Azure AD token support — openframe/docs/eua-azure-token.md
+
 // NewEUAToken returns a Fleet-signed JWT for the given UPN and Windows MDM device ID.
 func (m *manager) NewEUAToken(upn string, deviceID string) (string, error) {
 	if m == nil {
@@ -300,6 +309,8 @@ func (m *manager) GetEUATokenClaims(tokenStr string) (*EUATokenClaims, error) {
 	return nil, errors.New("issue with EUA token validation")
 }
 
+// <<< OPENFRAME(eua-azure-token)
+
 // GetSTSAuthToken validates the given token and returns the UPN claim
 func (m *manager) GetSTSAuthTokenUPNClaim(tokenStr string) (string, error) {
 	if m == nil {
@@ -335,6 +346,8 @@ func (m *manager) GetSTSAuthTokenUPNClaim(tokenStr string) (string, error) {
 
 	return "", errors.New("issue with STS token validation")
 }
+
+// >>> OPENFRAME(eua-azure-token): Fork-specific EUA/Azure AD token support — openframe/docs/eua-azure-token.md
 
 // GetAzureAuthTokenClaims validates the given Azure AD token and returns
 // UPN, TenantID, UniqueName, DeviceID
@@ -479,6 +492,8 @@ func azureDataFromClaims(ctx context.Context, claims jwt.MapClaims) (AzureData, 
 		Audience:   audience,
 	}, nil
 }
+
+// <<< OPENFRAME(eua-azure-token)
 
 func populateClientCert(sn *big.Int, subject string, issuerCert *x509.Certificate, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 	certRenewalPeriodInSecsInt, err := strconv.Atoi(syncml.PolicyCertRenewalPeriodInSecs)

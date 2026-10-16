@@ -13,6 +13,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
+// >>> OPENFRAME(saml-dos-guard): bound SAMLResponse XML depth/element count before unauthenticated canonicalization — openframe/docs/saml-dos-guard.md
 const (
 	// maxSAMLResponseDepth bounds how deeply nested the SAMLResponse XML may
 	// be. Legitimate SAML responses are shallow; deep nesting is the signature
@@ -23,6 +24,8 @@ const (
 	// SAMLResponse, for the same reason (a bomb can be wide rather than deep).
 	maxSAMLResponseElements = 5000
 )
+
+// <<< OPENFRAME(saml-dos-guard)
 
 // Since there's not a standard for display names, I have collected the most
 // commonly used attribute names for it.
@@ -121,6 +124,8 @@ func validateAudiences(assertion *saml.Assertion, expectedAudiences []string) er
 	return fmt.Errorf("wrong audience: %+v", assertion.Conditions.AudienceRestrictions)
 }
 
+// >>> OPENFRAME(saml-dos-guard): bound SAMLResponse XML depth/element count before unauthenticated canonicalization — openframe/docs/saml-dos-guard.md
+
 // validateSAMLResponseShape parses the decoded SAMLResponse XML and rejects
 // documents that are excessively deep or have too many elements before they
 // reach goxmldsig's pre-signature canonicalization, which (as of the time of writing)
@@ -155,14 +160,18 @@ func validateSAMLResponseShape(samlResponse []byte) error {
 	return walk(root, 1)
 }
 
+// <<< OPENFRAME(saml-dos-guard)
+
 // ParseAndVerifySAMLResponse runs the parsing and validation of SAMLResponses.
 func ParseAndVerifySAMLResponse(samlProvider *saml.ServiceProvider, samlResponse []byte, requestID string, acsURL *url.URL) (fleet.Auth, error) {
+	// >>> OPENFRAME(saml-dos-guard): bound SAMLResponse XML depth/element count before unauthenticated canonicalization — openframe/docs/saml-dos-guard.md
 	// Reject oversized/over-nested documents before handing them to
 	// crewjam/saml -> goxmldsig, whose pre-signature canonicalization is (at the time of writing)
 	// unbounded and runs without authentication.
 	if err := validateSAMLResponseShape(samlResponse); err != nil {
 		return nil, err
 	}
+	// <<< OPENFRAME(saml-dos-guard)
 
 	verifiedAssertion, err := samlProvider.ParseXMLResponse(samlResponse, []string{requestID}, *acsURL)
 	if err != nil {

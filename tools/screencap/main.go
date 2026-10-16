@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -175,6 +176,7 @@ func main() {
 	// have cleaned up).
 	os.Remove(filepath.Join(profileDir, "SingletonLock"))
 
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.WindowSize(1440, 900),
 		chromedp.UserDataDir(profileDir),
 	)
@@ -187,19 +189,18 @@ func main() {
 		opts = append(opts, chromedp.Flag("headless", false))
 	}
 
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer allocCancel()
-
-	ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithLogf(log.Printf))
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer allocCancel()
-
 	// Kill any orphaned Chrome processes left behind by a previous crashed run
 	// (log.Fatalf calls os.Exit which skips defers, so allocCancel may not
 	// have been called).
 	if out, err := exec.Command("pkill", "-f", "user-data-dir="+profileDir).CombinedOutput(); err != nil {
 		_ = out // no matching processes is fine
 	}
+
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer allocCancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithLogf(log.Printf))
+	defer cancel()
 
 	if needsLogin {
 		switch {

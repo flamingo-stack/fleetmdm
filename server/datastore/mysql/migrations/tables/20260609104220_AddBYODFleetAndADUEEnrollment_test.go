@@ -1,3 +1,4 @@
+// >>> OPENFRAME(byod-adue-enrollment): fork-specific BYOD/ADUE enrollment migration test — openframe/docs/byod-adue-enrollment.md
 package tables
 
 import (
@@ -196,3 +197,4 @@ func TestUp_20260609104220(t *testing.T) {
 		t.Errorf("expected byod_default_team_id to be NULL after deleting team, got %d", *byodDefaultTeamID)
 	}
 }
+// <<< OPENFRAME(byod-adue-enrollment)
