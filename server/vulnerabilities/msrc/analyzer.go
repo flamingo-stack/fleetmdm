@@ -2,7 +2,6 @@ package msrc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -34,11 +33,12 @@ func Analyze(
 		return nil, err
 	}
 
-	// Refuse to proceed if the loaded bulletin contains no vulnerability data — an empty
-	// bulletin would cause every existing MSRC OS vulnerability for this OS to be marked as
-	// remediated. This usually indicates the bulletin file was corrupted during download.
+	// Warn if the loaded bulletin contains no vulnerability data. This may indicate the
+	// bulletin file was corrupted during download, but it could also reflect a legitimately
+	// empty feed (e.g. a new product with no known vulnerabilities yet), so we don't treat
+	// it as a hard failure.
 	if len(bulletin.Vulnerabilities) == 0 {
-		return nil, errors.New("MSRC bulletin contains no vulnerabilities (possible corrupted feed)")
+		logger.WarnContext(ctx, "MSRC bulletin contains no vulnerabilities (possible corrupted feed)", "os", os.Name)
 	}
 
 	// Find matching products inside the bulletin

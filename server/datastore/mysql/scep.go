@@ -7,11 +7,11 @@ import (
 	"crypto/x509"
 	"database/sql"
 	_ "embed"
-	"errors"
 	"fmt"
 	"math/big"
 
 	"github.com/fleetdm/fleet/v4/pkg/certificate"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/assets"
 	"github.com/fleetdm/fleet/v4/server/mdm/scep/depot"
@@ -39,14 +39,15 @@ func newSCEPDepot(db *sql.DB, ds fleet.Datastore) (*SCEPDepot, error) {
 // CA returns the CA's certificate and private key.
 func (d *SCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 	// TODO(roberto): nano interfaces doesn't receive a context for this method.
-	cert, err := assets.CAKeyPair(context.Background(), d.ds)
+	ctx := context.Background()
+	cert, err := assets.CAKeyPair(ctx, d.ds)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting assets: %w", err)
+		return nil, nil, ctxerr.Wrap(ctx, err, "getting assets")
 	}
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(ctx, "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -54,13 +55,15 @@ func (d *SCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 
 // Serial allocates and returns a new (increasing) serial number.
 func (d *SCEPDepot) Serial() (*big.Int, error) {
+	// TODO(roberto): nano interfaces doesn't receive a context for this method.
+	ctx := context.Background()
 	result, err := d.db.Exec(`INSERT INTO identity_serials () VALUES ();`)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "insert identity serial")
 	}
 	lid, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get last insert id for identity serial")
 	}
 	return big.NewInt(lid), nil
 }
@@ -71,10 +74,12 @@ func (d *SCEPDepot) Serial() (*big.Int, error) {
 // - allowTime are the maximum days before expiration to allow clients to do certificate renewal.
 // - revokeOldCertificate specifies whether to revoke the old certificate once renewed.
 func (d *SCEPDepot) HasCN(cn string, allowTime int, cert *x509.Certificate, revokeOldCertificate bool) (bool, error) {
+	// TODO(roberto): nano interfaces doesn't receive a context for this method.
+	ctx := context.Background()
 	var ct int
 	row := d.db.QueryRow(`SELECT COUNT(*) FROM identity_certificates WHERE name = ?`, cn)
 	if err := row.Scan(&ct); err != nil {
-		return false, err
+		return false, ctxerr.Wrap(ctx, err, "scan identity certificate count")
 	}
 	return ct >= 1, nil
 }
@@ -84,11 +89,13 @@ func (d *SCEPDepot) HasCN(cn string, allowTime int, cert *x509.Certificate, revo
 // If the provided certificate has empty crt.Subject.CommonName,
 // then the hex sha256 of the crt.Raw is used as name.
 func (d *SCEPDepot) Put(name string, crt *x509.Certificate) error {
+	// TODO(roberto): nano interfaces doesn't receive a context for this method.
+	ctx := context.Background()
 	if crt.Subject.CommonName == "" {
 		name = fmt.Sprintf("%x", sha256.Sum256(crt.Raw))
 	}
 	if !crt.SerialNumber.IsInt64() {
-		return errors.New("cannot represent serial number as int64")
+		return ctxerr.New(ctx, "cannot represent serial number as int64")
 	}
 	certPEM := certificate.EncodeCertPEM(crt)
 	_, err := d.db.Exec(`
@@ -102,5 +109,8 @@ VALUES
 		crt.NotAfter,
 		certPEM,
 	)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "insert identity certificate")
+	}
+	return nil
 }
