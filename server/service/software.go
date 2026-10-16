@@ -10,7 +10,6 @@ import (
 
 	"github.com/fleetdm/fleet/v4/server/contexts/viewer"
 	"github.com/fleetdm/fleet/v4/server/fleet"
-	"github.com/fleetdm/fleet/v4/server/ptr"
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -189,22 +188,8 @@ func (svc *Service) SoftwareByID(ctx context.Context, id uint, teamID *uint, inc
 		IncludeObserver: true,
 	})
 	if err != nil {
-		if fleet.IsNotFound(err) && teamID == nil {
-			// here we use a global admin as filter because we want
-			// to check if the software version exists
-			filter := fleet.TeamFilter{User: &fleet.User{GlobalRole: ptr.String(fleet.RoleAdmin)}}
-			sw, err := svc.ds.SoftwareByID(ctx, id, teamID, includeCVEScores, &filter)
-			if err != nil {
-				// Not found anywhere
-				return nil, ctxerr.Wrap(ctx, err, "software not found for any team")
-			}
-			// Found, but user has no permission to hosts it's installed on.
-			// Instead of PermissionError, return a stub with the name.
-			stub := &fleet.Software{
-				ID:   id,
-				Name: sw.Name,
-			}
-			return stub, nil
+		if fleet.IsNotFound(err) {
+			return nil, ctxerr.Wrap(ctx, err, "getting software version by id")
 		}
 		return nil, ctxerr.Wrap(ctx, err, "getting software version by id")
 	}

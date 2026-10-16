@@ -52,14 +52,22 @@ func NewTestSecureHW(device transport.TPMCloser, metadataDir string, logger zero
 	}, nil
 }
 
+// withParentKey creates a transient parent key, invokes fn with its handle, and
+// guarantees the parent key handle is flushed afterwards regardless of the
+// outcome of fn or any future error paths added to fn.
+func (t *tpm2SecureHW) withParentKey(fn func(parentKeyHandle tpm2.NamedHandle) error) error {
+	parentKeyHandle, err := t.createParentKey()
+	if err != nil {
+		return err
+	}
+	defer t.flushHandle(parentKeyHandle.Handle, "parent")
+
+	return fn(parentKeyHandle)
+}
+
 // CreateKey partially implements SecureHW.
 func (t *tpm2SecureHW) CreateKey() (Key, error) {
 	t.logger.Info().Msg("creating new ECC key in TPM")
-
-	parentKeyHandle, err := t.createParentKey()
-	if err != nil {
-		return nil, fmt.Errorf("get or create TPM parent key: %w", err)
-	}
 
 	curveID, curveName := t.selectBestECCCurve()
 	t.logger.Info().Str("curve", curveName).Msg("selected ECC curve for key creation")
@@ -88,32 +96,35 @@ func (t *tpm2SecureHW) CreateKey() (Key, error) {
 		),
 	})
 
-	// Create the key under the transient parent
-	t.logger.Debug().Msg("creating child key")
-	createKey, err := tpm2.Create{
-		ParentHandle: parentKeyHandle,
-		InPublic:     eccTemplate,
-	}.Execute(t.device)
-	if err != nil {
-		// Flush the parent key before returning error
-		t.flushHandle(parentKeyHandle.Handle, "parent")
-		return nil, fmt.Errorf("create child key: %w", err)
-	}
+	var createKey *tpm2.CreateResponse
+	var loadedKey *tpm2.LoadResponse
 
-	t.logger.Debug().Msg("Loading created key")
-	loadedKey, err := tpm2.Load{
-		ParentHandle: parentKeyHandle,
-		InPrivate:    createKey.OutPrivate,
-		InPublic:     createKey.OutPublic,
-	}.Execute(t.device)
-	if err != nil {
-		// Flush the parent key before returning error
-		t.flushHandle(parentKeyHandle.Handle, "parent")
-		return nil, fmt.Errorf("load key: %w", err)
-	}
+	err := t.withParentKey(func(parentKeyHandle tpm2.NamedHandle) error {
+		// Create the key under the transient parent
+		t.logger.Debug().Msg("creating child key")
+		var err error
+		createKey, err = tpm2.Create{
+			ParentHandle: parentKeyHandle,
+			InPublic:     eccTemplate,
+		}.Execute(t.device)
+		if err != nil {
+			return fmt.Errorf("create child key: %w", err)
+		}
 
-	// Flush the parent key as it's no longer needed
-	t.flushHandle(parentKeyHandle.Handle, "parent")
+		t.logger.Debug().Msg("Loading created key")
+		loadedKey, err = tpm2.Load{
+			ParentHandle: parentKeyHandle,
+			InPrivate:    createKey.OutPrivate,
+			InPublic:     createKey.OutPublic,
+		}.Execute(t.device)
+		if err != nil {
+			return fmt.Errorf("load key: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	t.logger.Debug().
 		Str("handle", fmt.Sprintf("0x%x", loadedKey.ObjectHandle)).
@@ -276,30 +287,29 @@ func (t *tpm2SecureHW) LoadKey() (Key, error) {
 		return nil, err
 	}
 
+	var loadedKey *tpm2.LoadResponse
+
 	// Get the parent key handle.
 	//
 	// NOTE: createParentKey calls CreatePrimary which creates the parent key
 	// deterministically so this can be called when loadind a child key.
-	parentKeyHandle, err := t.createParentKey()
+	err = t.withParentKey(func(parentKeyHandle tpm2.NamedHandle) error {
+		// Load the key using the parent handle.
+		t.logger.Debug().Uint32("parent_handle", uint32(parentKeyHandle.Handle)).Msg("loading parent key")
+		var loadErr error
+		loadedKey, loadErr = tpm2.Load{
+			ParentHandle: parentKeyHandle,
+			InPrivate:    *private,
+			InPublic:     *public,
+		}.Execute(t.device)
+		if loadErr != nil {
+			return fmt.Errorf("load parent key: %w", loadErr)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("get parent key: %w", err)
+		return nil, err
 	}
-
-	// Load the key using the parent handle.
-	t.logger.Debug().Uint32("parent_handle", uint32(parentKeyHandle.Handle)).Msg("loading parent key")
-	loadedKey, err := tpm2.Load{
-		ParentHandle: parentKeyHandle,
-		InPrivate:    *private,
-		InPublic:     *public,
-	}.Execute(t.device)
-	if err != nil {
-		// Flush the parent key before returning error
-		t.flushHandle(parentKeyHandle.Handle, "parent")
-		return nil, fmt.Errorf("load parent key: %w", err)
-	}
-
-	// Flush the parent key as it's no longer needed
-	t.flushHandle(parentKeyHandle.Handle, "parent")
 
 	t.logger.Info().
 		Str("handle", fmt.Sprintf("0x%x", loadedKey.ObjectHandle)).

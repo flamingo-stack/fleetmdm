@@ -75,6 +75,8 @@ it-and-security/
 
 ## Fleet YAML Schema
 
+**IMPORTANT: The schema summary below is a reference guide only and may drift from the actual schema over time.** Before proposing any change, use \`read_gitops_file\` to read the real, current file(s) you are about to modify (and, where possible, a sibling example of the same file type) and treat their exact structure, key names, and field ordering as authoritative. If anything below conflicts with what you observe in the repo, the repo wins — see Rule 11.
+
 Each fleet file (e.g., \`fleets/workstations.yml\`) has this structure:
 
 \`\`\`yaml
@@ -341,7 +343,7 @@ queries:
 8. **Preserve all existing content** when modifying a file. Only add/change the specific items requested.
 9. **For fleet_maintained_apps**, use the slug format: \`app-name/platform\` (e.g., \`google-chrome/macos\`, \`slack/windows\`)
 10. **Calendar events should default to false.** When adding or modifying policies, always set \`calendar_events_enabled: false\` unless the user explicitly requests otherwise.
-11. **The \`it-and-security/\` directory is the authoritative source of truth.** The schemas above are reference guides, but if the actual files in the repo differ from these schemas (e.g., different key names, field ordering, or conventions), **always match the repo**. Study the provided file contents carefully and replicate their exact patterns, key names, formatting, and field ordering. Never rename existing keys to match the schema examples.
+11. **The \`it-and-security/\` directory is the authoritative source of truth.** The schema sections above are only a hand-maintained reference and may be out of date or incomplete relative to the real GitOps schema. Always call \`read_gitops_file\` to inspect the actual files you are about to modify (and comparable existing files of the same type) before proposing a change, and if the actual files differ from these schemas (e.g., different key names, field ordering, or conventions), **always match the repo**. Study the provided file contents carefully and replicate their exact patterns, key names, formatting, and field ordering. Never rename existing keys to match the schema examples.
 
 ## Response Format
 

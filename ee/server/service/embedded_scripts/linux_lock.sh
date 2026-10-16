@@ -117,6 +117,17 @@ if [ "$NEEDS_REBOOT" = "1" ]; then
     # The script already uses systemctl extensively, so systemd-run should be available
     # This gives us precise 10-second delay for the script to report success
     echo "Scheduling system reboot in 10 seconds to complete lock process..."
-    systemd-run --on-active=10s --timer-property=AccuracySec=100ms /sbin/reboot
+    if command -v systemd-run >/dev/null 2>&1 && systemd-run --on-active=10s --timer-property=AccuracySec=100ms /sbin/reboot; then
+        :
+    else
+        echo "systemd-run failed or is unavailable - falling back to 'at' for delayed reboot"
+        if command -v at >/dev/null 2>&1 && echo "/sbin/reboot" | at now + 1 minute >/dev/null 2>&1; then
+            :
+        else
+            echo "'at' unavailable or failed - falling back to backgrounded sleep-based reboot"
+            ( sleep 10 && /sbin/reboot ) >/dev/null 2>&1 &
+            disown 2>/dev/null || true
+        fi
+    fi
 fi
 exit 0

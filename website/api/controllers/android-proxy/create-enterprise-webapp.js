@@ -106,7 +106,7 @@ module.exports = {
     }).intercept({ status: 400 }, (err) => {
       return {'invalidWebApp': `Attempted to create a webApp with an invalid value for an Android enterprise (${androidEnterpriseId}): ${err}`};
     }).intercept((err)=>{
-      return new Error(`When attempting to create a webapp for an Android enterprise (${androidEnterpriseId}), an error occurred. Error: ${require('util').inspect(err)}`);
+      return new Error(`When attempting to create a webapp for an Android enterprise (${androidEnterpriseId}), an error occurred. Error: ${err.message}`);
     });
 
 
@@ -117,3 +117,4 @@ module.exports = {
 
 
 };
+</br>
