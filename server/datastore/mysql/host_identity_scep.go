@@ -45,7 +45,10 @@ func updateHostIdentityCertHostIDBySerial(ctx context.Context, tx sqlx.ExtContex
 		UPDATE host_identity_scep_certificates
 		SET host_id = ?
 		WHERE serial = ?`, hostID, serialNumber)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating host identity cert host id by serial: %w", err)
+	}
+	return nil
 }
 
 func (ds *Datastore) GetHostIdentityCertByName(ctx context.Context, name string) (*types.HostIdentityCertificate, error) {

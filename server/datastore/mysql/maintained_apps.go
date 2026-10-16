@@ -40,7 +40,10 @@ ON DUPLICATE KEY UPDATE
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "upsert maintained app")
 		}
-		id, _ := res.LastInsertId()
+		id, err := res.LastInsertId()
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "get last insert id for maintained app")
+		}
 		appID = uint(id) //nolint:gosec // dismiss G115
 
 		// For darwin apps, update existing software_titles and software entries

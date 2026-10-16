@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"time"
 
@@ -23,12 +24,12 @@ func (i *InviteMailer) Message() ([]byte, error) {
 	i.CurrentYear = time.Now().Year()
 	t, err := server.GetTemplate("server/mail/templates/invite_token.html", "email_template")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get invite email template: %w", err)
 	}
 
 	var msg bytes.Buffer
 	if err = t.Execute(&msg, i); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("execute invite email template: %w", err)
 	}
 	return msg.Bytes(), nil
 }

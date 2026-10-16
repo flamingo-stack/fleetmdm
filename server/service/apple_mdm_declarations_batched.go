@@ -44,7 +44,8 @@ func ReconcileAppleDeclarationsBatched(
 
 	cursor, err := ds.GetMDMAppleDeclarationReconcileCursor(ctx)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to read apple MDM declaration reconcile cursor; starting from beginning", "err", err)
+		wrappedErr := fmt.Errorf("reading apple MDM declaration reconcile cursor: %w", err)
+		logger.WarnContext(ctx, "failed to read apple MDM declaration reconcile cursor; starting from beginning", "err", wrappedErr)
 		cursor = ""
 	}
 
