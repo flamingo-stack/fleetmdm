@@ -105,6 +105,8 @@ func (v Viewer) CanPerformPasswordReset() bool {
 	return false
 }
 
+// >>> OPENFRAME(viewer-telemetry): add diagnostic/telemetry context and system viewer — openframe/docs/....md
+
 // GetDiagnosticContext implements ctxerr.ErrorContextProvider
 func (v *Viewer) GetDiagnosticContext() map[string]any {
 	vdata := map[string]any{
@@ -156,3 +158,5 @@ var systemUser = &fleet.User{
 func NewSystemContext(ctx context.Context) context.Context {
 	return NewContext(ctx, Viewer{User: systemUser})
 }
+
+// <<< OPENFRAME(viewer-telemetry)

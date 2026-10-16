@@ -11,8 +11,10 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
+// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 // displayVersionPattern matches Windows display version strings like "22H2", "23H2", "24H2".
 var displayVersionPattern = regexp.MustCompile(`\b\d{2}H[12]\b`)
+// <<< OPENFRAME(msrc-display-version)
 
 // Product abstracts a MS full product name.
 // A full product name includes the name of the product plus its arch
@@ -24,6 +26,7 @@ type Products map[string]Product
 var ErrNoMatch = errors.New("no product matches")
 
 func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (string, error) {
+	// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 	isServerCoreHost := strings.EqualFold(os.InstallationType, "Server Core")
 	installationTypeKnown := os.InstallationType != ""
 
@@ -31,6 +34,7 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 	// (e.g. "22H2") matches the host's. matchByBuildNumber is the fallback for
 	// hosts that lack a display version (legacy builds 22000/10240 only).
 	var matchByDisplayVersion, matchByBuildNumber string
+	// <<< OPENFRAME(msrc-display-version)
 
 	for pID, product := range p {
 		normalizedOS := NewProductFromOS(os)
@@ -43,6 +47,7 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 			continue
 		}
 
+		// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 		// When the host's installation type is known, only match products
 		// that correspond to the correct installation type (Server Core vs full desktop).
 		if installationTypeKnown && product.IsServerCore() != isServerCoreHost {
@@ -53,8 +58,10 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 		// (superset of Server Core CVEs) for deterministic matching. Only use
 		// a Server Core product if no desktop alternative has been found.
 		isCore := product.IsServerCore()
+		// <<< OPENFRAME(msrc-display-version)
 
 		if product.HasDisplayVersion() {
+			// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 			// Use os.DisplayVersion if available, otherwise try to extract it from the OS name.
 			// The OS name may already contain the display version (e.g., "Microsoft Windows 10 Pro 22H2")
 			// even when the DisplayVersion field is empty, which can happen when osquery includes
@@ -72,6 +79,7 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 				}
 				continue
 			}
+			// <<< OPENFRAME(msrc-display-version)
 		}
 
 		// If os.DisplayVersion is empty, we need to confirm that the product
@@ -85,13 +93,16 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 				build = parts[2]
 			}
 			if build == "22000" || build == "10240" {
+				// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 				if matchByBuildNumber == "" || !isCore {
 					matchByBuildNumber = pID
 				}
+				// <<< OPENFRAME(msrc-display-version)
 			}
 		}
 	}
 
+	// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 	if matchByDisplayVersion == "" && matchByBuildNumber == "" {
 		return "", ctxerr.Wrap(ctx, ErrNoMatch)
 	}
@@ -101,6 +112,7 @@ func (p Products) GetMatchForOS(ctx context.Context, os fleet.OperatingSystem) (
 	}
 
 	return matchByBuildNumber, nil
+	// <<< OPENFRAME(msrc-display-version)
 }
 
 func NewProductFromFullName(fullName string) Product {
@@ -247,6 +259,7 @@ func (p Product) Name() string {
 	}
 }
 
+// >>> OPENFRAME(msrc-display-version): match hosts missing DisplayVersion via OS name fallback — openframe/docs/msrc-matching.md
 // IsServerCore returns true if the product name indicates a Server Core installation.
 func (p Product) IsServerCore() bool {
 	return strings.Contains(strings.ToLower(string(p)), "server core")
@@ -259,6 +272,7 @@ func extractDisplayVersionFromName(name string) string {
 	match := displayVersionPattern.FindString(name)
 	return match
 }
+// <<< OPENFRAME(msrc-display-version)
 
 // Matches checks whether product A matches product B by checking to see if both are for the same
 // product and if the architecture they target are compatible. This function is commutative.
@@ -269,3 +283,4 @@ func (p Product) Matches(o Product) bool {
 
 	return p.Arch() == "all" || o.Arch() == "all" || p.Arch() == o.Arch()
 }
+
