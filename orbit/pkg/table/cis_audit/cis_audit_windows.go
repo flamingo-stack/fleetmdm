@@ -250,8 +250,7 @@ func getSeceditData() (SeceditData, error) {
 	// Load the .inf file content
 	cfg, err := ini.Load(fileContent)
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return data, err
+		return data, fmt.Errorf("failed to load secedit inf file: %w", err)
 	}
 
 	// Parse System Access section
