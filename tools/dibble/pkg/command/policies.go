@@ -1,6 +1,8 @@
 package command
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/fleetdm/fleet/v4/tools/dibble/pkg/seed"
@@ -50,7 +52,7 @@ func listExistingTeams(c *Client) ([]seed.Team, error) {
 		} `json:"fleets"`
 	}
 	if err := c.Get("/api/latest/fleet/fleets?per_page=500", &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing existing teams: %w", err)
 	}
 	out := make([]seed.Team, 0, len(resp.Teams)+len(resp.Fleets))
 	for _, t := range resp.Teams {
