@@ -20,6 +20,9 @@ func (c *Client) getRawBody(endpoint string) ([]byte, error) {
 		if err == nil && len(body) > 0 {
 			return nil, fmt.Errorf("get %s received status %d: %s", endpoint, response.StatusCode, body)
 		}
+		if err != nil {
+			return nil, fmt.Errorf("get %s received status %d, read response body: %w", endpoint, response.StatusCode, err)
+		}
 		return nil, fmt.Errorf("get %s received status %d", endpoint, response.StatusCode)
 	}
 
