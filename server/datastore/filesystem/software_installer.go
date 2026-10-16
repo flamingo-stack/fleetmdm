@@ -119,7 +119,8 @@ func (i *SoftwareInstallerStore) Cleanup(ctx context.Context, usedInstallerIDs [
 
 		info, err := de.Info()
 		if err != nil {
-			return 0, ctxerr.Wrap(ctx, err, "get software installer modtime in filesystem store")
+			errs = append(errs, err)
+			continue
 		}
 		if info.ModTime().After(removeCreatedBefore) {
 			continue

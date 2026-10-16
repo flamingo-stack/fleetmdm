@@ -74,7 +74,7 @@ func setupSharedFlags() {
 func setupDS(privateKey, userName, password, address, name string) *mysql.Datastore {
 	db, err := sql.Open(
 		"mysql",
-		fmt.Sprintf("%s:%s@tcp(%s)/?multiStatements=true&tls=skip-verify", testUsername, testPassword, testAddress),
+		fmt.Sprintf("%s:%s@tcp(%s)/?multiStatements=true&tls=skip-verify", userName, password, address),
 	)
 	if err != nil {
 		log.Fatal("opening MySQL connection:", err)
@@ -324,9 +324,20 @@ export FLEET_MDM_APPLE_BM_KEY=%[1]s/abm_key.key
 		// SCEPDepot.Serial() from ever handing it out to a future client cert.
 		// We deliberately do not insert into identity_certificates — the CA
 		// cert itself lives in mdm_config_assets, not the depot's cert table.
+		//
+		// NOTE: this uses a separate raw *sql.DB connection (rather than the
+		// `ds` datastore) because reserving the serial and writing the
+		// rolled-over CA cert via ReplaceMDMConfigAssets are not wrapped in a
+		// single cross-datastore transaction. If ReplaceMDMConfigAssets fails
+		// after the serial below has been allocated, this tool exits via
+		// log.Fatal without releasing/rolling back the reserved serial. This
+		// is an accepted trade-off: the only consequence is a permanent gap
+		// in the identity_serials auto-increment sequence (no cert is ever
+		// issued using the leaked serial, so there is no risk of collision
+		// or of a dangling/invalid certificate).
 		rawDB, err := sql.Open(
 			"mysql",
-			fmt.Sprintf("%s:%s@tcp(%s)/%s?tls=skip-verify", flagDBUser, flagDBPass, flagDBAddress, flagDBName),
+			fmt.Sprintf("%s:%s@tcp(%s)/%s?tls=%s", flagDBUser, flagDBPass, flagDBAddress, flagDBName, "skip-verify"),
 		)
 		if err != nil {
 			log.Fatal("opening MySQL connection to reserve CA serial: ", err)

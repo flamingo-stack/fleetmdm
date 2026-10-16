@@ -112,7 +112,7 @@ module.exports = {
 
     // For emphasized text
     customRenderer.em = function(textHTML) {
-      return `<span style="display: inline; font-style: italic; font-size:16px;>${textHTML}</span>`;
+      return `<span style="display: inline; font-style: italic; font-size:16px;">${textHTML}</span>`;
     };
 
     // For inline codespans
@@ -162,3 +162,4 @@ module.exports = {
 
 
 };
+

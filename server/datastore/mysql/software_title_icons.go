@@ -183,8 +183,9 @@ func (ds *Datastore) ActivityDetailsForSoftwareTitleIcon(ctx context.Context, te
 		Exclude    bool   `db:"exclude"`
 		RequireAll bool   `db:"require_all"`
 	}
-	var labels []ActivitySoftwareLabel
+	var allLabels []ActivitySoftwareLabel
 	if details.SoftwareInstallerID != nil {
+		var labels []ActivitySoftwareLabel
 		labelQuery := `
 			SELECT
 				labels.id AS id,
@@ -198,8 +199,10 @@ func (ds *Datastore) ActivityDetailsForSoftwareTitleIcon(ctx context.Context, te
 		if err := sqlx.SelectContext(ctx, ds.reader(ctx), &labels, labelQuery, details.SoftwareInstallerID); err != nil {
 			return fleet.DetailsForSoftwareIconActivity{}, ctxerr.Wrap(ctx, err, "getting labels for software title icon")
 		}
+		allLabels = append(allLabels, labels...)
 	}
-	if details.AdamID != nil {
+	if details.AdamID != nil && details.VPPAppTeamID != nil {
+		var labels []ActivitySoftwareLabel
 		labelQuery := `
 			SELECT
 				labels.id AS id,
@@ -213,8 +216,10 @@ func (ds *Datastore) ActivityDetailsForSoftwareTitleIcon(ctx context.Context, te
 		if err := sqlx.SelectContext(ctx, ds.reader(ctx), &labels, labelQuery, details.VPPAppTeamID); err != nil {
 			return fleet.DetailsForSoftwareIconActivity{}, ctxerr.Wrap(ctx, err, "getting labels for software title icon")
 		}
+		allLabels = append(allLabels, labels...)
 	}
 	if details.InHouseAppID != nil {
+		var labels []ActivitySoftwareLabel
 		labelQuery := `
 			SELECT
 				labels.id AS id,
@@ -228,9 +233,10 @@ func (ds *Datastore) ActivityDetailsForSoftwareTitleIcon(ctx context.Context, te
 		if err := sqlx.SelectContext(ctx, ds.reader(ctx), &labels, labelQuery, details.InHouseAppID); err != nil {
 			return fleet.DetailsForSoftwareIconActivity{}, ctxerr.Wrap(ctx, err, "getting labels for software title icon")
 		}
+		allLabels = append(allLabels, labels...)
 	}
 
-	for _, l := range labels {
+	for _, l := range allLabels {
 		switch {
 		case l.Exclude && !l.RequireAll:
 			details.LabelsExcludeAny = append(details.LabelsExcludeAny, fleet.ActivitySoftwareLabel{

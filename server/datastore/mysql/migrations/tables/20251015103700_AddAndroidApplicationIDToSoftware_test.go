@@ -54,21 +54,18 @@ func TestUp_20251015103700(t *testing.T) {
 			var title fleet.SoftwareTitle
 			err := db.Get(&title, "SELECT id, name, source, extension_for, application_id, bundle_identifier FROM software_titles WHERE id = ?", tt.titleID)
 			require.NoError(t, err)
-			switch {
-			case tt.expectedBundleID == nil:
+			if tt.expectedBundleID == nil {
 				require.Nil(t, title.BundleIdentifier)
-
-			case tt.expectedBundleID != nil:
+			} else {
 				require.NotNil(t, tt.expectedBundleID)
 				assert.Equal(t, *tt.expectedBundleID, *title.BundleIdentifier)
+			}
 
-			case tt.expectedApplicationID == nil:
+			if tt.expectedApplicationID == nil {
 				require.Nil(t, title.ApplicationID)
-
-			case tt.expectedApplicationID != nil:
+			} else {
 				require.NotNil(t, title.ApplicationID)
 				assert.Equal(t, tt.expectedApplicationID, title.ApplicationID)
-
 			}
 
 			var gotUniqueID string

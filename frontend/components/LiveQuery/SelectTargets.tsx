@@ -290,6 +290,8 @@ const SelectTargets = ({
     // this effect every render, which dispatches a context update and causes an
     // infinite render loop ("Maximum update depth exceeded"), freezing the
     // Select targets UI (e.g. the X to remove a host stops responding).
+    // TODO: memoize `setSelectedTargets` at its source in QueryContext so this
+    // effect can safely include it in its dependency array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetedHosts, targetedLabels, targetedTeams]);
 
@@ -318,7 +320,9 @@ const SelectTargets = ({
     // if the target was previously selected, we want to remove it now
     let newTargets = prevTargets.filter((t) => t.id !== selectedEntity.id);
     // if the length remains the same, the target was not previously selected so we want to add it now
-    prevTargets.length === newTargets.length && newTargets.push(selectedEntity);
+    if (prevTargets.length === newTargets.length) {
+      newTargets.push(selectedEntity);
+    }
 
     // Logic when to deselect/select "all hosts" when using more granulated filters
     // If "all hosts" is selected

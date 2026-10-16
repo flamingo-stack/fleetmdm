@@ -157,9 +157,15 @@ func ApplyStarterLibrary(
 	if err != nil {
 		return fmt.Errorf("failed to create fleetctl config: %w", err)
 	}
+	if err := os.Chmod(configFile.Name(), 0o600); err != nil {
+		configFile.Close()
+		return fmt.Errorf("failed to set permissions on fleetctl config: %w", err)
+	}
 	fmt.Fprintf(configFile, "contexts:\n  default:\n    address: %s\n    tls-skip-verify: true\n    token: %s\n",
 		serverURL, token)
-	configFile.Close()
+	if err := configFile.Close(); err != nil {
+		return fmt.Errorf("failed to close fleetctl config: %w", err)
+	}
 
 	// Build the gitops args: global config first, then team configs (premium only).
 	args := []string{"gitops", "--config", configFile.Name(), "-f", filepath.Join(outDir, "default.yml")}

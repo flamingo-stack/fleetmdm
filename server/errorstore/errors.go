@@ -317,19 +317,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		flush, err = strconv.ParseBool(opts.Get("flush"))
 
 		if err != nil {
+			h.logger.ErrorContext(r.Context(), "failed to parse flush query param", "err", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 	}
 
-	errors, err := h.Retrieve(flush)
+	storedErrors, err := h.Retrieve(flush)
 	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to retrieve stored errors", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	bytes, err := json.Marshal(errors)
+	bytes, err := json.Marshal(storedErrors)
 	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to marshal stored errors", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

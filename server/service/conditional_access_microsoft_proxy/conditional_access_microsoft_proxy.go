@@ -53,6 +53,7 @@ type CreateResponse struct {
 func (p *Proxy) Create(ctx context.Context, tenantID string) (*CreateResponse, error) {
 	var createResponse CreateResponse
 	if err := p.post(
+		ctx,
 		"/api/v1/microsoft-compliance-partner",
 		createRequest{TenantID: tenantID},
 		&createResponse,
@@ -73,9 +74,13 @@ type GetResponse struct {
 // Get returns the integration settings.
 func (p *Proxy) Get(ctx context.Context, tenantID string, secret string) (*GetResponse, error) {
 	var getResponse GetResponse
+	query := url.Values{}
+	query.Set("entraTenantId", tenantID)
+	query.Set("fleetServerSecret", secret)
 	if err := p.get(
+		ctx,
 		"/api/v1/microsoft-compliance-partner/settings",
-		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s", tenantID, secret),
+		query.Encode(),
 		&getResponse,
 	); err != nil {
 		return nil, fmt.Errorf("get integration settings failed: %w", err)
@@ -92,9 +97,13 @@ type DeleteResponse struct {
 // Returns a fleet.IsNotFound error if the integration doesn't exist.
 func (p *Proxy) Delete(ctx context.Context, tenantID string, secret string) (*DeleteResponse, error) {
 	var deleteResponse DeleteResponse
+	query := url.Values{}
+	query.Set("entraTenantId", tenantID)
+	query.Set("fleetServerSecret", secret)
 	if err := p.delete(
+		ctx,
 		"/api/v1/microsoft-compliance-partner",
-		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s", tenantID, secret),
+		query.Encode(),
 		&deleteResponse,
 	); err != nil {
 		return nil, fmt.Errorf("delete integration failed: %w", err)
@@ -137,6 +146,7 @@ func (p *Proxy) SetComplianceStatus(
 ) (*SetComplianceStatusResponse, error) {
 	var setComplianceStatusResponse SetComplianceStatusResponse
 	if err := p.post(
+		ctx,
 		"/api/v1/microsoft-compliance-partner/device",
 		setComplianceStatusRequest{
 			TenantID: tenantID,
@@ -179,9 +189,14 @@ func (p *Proxy) GetMessageStatus(
 	messageID string,
 ) (*GetMessageStatusResponse, error) {
 	var getMessageStatusResponse GetMessageStatusResponse
+	query := url.Values{}
+	query.Set("entraTenantId", tenantID)
+	query.Set("fleetServerSecret", secret)
+	query.Set("messageId", messageID)
 	if err := p.get(
+		ctx,
 		"/api/v1/microsoft-compliance-partner/device/message",
-		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s&messageId=%s", tenantID, secret, messageID),
+		query.Encode(),
 		&getMessageStatusResponse,
 	); err != nil {
 		return nil, fmt.Errorf("get message status response failed: %w", err)
@@ -189,12 +204,12 @@ func (p *Proxy) GetMessageStatus(
 	return &getMessageStatusResponse, nil
 }
 
-func (p *Proxy) post(path string, request interface{}, response interface{}) error {
+func (p *Proxy) post(ctx context.Context, path string, request interface{}, response interface{}) error {
 	b, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	postRequest, err := http.NewRequest("POST", p.uri+path, nil)
+	postRequest, err := http.NewRequestWithContext(ctx, "POST", p.uri+path, bytes.NewBuffer(b))
 	if err != nil {
 		return fmt.Errorf("post create request: %w", err)
 	}
@@ -202,7 +217,6 @@ func (p *Proxy) post(path string, request interface{}, response interface{}) err
 		return fmt.Errorf("post set headers: %w", err)
 	}
 	postRequest.Header.Add("Content-Type", "application/json")
-	postRequest.Body = io.NopCloser(bytes.NewBuffer(b))
 	resp, err := p.c.Do(postRequest)
 	if err != nil {
 		return fmt.Errorf("post request: %w", err)
@@ -221,12 +235,12 @@ func (p *Proxy) post(path string, request interface{}, response interface{}) err
 	return nil
 }
 
-func (p *Proxy) get(path string, query string, response interface{}) error {
+func (p *Proxy) get(ctx context.Context, path string, query string, response interface{}) error {
 	getURL := p.uri + path
 	if query != "" {
-		getURL += "?" + url.PathEscape(query)
+		getURL += "?" + query
 	}
-	getRequest, err := http.NewRequest("GET", getURL, nil)
+	getRequest, err := http.NewRequestWithContext(ctx, "GET", getURL, nil)
 	if err != nil {
 		return fmt.Errorf("get create request: %w", err)
 	}
@@ -251,12 +265,12 @@ func (p *Proxy) get(path string, query string, response interface{}) error {
 	return nil
 }
 
-func (p *Proxy) delete(path string, query string, response interface{}) error {
+func (p *Proxy) delete(ctx context.Context, path string, query string, response interface{}) error {
 	deleteURL := p.uri + path
 	if query != "" {
-		deleteURL += "?" + url.PathEscape(query)
+		deleteURL += "?" + query
 	}
-	deleteRequest, err := http.NewRequest("DELETE", deleteURL, nil)
+	deleteRequest, err := http.NewRequestWithContext(ctx, "DELETE", deleteURL, nil)
 	if err != nil {
 		return fmt.Errorf("delete create request: %w", err)
 	}
