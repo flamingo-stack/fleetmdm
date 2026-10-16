@@ -1,3 +1,5 @@
+//go:build fleettest
+
 package mysql
 
 import (
@@ -13,6 +15,11 @@ import (
 // CheckAndModifyMysqlConfig is an exported wrapper around the package's
 // internal config validator; used by mysqltest helpers. It must not be used
 // from production code other than the existing mysql package internals.
+//
+// This file is only compiled when the "fleettest" build tag is set, which
+// must never be enabled for production builds. This prevents these
+// test-only accessors from becoming part of the production binary's API
+// surface.
 func CheckAndModifyMysqlConfig(conf *config.MysqlConfig) error {
 	return checkAndModifyConfig(conf)
 }

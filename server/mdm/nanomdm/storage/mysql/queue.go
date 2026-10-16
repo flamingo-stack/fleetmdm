@@ -10,7 +10,6 @@ import (
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/mdm/nanomdm/mdm"
 	common_mysql "github.com/fleetdm/fleet/v4/server/platform/mysql"
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -191,18 +190,7 @@ UPDATE
 
 func (m *MySQLStorage) RetrieveNextCommand(r *mdm.Request, skipNotNow bool) (*mdm.CommandWithSubtype, error) {
 	command := new(mdm.CommandWithSubtype)
-	id := "?"
-	var args []interface{}
-	// This performance optimization eliminates the prepare statement for this frequent query for macOS devices.
-	// For macOS devices, UDID is a UUID, so we can validate it and use it directly in the query.
-	if err := uuid.Validate(r.ID); err == nil {
-		id = "'" + r.ID + "'"
-	} else {
-		// iOS devices have a UDID that is not a valid UUID.
-		// User enrollments have their own identifier, which is not a UUID.
-		// We use a prepared statement for these cases to avoid SQL injection.
-		args = append(args, r.ID)
-	}
+	args := []interface{}{r.ID}
 	err := m.reader(r.Context).QueryRowxContext(
 		r.Context, fmt.Sprintf(
 			// The query should use the ANTIJOIN (NOT EXISTS) optimization on the nano_command_results table.
@@ -213,13 +201,13 @@ FROM nano_enrollment_queue AS q
         ON q.command_uuid = c.command_uuid
     LEFT JOIN nano_command_results r
         ON r.command_uuid = q.command_uuid AND r.id = q.id AND (r.status != 'NotNow' OR %t)
-WHERE q.id = %s
+WHERE q.id = ?
     AND q.active = 1
     AND r.status IS NULL
 ORDER BY
     q.priority DESC,
     q.created_at
-LIMIT 1;`, skipNotNow, id), args...,
+LIMIT 1;`, skipNotNow), args...,
 	).Scan(&command.CommandUUID, &command.Command.Command.RequestType, &command.Raw, &command.Subtype)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

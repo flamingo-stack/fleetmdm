@@ -414,7 +414,7 @@ func (c *Client) MDMLockHost(hostID uint) error {
 func (c *Client) MDMUnlockHost(hostID uint) (string, error) {
 	var response fleet.UnlockHostResponse
 	if err := c.authenticatedRequest(nil, "POST", fmt.Sprintf("/api/latest/fleet/hosts/%d/unlock", hostID), &response); err != nil {
-		return "", fmt.Errorf("lock host request: %w", err)
+		return "", fmt.Errorf("unlock host request: %w", err)
 	}
 	return response.UnlockPIN, nil
 }
@@ -572,3 +572,4 @@ func (c *Client) UploadEULA(eulaPath string, dryRun bool) error {
 
 	return nil
 }
+
