@@ -24,7 +24,7 @@ func (svc *Service) CalendarWebhook(ctx context.Context, eventUUID string, chann
 	appConfig, err := svc.ds.AppConfig(ctx)
 	if err != nil {
 		svc.authz.SkipAuthorization(ctx)
-		return fmt.Errorf("load app config: %w", err)
+		return ctxerr.Wrap(ctx, err, "load app config")
 	}
 
 	if len(appConfig.Integrations.GoogleCalendar) == 0 {
@@ -88,7 +88,7 @@ func (svc *Service) CalendarWebhook(ctx context.Context, eventUUID string, chann
 	if eventDetails.TeamID == nil {
 		// Should not happen
 		svc.authz.SkipAuthorization(ctx)
-		return fmt.Errorf("calendar event %s has no fleet ID", eventUUID)
+		return ctxerr.New(ctx, fmt.Sprintf("calendar event %s has no fleet ID", eventUUID))
 	}
 
 	localConfig := &calendar.Config{
@@ -227,7 +227,7 @@ func (svc *Service) processCalendarEvent(ctx context.Context, eventDetails *flee
 			return "", false, nil
 		}
 		if host.Email == "" {
-			err = fmt.Errorf("host %d has no associated email", host.HostID)
+			err = ctxerr.New(ctx, fmt.Sprintf("host %d has no associated email", host.HostID))
 			return "", false, err
 		}
 

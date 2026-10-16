@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/pem"
-	"fmt"
 	"log/slog"
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
@@ -36,7 +35,7 @@ func ReconcileAppleProfilesBatched(
 ) (err error) {
 	appConfig, err := ds.AppConfig(ctx)
 	if err != nil {
-		return fmt.Errorf("reading app config: %w", err)
+		return ctxerr.Wrap(ctx, err, "reading app config")
 	}
 	if !appConfig.MDM.EnabledAndConfigured {
 		return nil
