@@ -176,10 +176,13 @@ const SoftwareTable = ({
   const vulnFilterDetails = getVulnFilterRenderDetails(vulnFilters);
   const hasVulnFilters = vulnFilterDetails.filterCount > 0;
 
-  // Include showVersions — the titles view can have installers even when
-  // the versions view is empty, so the toggle should stay interactive.
-  const isTrulyEmpty =
-    !hasData && !hasQuery && !hasVulnFilters && !showVersions;
+  // On the versions view, installable software existing elsewhere (titles
+  // view) should keep the toggle interactive even if the versions view
+  // itself is empty. On the titles view, there's no separate signal, so
+  // emptiness alone determines the page-wide-disable state.
+  const isTrulyEmpty = showVersions
+    ? !hasData && !hasQuery && !hasVulnFilters && !installableSoftwareExists
+    : !hasData && !hasQuery && !hasVulnFilters;
   const controlsDisabled = !isSoftwareEnabled || isTrulyEmpty;
 
   const handleShowVersionsToggle = () => {

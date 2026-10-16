@@ -338,7 +338,8 @@ export const isAndroidBYO = (enrollmentStatus: MdmEnrollmentStatus | null) => {
   return enrollmentStatus === "On (personal)";
 };
 
-/** Android COBO (company-owned, fully managed) enrollment. */
+/** Android COBO (company-owned, fully managed) enrollment. Shares the same
+ * current/legacy enrollment status semantics as isAutomaticDeviceEnrollment. */
 export const isAndroidCOBO = (enrollmentStatus: MdmEnrollmentStatus | null) => {
-  return enrollmentStatus === "On (automatic)";
+  return isAutomaticDeviceEnrollment(enrollmentStatus);
 };
