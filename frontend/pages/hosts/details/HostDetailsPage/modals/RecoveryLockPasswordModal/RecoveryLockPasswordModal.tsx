@@ -49,6 +49,7 @@ const RecoveryLockPasswordModal = ({
     () => hostAPI.getRecoveryLockPassword(hostId),
     {
       ...DEFAULT_USE_QUERY_OPTIONS,
+      enabled: canRotatePassword,
       select: (data) => data.recovery_lock_password,
       // prevent caching this sensitive string
       cacheTime: 0,

@@ -17,7 +17,6 @@ func TestWSTEPStore(t *testing.T) {
 
 	wantCert, err := cryptoutil.DecodePEMCertificate(testCert)
 	require.NoError(t, err)
-	require.NoError(t, err)
 
 	// serial number should start at 2 because 1 is reserved for the CA cert
 	sn, err := ds.WSTEPNewSerial(context.Background())
@@ -156,3 +155,4 @@ PQAARDBzDlWvlMGWcbdrdypdeA==
 // // prevent static analysis tools from raising issues due to detection of private key
 // // in code.
 // func testingKey(s string) string { return strings.ReplaceAll(s, "TESTING KEY", "PRIVATE KEY") }
+

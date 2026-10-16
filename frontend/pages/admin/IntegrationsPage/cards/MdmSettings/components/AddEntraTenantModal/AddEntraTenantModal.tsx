@@ -46,13 +46,15 @@ const AddEntraTenantModal = ({ onExit }: IAddEntraTenantModalProps) => {
   };
 
   const onAddTenant = async () => {
-    const { tenantId } = formData;
+    const tenantId = formData.tenantId?.toLowerCase();
 
     const validation = validateFormData({ tenantId });
 
     // do an additional validation to check if the tenant id already exists in the config
     const tenantIdExists =
-      config?.mdm.windows_entra_tenant_ids?.includes(tenantId ?? "") ?? false;
+      config?.mdm.windows_entra_tenant_ids?.some(
+        (id) => id.toLowerCase() === tenantId
+      ) ?? false;
     if (tenantIdExists) {
       renderFlash("error", "Couldn't add tenant. Tenant ID already exists.");
       return;

@@ -54,12 +54,13 @@ func (s *Service) NewActivity(ctx context.Context, user *api.User, activity api.
 	}
 
 	// Activate the next upcoming activity if requested by the activity type.
-	// This is done before storing to avoid holding a DB transaction open during
-	// potentially slow operations.
+	// This is best-effort: a failure here must not prevent persisting the
+	// activity record itself, so we log and swallow the error instead of
+	// aborting the call.
 	if aa, ok := activity.(types.ActivityActivator); ok && aa.MustActivateNextUpcomingActivity() {
 		hostID, cmdUUID := aa.ActivateNextUpcomingActivityArgs()
 		if err := s.providers.ActivateNextUpcomingActivity(ctx, hostID, cmdUUID); err != nil {
-			return ctxerr.Wrap(ctx, err, "activate next upcoming activity")
+			s.logger.ErrorContext(ctx, "activate next upcoming activity", slog.String("err", err.Error()))
 		}
 	}
 

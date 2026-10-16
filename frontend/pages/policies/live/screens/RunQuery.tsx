@@ -120,7 +120,17 @@ const RunQuery = ({
       }
 
       previousSocketData.current = data;
-      const socketData = JSON.parse(data);
+
+      let socketData;
+      try {
+        socketData = JSON.parse(data);
+      } catch (error) {
+        // if the server (or a proxy/misbehaving SockJS transport) sends a
+        // non-JSON frame, treat it as a no-op instead of throwing inside the
+        // socket event handler
+        return;
+      }
+
       setCampaignState((prevCampaignState) => {
         return {
           ...prevCampaignState,

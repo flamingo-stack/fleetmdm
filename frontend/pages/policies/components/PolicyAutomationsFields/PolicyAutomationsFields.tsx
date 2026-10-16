@@ -179,10 +179,10 @@ const PolicyAutomationsFields = forwardRef<
 
     const validate = (): IAutomationsErrors => {
       const newErrors: IAutomationsErrors = {};
-      if (installSoftware && softwareTitleId === null) {
+      if (installSoftware && !gitOpsModeEnabled && softwareTitleId === null) {
         newErrors.install_software = "Please select software to install.";
       }
-      if (runScript && scriptId === null) {
+      if (runScript && !gitOpsModeEnabled && scriptId === null) {
         newErrors.run_script = "Please select a script to run.";
       }
       return newErrors;
@@ -308,7 +308,12 @@ const PolicyAutomationsFields = forwardRef<
           ),
           checked: installSoftware,
           onToggle: handleToggleInstallSoftware,
+          // When GitOps mode locks the picker, the checkbox must also be
+          // locked — otherwise a user could check this row with no way to
+          // select (or fix) a software title, producing an unresolvable
+          // validation error.
           isDisabled: false,
+          isLocked: gitOpsModeEnabled,
           picker: installSoftware ? (
             <DropdownWrapper
               name="software-title"
@@ -338,7 +343,9 @@ const PolicyAutomationsFields = forwardRef<
           ),
           checked: runScript,
           onToggle: handleToggleRunScript,
+          // See comment on install_software's isLocked above.
           isDisabled: false,
+          isLocked: gitOpsModeEnabled,
           picker: runScript ? (
             <DropdownWrapper
               name="script"

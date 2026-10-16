@@ -76,11 +76,12 @@ const SoftwareLibrary = ({
       softwareAPI.getSoftwareTitles(omit(queryKey, "scope")),
     {
       ...QUERY_OPTIONS,
-      // Uses window.location (not a prop) — safe because this component
-      // is only mounted at the /software/library route.
+      // Uses the injected router's location (not window.location) so that
+      // fetch behavior can be controlled via router mocks in tests and
+      // matches the actual InjectedRouter path during client-side navigation.
       enabled:
         teamId !== undefined &&
-        window.location.pathname === PATHS.SOFTWARE_LIBRARY,
+        router.location?.pathname === PATHS.SOFTWARE_LIBRARY,
     }
   );
 

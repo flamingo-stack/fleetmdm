@@ -35,15 +35,14 @@ func (e *AuthError) Error() string {
 // r.Body and you are responsible for Closing it.
 func NewAuthError(r *http.Response) error {
 	body, readErr := io.ReadAll(r.Body)
-	err := &AuthError{
+	if readErr != nil {
+		return fmt.Errorf("reading body of DEP auth error (status %s): %w", r.Status, readErr)
+	}
+	return &AuthError{
 		Body:       body,
 		Status:     r.Status,
 		StatusCode: r.StatusCode,
 	}
-	if readErr != nil {
-		return fmt.Errorf("reading body of DEP auth error: %v: %w", err, readErr)
-	}
-	return err
 }
 
 // OAuth1Tokens represents the token Apple DEP OAuth1 authentication tokens.

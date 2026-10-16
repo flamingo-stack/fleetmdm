@@ -72,7 +72,17 @@ func (db Database) Eval(ctx context.Context, software []fleet.Software, logger *
 				} else {
 					currentVersion = swItem.Version
 				}
-				fixedVersion := strings.Split(fixedVersionWithEpochPrefix, ":")[1]
+				versionParts := strings.SplitN(fixedVersionWithEpochPrefix, ":", 2)
+				if len(versionParts) != 2 {
+					logger.ErrorContext(ctx, "unexpected fixed version format, missing epoch prefix",
+						"package", swItem.Name,
+						"arch", swItem.Arch,
+						"platform", db.platform,
+						"fixed_version", fixedVersionWithEpochPrefix,
+					)
+					continue
+				}
+				fixedVersion := versionParts[1]
 
 				if utils.Rpmvercmp(currentVersion, fixedVersion) < 0 {
 					vulnerabilities = append(vulnerabilities, fleet.SoftwareVulnerability{
@@ -109,3 +119,4 @@ func (db Database) Close() error {
 	}
 	return db.sqlite.Close()
 }
+
