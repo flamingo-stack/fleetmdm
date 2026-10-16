@@ -18,6 +18,12 @@ func init() {
 }
 
 // LegacyIntegrationsWithCertAuthorities represents the legacy integrations configuration when it included certificate authorities.
+//
+// NOTE: There is no legacy "hydrant" field here intentionally. The certificate_authorities table
+// and dbCertificateAuthority struct include Hydrant-specific columns/fields (client_id,
+// client_secret_encrypted) to support Hydrant going forward, but Hydrant was never supported as a
+// legacy integration stored in app_config_json's "integrations" key, so there is no legacy source
+// to migrate from and this migration correctly does not populate any Hydrant rows.
 type LegacyIntegrationsWithCertAuthorities struct {
 	Jira           []*fleet.JiraIntegration           `json:"jira"`
 	Zendesk        []*fleet.ZendeskIntegration        `json:"zendesk"`
@@ -152,7 +158,7 @@ FROM
 		for _, digicertCA := range integrations.DigiCert.Value {
 			digicertAPIToken := getCAConfigAsset(digicertCA.Name, fleet.CAConfigDigiCert)
 			if digicertAPIToken == nil || len(digicertAPIToken.Value) == 0 {
-				return errors.New("DigiCert API token not found in ca_config_assets")
+				return fmt.Errorf("DigiCert API token not found in ca_config_assets for %s", digicertCA.Name)
 			}
 			casToInsert = append(casToInsert, dbCertificateAuthority{
 				CertificateAuthority: fleet.CertificateAuthority{

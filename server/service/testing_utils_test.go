@@ -328,6 +328,13 @@ func newTestServiceWithClock(t *testing.T, ds fleet.Datastore, rs fleet.QueryRes
 	})
 }
 
+// NOTE: this is an internal copy of the test users used by server/service/svctest.
+// The svctest package (used by external test packages, e.g. servicetest) maintains
+// its own equivalent testUsers/createTestUsers/mockMailService because it cannot
+// import unexported identifiers from this package, and this package cannot import
+// svctest without risking an import cycle. If you change this data (e.g. add a
+// role, change bcrypt cost), update server/service/svctest/users.go and
+// server/service/svctest/mocks.go to match.
 func createTestUsers(t *testing.T, ds fleet.Datastore) map[string]fleet.User {
 	users := make(map[string]fleet.User)
 	// Map iteration is random so we sort and iterate using the testUsers keys.
@@ -385,6 +392,9 @@ func createEnrollSecrets(t *testing.T, count int) []*fleet.EnrollSecret {
 	return secrets
 }
 
+// NOTE: this is an internal copy of the mock mail service also defined in
+// server/service/svctest/mocks.go. See the comment above createTestUsers for
+// why the duplication exists; keep both copies' fields and methods in sync.
 type mockMailService struct {
 	SendEmailFn func(e fleet.Email) error
 	Invoked     bool

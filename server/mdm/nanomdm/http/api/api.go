@@ -291,11 +291,12 @@ func readPEMCertAndKey(input []byte) (cert []byte, key []byte, err error) {
 		case block.Type == "PRIVATE KEY" || strings.HasSuffix(block.Type, " PRIVATE KEY"):
 			if x509.IsEncryptedPEMBlock(block) {
 				err = errors.New("private key PEM appears to be encrypted")
-				break
+				return
 			}
 			key = pem.EncodeToMemory(block)
 		default:
 			err = fmt.Errorf("unrecognized PEM type: %q", block.Type)
+			return
 		}
 	}
 	return

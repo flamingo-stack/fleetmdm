@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -14,13 +15,20 @@ const (
 	totalRecords = 1000000
 )
 
+func getEnvOrDefault(key, defaultValue string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
-	// MySQL connection details from your Docker Compose file
-	user := "fleet"
-	password := "insecure"
-	host := "localhost" // Assuming you are running this script on the same host as Docker
-	port := "3306"
-	database := "fleet"
+	// MySQL connection details, overridable via environment variables for local dev
+	user := getEnvOrDefault("SEED_MYSQL_USER", "fleet")
+	password := getEnvOrDefault("SEED_MYSQL_PASSWORD", "insecure")
+	host := getEnvOrDefault("SEED_MYSQL_HOST", "localhost") // Assuming you are running this script on the same host as Docker
+	port := getEnvOrDefault("SEED_MYSQL_PORT", "3306")
+	database := getEnvOrDefault("SEED_MYSQL_DATABASE", "fleet")
 
 	// Construct the MySQL DSN (Data Source Name)
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", user, password, host, port, database)

@@ -224,7 +224,8 @@ func (dc *DeviceClient) getMinDesktopPayload(token string) (fleetDesktopResponse
 func (dc *DeviceClient) DesktopSummary(token string) (*fleetDesktopResponse, error) {
 	r, err := dc.getMinDesktopPayload(token)
 	if err == nil {
-		r.FailingPolicies = new(uintValueOrZero(r.FailingPolicies))
+		failingPolicies := uintValueOrZero(r.FailingPolicies)
+		r.FailingPolicies = &failingPolicies
 		dc.fleetAlternativeBrowserHostFromServer = r.AlternativeBrowserHost
 		return &r, nil
 	}
@@ -243,7 +244,7 @@ func (dc *DeviceClient) DesktopSummary(token string) (*fleetDesktopResponse, err
 		}
 		return &fleetDesktopResponse{
 			DesktopSummary: fleet.DesktopSummary{
-				FailingPolicies: new(failingPolicies),
+				FailingPolicies: &failingPolicies,
 			},
 		}, nil
 	}

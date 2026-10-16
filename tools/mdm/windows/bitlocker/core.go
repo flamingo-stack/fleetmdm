@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"flag"
 	"fmt"
 )
@@ -10,29 +11,29 @@ func BitlockerEncryptionNumericalPassword(encryptionPassword string) error {
 	// Connect to the volume
 	vol, err := Connect("c:")
 	if err != nil {
-		return fmt.Errorf("there was an error connecting to the volume - error: %v", err)
+		return fmt.Errorf("there was an error connecting to the volume: %w", err)
 	}
 	defer vol.Close()
 
 	// Prepare for encryption
 	if err := vol.Prepare(VolumeTypeDefault, EncryptionTypeSoftware); err != nil {
-		return fmt.Errorf("there was an error preparing the volume for encryption - error: %v", err)
+		return fmt.Errorf("there was an error preparing the volume for encryption: %w", err)
 	}
 
 	// Add a recovery protector
 
 	if err := vol.ProtectWithNumericalPassword(encryptionPassword); err != nil {
-		return fmt.Errorf("there was an error adding a recovery protector - error: %v", err)
+		return fmt.Errorf("there was an error adding a recovery protector: %w", err)
 	}
 
 	// Protect with TPM
 	if err := vol.ProtectWithTPM(nil); err != nil {
-		return fmt.Errorf("there was an error protecting with TPM - error: %v", err)
+		return fmt.Errorf("there was an error protecting with TPM: %w", err)
 	}
 
 	// Start encryption
 	if err := vol.Encrypt(XtsAES256, EncryptDataOnly); err != nil {
-		return fmt.Errorf("there was an error starting encryption - error: %v", err)
+		return fmt.Errorf("there was an error starting encryption: %w", err)
 	}
 
 	return nil
@@ -43,13 +44,13 @@ func BitlockerDecryption() error {
 	// Connect to the volume
 	vol, err := Connect("c:")
 	if err != nil {
-		return fmt.Errorf("there was an error connecting to the volume - error: %v", err)
+		return fmt.Errorf("there was an error connecting to the volume: %w", err)
 	}
 	defer vol.Close()
 
 	// Start decryption
 	if err := vol.Decrypt(); err != nil {
-		return fmt.Errorf("there was an error starting decryption - error: %v", err)
+		return fmt.Errorf("there was an error starting decryption: %w", err)
 	}
 
 	return nil
@@ -60,17 +61,49 @@ func GetBitlockerStatus() (*EncryptionStatus, error) {
 	// Connect to the volume
 	vol, err := Connect("c:")
 	if err != nil {
-		return nil, fmt.Errorf("there was an error connecting to the volume - error: %v", err)
+		return nil, fmt.Errorf("there was an error connecting to the volume: %w", err)
 	}
 	defer vol.Close()
 
 	// Get volume status
 	status, err := vol.GetBitlockerStatus()
 	if err != nil {
-		return nil, fmt.Errorf("there was an error starting decryption - error: %v", err)
+		return nil, fmt.Errorf("there was an error getting bitlocker status: %w", err)
 	}
 
 	return status, nil
+}
+
+// generateNumericalRecoveryPassword generates a random 48-digit BitLocker
+// numerical recovery password formatted as 8 groups of 6 digits, per
+// https://learn.microsoft.com/en-us/windows/win32/secprov/getkeyprotectornumericalpassword-win32-encryptablevolume
+func generateNumericalRecoveryPassword() (string, error) {
+	const groups = 8
+	password := ""
+	for i := 0; i < groups; i++ {
+		if i > 0 {
+			password += "-"
+		}
+
+		max := int64(1000000) // 6 digits, 0-999999
+		b := make([]byte, 8)
+		if _, err := rand.Read(b); err != nil {
+			return "", fmt.Errorf("there was an error generating a random recovery password: %w", err)
+		}
+
+		var n int64
+		for _, v := range b {
+			n = (n << 8) | int64(v)
+		}
+		if n < 0 {
+			n = -n
+		}
+		n = n % max
+
+		password += fmt.Sprintf("%06d", n)
+	}
+
+	return password, nil
 }
 
 func main() {
@@ -84,11 +117,13 @@ func main() {
 	if *enableBitlocker {
 		fmt.Println("About to attempt enabling bitlocker")
 
-		//This needs to be generated with algorithm defined at
-		//https://learn.microsoft.com/en-us/windows/win32/secprov/getkeyprotectornumericalpassword-win32-encryptablevolume
-		newPassword := "527230-472395-606199-107525-536789-168927-479336-471856"
+		newPassword, err := generateNumericalRecoveryPassword()
+		if err != nil {
+			fmt.Printf("bitlocker encryption error - %v\n", err)
+			return
+		}
 
-		err := BitlockerEncryptionNumericalPassword(newPassword)
+		err = BitlockerEncryptionNumericalPassword(newPassword)
 		if err != nil {
 			fmt.Printf("bitlocker encryption error - %v\n", err)
 			return

@@ -7,11 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// NewEnrollment creates a new row in the acme_enrollments table with the given
+// NewACMEEnrollment creates a new row in the acme_enrollments table with the given
 // host_identifier. It generates a new path_identifier for the row and returns
 // it.
-func (ds *Datastore) NewEnrollment(ctx context.Context, hostIdentifier string) (string, error) {
-	ctx, span := tracer.Start(ctx, "acme.mysql.NewEnrollment")
+func (ds *Datastore) NewACMEEnrollment(ctx context.Context, hostIdentifier string) (string, error) {
+	ctx, span := tracer.Start(ctx, "acme.mysql.NewACMEEnrollment")
 	defer span.End()
 
 	pathIdentifier := uuid.NewString()
@@ -26,3 +26,4 @@ VALUES (?, ?)
 
 	return pathIdentifier, nil
 }
+

@@ -14,9 +14,10 @@ import (
 	"github.com/fleetdm/fleet/v4/server/aws_common"
 )
 
+// >>> OPENFRAME(redis-aws-iam-auth): AWS IAM auth token generation for ElastiCache — openframe/docs/redis-aws-iam-auth.md
 const (
 	// emptySHA256 is the SHA256 hash of an empty payload (for GET requests)
-	emptySHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	emptySHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"[:64]
 
 	elastiCacheServiceName = "elasticache"
 )
@@ -90,3 +91,5 @@ func (g *awsIAMAuthTokenGenerator) generateNewToken(ctx context.Context) (string
 
 	return authToken, nil
 }
+
+// <<< OPENFRAME(redis-aws-iam-auth)

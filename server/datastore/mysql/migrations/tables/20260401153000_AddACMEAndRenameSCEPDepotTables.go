@@ -88,7 +88,7 @@ func Up_20260401153000(tx *sql.Tx) error {
   created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  FOREIGN KEY (acme_account_id) REFERENCES acme_accounts(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (acme_account_id) REFERENCES acme_accounts(id) ON DELETE RESTRICT ON UPDATE CASCADE,
   UNIQUE KEY idx_issued_certificate_serial (issued_certificate_serial)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `)

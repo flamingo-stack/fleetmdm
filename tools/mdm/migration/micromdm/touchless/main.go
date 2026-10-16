@@ -55,6 +55,14 @@ type TokenUpdate struct {
 // timestamp has changed, the record will be completely ignored.
 const referenceTime = "2000-01-01 00:00:00"
 
+// sqlEscape escapes single quotes and backslashes in a string so it can be
+// safely embedded in a single-quoted SQL string literal.
+func sqlEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return s
+}
+
 func main() {
 	flDB := flag.String("db", "/var/db/micromdm/micromdm.db", "path to micromdm DB")
 	flag.Parse()
@@ -116,6 +124,7 @@ func main() {
 		}
 
 		var sb strings.Builder
+		var skippedDevices []string
 		for _, device := range devices {
 			if len(device.UDID) == 0 {
 				log.Println("Skipping device with empty UDID. Serial: ", device.SerialNumber, " UUID: ", device.UUID, " Last seen: ", device.LastSeen)
@@ -124,6 +133,7 @@ func main() {
 			pushInfo, err := apnsDB.PushInfo(context.Background(), device.UDID)
 			if err != nil {
 				log.Println(device.UDID, " FAILED: ", err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (push info error: %s)", device.UDID, err))
 				continue
 			}
 
@@ -145,17 +155,20 @@ func main() {
 			authenticatePlist, err := plist.Marshal(authenticate)
 			if err != nil {
 				log.Println(err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (authenticate plist marshal error: %s)", device.UDID, err))
 				continue
 			}
 
 			token, err := hex.DecodeString(pushInfo.Token)
 			if err != nil {
 				log.Println(device.UDID, " FAILED: ", err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (push token decode error: %s)", device.UDID, err))
 				continue
 			}
 			unlockToken, err := hex.DecodeString(device.UnlockToken)
 			if err != nil {
 				log.Println(device.UDID, " FAILED: ", err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (unlock token decode error: %s)", device.UDID, err))
 				continue
 			}
 
@@ -173,12 +186,14 @@ func main() {
 			tokenPlist, err := plist.Marshal(tokenUpdate)
 			if err != nil {
 				log.Println(err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (token plist marshal error: %s)", device.UDID, err))
 				continue
 			}
 
 			certHash, err := deviceDB.GetUDIDCertHash([]byte(device.UDID))
 			if err != nil {
 				log.Println(device.UDID, " FAILED: ", err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (cert hash lookup error: %s)", device.UDID, err))
 				continue
 			}
 
@@ -191,6 +206,7 @@ func main() {
 			})
 			if err != nil {
 				log.Println(device.UDID, " FAILED: ", err)
+				skippedDevices = append(skippedDevices, fmt.Sprintf("%s (cert lookup error: %s)", device.UDID, err))
 				continue
 			}
 
@@ -201,19 +217,20 @@ func main() {
 				cert, err := x509.ParseCertificate(certDer)
 				if err != nil {
 					log.Printf("WARN: unable to parse SCEP identity certificate for %s: %s\n", device.UDID, err)
-				}
-				certExpiration = cert.NotAfter.Format("2006-01-02 15:04:05")
+				} else {
+					certExpiration = cert.NotAfter.Format("2006-01-02 15:04:05")
 
-				// encode it to PEM to store it in the DB in
-				// the format that nano expects. At the moment
-				// we don't really need this value as we can
-				// make do with the hash and the expiration,
-				// but I figured it would be good to have it.
-				pemBlock := &pem.Block{
-					Type:  "CERTIFICATE",
-					Bytes: cert.Raw,
+					// encode it to PEM to store it in the DB in
+					// the format that nano expects. At the moment
+					// we don't really need this value as we can
+					// make do with the hash and the expiration,
+					// but I figured it would be good to have it.
+					pemBlock := &pem.Block{
+						Type:  "CERTIFICATE",
+						Bytes: cert.Raw,
+					}
+					certPEM = pem.EncodeToMemory(pemBlock)
 				}
-				certPEM = pem.EncodeToMemory(pemBlock)
 			}
 
 			if len(device.BootstrapToken) == 0 {
@@ -263,7 +280,7 @@ UPDATE
     bootstrap_token_b64 = VALUES(bootstrap_token_b64),
     bootstrap_token_at = CURRENT_TIMESTAMP,
     identity_cert = VALUES(identity_cert);
-		`, device.UDID, device.SerialNumber, authenticatePlist, tokenPlist, base64BootstrapToken, certPEM, referenceTime, device.UDID, referenceTime))
+		`, sqlEscape(device.UDID), sqlEscape(device.SerialNumber), sqlEscape(string(authenticatePlist)), sqlEscape(string(tokenPlist)), sqlEscape(base64BootstrapToken), sqlEscape(string(certPEM)), sqlEscape(referenceTime), sqlEscape(device.UDID), sqlEscape(referenceTime)))
 
 			sb.WriteString(fmt.Sprintf(`
 INSERT INTO nano_enrollments (
@@ -309,15 +326,15 @@ UPDATE
     enabled = VALUES(enabled),
     last_seen_at = CURRENT_TIMESTAMP,
     token_update_tally = nano_enrollments.token_update_tally + 1;`,
-				device.UDID,
-				device.UDID,
-				tokenUpdate.Topic,
-				tokenUpdate.PushMagic,
-				hex.EncodeToString(tokenUpdate.Token),
+				sqlEscape(device.UDID),
+				sqlEscape(device.UDID),
+				sqlEscape(tokenUpdate.Topic),
+				sqlEscape(tokenUpdate.PushMagic),
+				sqlEscape(hex.EncodeToString(tokenUpdate.Token)),
 				device.Enrolled,
-				referenceTime,
-				device.UDID,
-				referenceTime,
+				sqlEscape(referenceTime),
+				sqlEscape(device.UDID),
+				sqlEscape(referenceTime),
 			))
 
 			sb.WriteString(fmt.Sprintf(`
@@ -335,7 +352,7 @@ ON DUPLICATE KEY UPDATE
   updated_at = updated_at, -- preserve updated_at
   sha256 = VALUES(sha256),
   cert_not_valid_after = VALUES(cert_not_valid_after);
-	    `, device.UDID, hex.EncodeToString(certHash), certExpiration, referenceTime, device.UDID, referenceTime))
+	    `, sqlEscape(device.UDID), sqlEscape(hex.EncodeToString(certHash)), sqlEscape(certExpiration), sqlEscape(referenceTime), sqlEscape(device.UDID), sqlEscape(referenceTime)))
 		}
 
 		sb.WriteString("\n")
@@ -343,6 +360,13 @@ ON DUPLICATE KEY UPDATE
 			log.Fatal(err)
 		}
 		log.Println("Wrote device/enrollment records to dump.sql")
+
+		if len(skippedDevices) > 0 {
+			log.Printf("WARNING: skipped %d device(s) during migration due to errors:", len(skippedDevices))
+			for _, s := range skippedDevices {
+				log.Println("  - ", s)
+			}
+		}
 	}()
 
 	// SCEP cert/key
