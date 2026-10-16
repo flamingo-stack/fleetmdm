@@ -2,6 +2,7 @@ package allmulti
 
 import (
 	"context"
+	"errors"
 
 	"github.com/fleetdm/fleet/v4/server/mdm/nanomdm/mdm"
 	"github.com/fleetdm/fleet/v4/server/mdm/nanomdm/storage"
@@ -58,6 +59,9 @@ func (ms *MultiAllStorage) execStores(ctx context.Context, r errRunner) (interfa
 				"n", sErr.storeNumber,
 				"err", sErr.err,
 			)
+			if finalErr == nil {
+				finalErr = sErr.err
+			}
 		}
 	}
 	return finalValue, finalErr
@@ -81,7 +85,10 @@ func (ms *MultiAllStorage) RetrieveTokenUpdateTally(ctx context.Context, id stri
 	val, err := ms.execStores(ctx, func(s storage.AllStorage) (interface{}, error) {
 		return s.RetrieveTokenUpdateTally(ctx, id)
 	})
-	return val.(int), err
+	if err != nil {
+		return 0, err
+	}
+	return val.(int), nil
 }
 
 func (ms *MultiAllStorage) StoreUserAuthenticate(r *mdm.Request, msg *mdm.UserAuthenticate) error {
@@ -102,17 +109,20 @@ func (ms *MultiAllStorage) ExpandEmbeddedSecrets(ctx context.Context, document s
 	doc, err := ms.execStores(ctx, func(s storage.AllStorage) (interface{}, error) {
 		return s.ExpandEmbeddedSecrets(ctx, document)
 	})
-	return doc.(string), err
+	if err != nil {
+		return "", err
+	}
+	return doc.(string), nil
 }
 
 func (ms *MultiAllStorage) ExpandHostSecrets(ctx context.Context, document string, enrollmentID string) (string, error) {
 	// NOT IMPLEMENTED
-	return document, nil
+	return document, errors.New("not implemented")
 }
 
 func (ms *MultiAllStorage) SetRecoveryLockFailed(ctx context.Context, hostUUID string, errorMsg string) error {
 	// NOT IMPLEMENTED
-	return nil
+	return errors.New("not implemented")
 }
 
 func (ms *MultiAllStorage) BulkDeleteHostUserCommandsWithoutResults(ctx context.Context, commandToIDs map[string][]string) error {

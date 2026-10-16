@@ -177,9 +177,15 @@ const AutomationsModal = ({
         await Promise.all(promises);
       } else if (teamIdForApi !== undefined) {
         // A real team: everything goes to teams.update in a single payload.
+        // Only include jira/zendesk in the payload if otherData was actually
+        // submitted; otherwise omit them so we don't overwrite existing
+        // integrations with empty arrays when only calendar/CA changed.
         const integrations: ITeamIntegrations = {
-          jira: otherData?.integrations.jira ?? [],
-          zendesk: otherData?.integrations.zendesk ?? [],
+          jira: otherData?.integrations.jira ?? teamConfig?.integrations.jira ?? [],
+          zendesk:
+            otherData?.integrations.zendesk ??
+            teamConfig?.integrations.zendesk ??
+            [],
         };
         if (calendarData) {
           integrations.google_calendar = {

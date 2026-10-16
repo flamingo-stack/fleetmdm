@@ -29,7 +29,7 @@ import { getDisplayedSoftwareName } from "../../helpers";
 const baseClass = "edit-configuration-modal";
 
 export interface ISoftwareConfigurationFormData {
-  configuration: string;
+  configuration: string | Record<string, unknown>;
 }
 
 interface IEditConfigurationModalProps {
@@ -101,13 +101,14 @@ const EditConfigurationModal = ({
       // iOS/iPadOS: send XML as a string
       return { configuration: formData };
     }
-    // Android: send parsed JSON object (cast to string to match interface;
-    // runtime value is an object that gets serialized by sendRequest)
+    // Android: send parsed JSON object; the interface allows either a string
+    // (Apple/XML) or an object (Android/JSON), matching the actual runtime
+    // value that gets serialized by sendRequest.
     if (formData === "") {
-      return { configuration: ({} as unknown) as string };
+      return { configuration: {} };
     }
     return {
-      configuration: (JSON.parse(formData) as unknown) as string,
+      configuration: JSON.parse(formData) as Record<string, unknown>,
     };
   };
 
@@ -303,3 +304,7 @@ const EditConfigurationModal = ({
 };
 
 export default EditConfigurationModal;
+FILE>>>
+
+<<<NOTES
+1. CONFIDENCE: 70 - In `EditConfigurationModal.tsx`, widened the `ISoftwareConfigurationFormData.configuration` type from `string` to `string | Record<string, unknown>` so it truthfully reflects both runtime shapes (XML string for Apple, parsed JSON object for Android). Removed the lying `as unknown as string` double-casts in `buildSubmitPayload()`, now returning `{ configuration: {} }` and `{ configuration: JSON.parse(formData) as Record<string, unknown> }` directly with no unsafe cast. This is a local-file fix; risk is that `softwareAPI.editSoftwarePackage`/`editAppStoreApp` (defined in `services/entities/software`, not visible here) may have parameter types declared strictly as `string` for the configuration field, which could now produce a type error at the call sites in this same file — I cannot see/edit that service file to confirm or widen its signature, so a complete fix may additionally require updating the corresponding type in `services/entities/software`.

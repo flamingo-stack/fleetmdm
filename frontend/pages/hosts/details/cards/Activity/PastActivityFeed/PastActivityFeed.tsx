@@ -10,7 +10,10 @@ import { ShowActivityDetailsHandler } from "components/ActivityItem/ActivityItem
 
 import EmptyFeed from "../EmptyFeed/EmptyFeed";
 
-import { pastActivityComponentMap } from "../ActivityConfig";
+import {
+  pastActivityComponentMap,
+  IHostActivityItemComponentPropsWithShowDetails,
+} from "../ActivityConfig";
 
 const baseClass = "past-activity-feed";
 
@@ -21,6 +24,12 @@ interface IPastActivityFeedProps {
   onNextPage: () => void;
   onPreviousPage: () => void;
 }
+
+const usesShowDetails = (
+  activityType: keyof typeof pastActivityComponentMap
+): boolean => {
+  return Boolean(activityType);
+};
 
 const PastActivityFeed = ({
   activities,
@@ -68,13 +77,30 @@ const PastActivityFeed = ({
             );
             return null;
           }
+          if (
+            "onShowDetails" in ActivityItemComponent.propTypes ||
+            usesShowDetails(activity.type)
+          ) {
+            const ActivityItemComponentWithShowDetails = ActivityItemComponent as React.FC<IHostActivityItemComponentPropsWithShowDetails>;
+            return (
+              <ActivityItemComponentWithShowDetails
+                key={activity.id}
+                tab="past"
+                activity={activity}
+                hideCancel
+                onShowDetails={onShowDetails}
+              />
+            );
+          }
+          const ActivityItemComponentWithoutShowDetails = ActivityItemComponent as React.FC<
+            Omit<IHostActivityItemComponentPropsWithShowDetails, "onShowDetails">
+          >;
           return (
-            <ActivityItemComponent
+            <ActivityItemComponentWithoutShowDetails
               key={activity.id}
               tab="past"
               activity={activity}
               hideCancel
-              onShowDetails={onShowDetails}
             />
           );
         })}

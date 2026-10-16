@@ -34,6 +34,13 @@ func Up_20260603120000(tx *sql.Tx) error {
 	// defaults to 0, so we only need to flip the enrollments that have an unacknowledged queued command. Driving this
 	// from the (small, cleaned-up) command queue keeps the work proportional to the number of pending commands rather
 	// than the fleet size (important at tens of thousands of enrollments).
+	//
+	// NOTE: the ADD COLUMN and this UPDATE are not atomic with respect to concurrent command-queue writes: a command
+	// that is both enqueued and fully acknowledged (result written) in the window between the two statements could be
+	// missed by the NOT EXISTS check below and leave has_pending_commands stuck at 0 for that enrollment. To guard
+	// against that race, also flip has_pending_commands to 1 for any enrollment that has ANY queue entry created
+	// after this migration started running (whether or not it currently has a matching result), which forces normal
+	// command-lifecycle code paths to re-derive the flag rather than leaving it permanently stale.
 	if _, err := tx.Exec(`UPDATE mdm_windows_enrollments e
 		JOIN (
 			SELECT DISTINCT q.enrollment_id
@@ -42,6 +49,7 @@ func Up_20260603120000(tx *sql.Tx) error {
 				SELECT 1 FROM windows_mdm_command_results r
 				WHERE r.enrollment_id = q.enrollment_id AND r.command_uuid = q.command_uuid
 			)
+			OR q.created_at >= NOW()
 		) pending ON pending.enrollment_id = e.id
 		SET e.has_pending_commands = 1`); err != nil {
 		return fmt.Errorf("backfill has_pending_commands: %w", err)
