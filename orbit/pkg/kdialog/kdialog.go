@@ -95,7 +95,7 @@ func execCmdWithOutput(timeout time.Duration, args ...string) ([]byte, int, erro
 
 	output, exitCode, err := execuser.RunWithOutput(kdialogProcessName, opts...)
 	if err != nil {
-		return nil, exitCode, err
+		return nil, exitCode, fmt.Errorf("run kdialog via execuser: %w", err)
 	}
 
 	return output, exitCode, nil
