@@ -26,10 +26,20 @@ type Migrations []*Migration
 func (ms Migrations) Len() int      { return len(ms) }
 func (ms Migrations) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
 func (ms Migrations) Less(i, j int) bool {
-	if ms[i].Version == ms[j].Version {
-		log.Fatalf("goose: duplicate version %v detected:\n%v\n%v", ms[i].Version, ms[i].Source, ms[j].Source)
-	}
 	return ms[i].Version < ms[j].Version
+}
+
+// duplicateVersion returns an error describing the first duplicate migration
+// version found in ms, or nil if there are none. Callers must invoke this
+// after sorting, since sort.Interface implementations must not return errors
+// or abort the process from within a comparator.
+func (ms Migrations) duplicateVersion() error {
+	for i := 1; i < len(ms); i++ {
+		if ms[i].Version == ms[i-1].Version {
+			return fmt.Errorf("goose: duplicate version %v detected:\n%v\n%v", ms[i].Version, ms[i-1].Source, ms[i].Source)
+		}
+	}
+	return nil
 }
 
 func (ms Migrations) Current(current int64) (*Migration, error) {
@@ -126,13 +136,15 @@ func (c *Client) collectMigrations(dirpath string, current, target int64) (Migra
 		}
 	}
 
-	migrations = sortAndConnectMigrations(migrations)
-
-	return migrations, nil
+	return sortAndConnectMigrations(migrations)
 }
 
-func sortAndConnectMigrations(migrations Migrations) Migrations {
+func sortAndConnectMigrations(migrations Migrations) (Migrations, error) {
 	sort.Sort(migrations)
+
+	if err := migrations.duplicateVersion(); err != nil {
+		return nil, err
+	}
 
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
@@ -145,7 +157,7 @@ func sortAndConnectMigrations(migrations Migrations) Migrations {
 		migrations[i].Previous = prev
 	}
 
-	return migrations
+	return migrations, nil
 }
 
 func versionFilter(v, current, target int64) bool {
@@ -165,7 +177,10 @@ func versionFilter(v, current, target int64) bool {
 func (c *Client) GetDBVersion(db *sql.DB) (int64, error) {
 	rows, err := c.Dialect.dbVersionQuery(db, c.TableName)
 	if err != nil {
-		return 0, c.createVersionTable(db)
+		if isTableDoesNotExistErr(err) {
+			return 0, c.createVersionTable(db)
+		}
+		return 0, err
 	}
 	defer rows.Close()
 
@@ -216,6 +231,49 @@ func (c *Client) GetDBVersion(db *sql.DB) (int64, error) {
 	// migrations proceed/retry instead of panicking. — openframe/docs/migrations.md
 	return 0, nil
 	// <<< OPENFRAME(migration-race)
+}
+
+// isTableDoesNotExistErr reports whether err looks like it was caused by the
+// goose version table not existing yet, as opposed to some other query
+// failure (connection drop, permission error, deadlock, etc.) that should be
+// surfaced to the caller rather than papered over with a CREATE TABLE.
+func isTableDoesNotExistErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return containsAny(msg, []string{
+		"does not exist",  // postgres
+		"doesn't exist",   // mysql
+		"no such table",   // sqlite
+		"relation",        // postgres: relation "..." does not exist
+	})
+}
+
+func containsAny(s string, substrs []string) bool {
+	for _, sub := range substrs {
+		if len(sub) > 0 && stringContains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func stringContains(s, sub string) bool {
+	return len(s) >= len(sub) && indexOf(s, sub) >= 0
+}
+
+func indexOf(s, sub string) int {
+	n := len(sub)
+	if n == 0 {
+		return 0
+	}
+	for i := 0; i+n <= len(s); i++ {
+		if s[i:i+n] == sub {
+			return i
+		}
+	}
+	return -1
 }
 
 // Create the goose_db_version table

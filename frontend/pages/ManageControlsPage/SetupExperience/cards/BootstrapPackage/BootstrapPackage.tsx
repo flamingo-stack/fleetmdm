@@ -141,13 +141,34 @@ const BootstrapPackage = ({
   const onDelete = async () => {
     try {
       await mdmAPI.deleteBootstrapPackage(currentTeamId);
+    } catch (error) {
+      console.error("Failed to delete bootstrap package:", error);
+      renderFlash("error", "Couldn't delete. Please try again.");
+      setShowDeleteBootstrapPackageModal(false);
+      refretchBootstrapMetadata();
+      if (currentTeamId !== API_NO_TEAM_ID) {
+        refetchTeamConfig();
+      } else {
+        refetchGlobalConfig();
+      }
+      return;
+    }
+
+    try {
       await mdmAPI.updateSetupExperienceSettings({
         fleet_id: currentTeamId,
         macos_manual_agent_install: false,
       });
       renderFlash("success", "Successfully deleted.");
-    } catch {
-      renderFlash("error", "Couldn't delete. Please try again.");
+    } catch (error) {
+      console.error(
+        "Bootstrap package deleted, but failed to update setup experience settings:",
+        error
+      );
+      renderFlash(
+        "error",
+        "Bootstrap package deleted, but couldn't update settings. Please try again."
+      );
     } finally {
       setShowDeleteBootstrapPackageModal(false);
       refretchBootstrapMetadata();

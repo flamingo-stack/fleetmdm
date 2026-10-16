@@ -3,6 +3,7 @@ package externalsvc
 import (
 	"context"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -118,6 +119,11 @@ func doWithRetry(fn func() (*jira.Response, error)) error {
 			}
 		}
 
+		if resp == nil {
+			// no response received (e.g. connection error); treat as retryable
+			return err
+		}
+
 		if resp.StatusCode >= http.StatusInternalServerError {
 			// 500+ status, can be worth retrying
 			return err
@@ -128,8 +134,11 @@ func doWithRetry(fn func() (*jira.Response, error)) error {
 			// https://developer.atlassian.com/cloud/jira/platform/rate-limiting/
 			// for details.
 			rawAfter := resp.Header.Get("Retry-After")
-			afterSecs, err := strconv.ParseInt(rawAfter, 10, 0)
-			if err == nil && (time.Duration(afterSecs)*time.Second) < maxWaitForRetryAfter {
+			afterSecs, parseErr := strconv.ParseInt(rawAfter, 10, 0)
+			if parseErr != nil {
+				log.Printf("jira: failed to parse Retry-After header %q: %v", rawAfter, parseErr)
+			}
+			if parseErr == nil && (time.Duration(afterSecs)*time.Second) < maxWaitForRetryAfter {
 				// the retry-after duration is reasonable, wait for it and return a
 				// retryable error so that we try again.
 				time.Sleep(time.Duration(afterSecs) * time.Second)

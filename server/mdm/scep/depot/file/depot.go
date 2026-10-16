@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log/slog"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func NewFileDepot(path string) (*fileDepot, error) {
 		fmt.Sprintf("%s/index.txt", path),
 		os.O_RDONLY|os.O_CREATE, 0o666)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("opening index.txt: %w", err)
 	}
 	defer f.Close()
 	return &fileDepot{dirPath: path}, nil
@@ -41,19 +42,19 @@ type fileDepot struct {
 func (d *fileDepot) CA(pass []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 	caPEM, err := d.getFile("ca.pem")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("reading ca.pem: %w", err)
 	}
 	cert, err := loadCert(caPEM.Data)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("loading ca certificate: %w", err)
 	}
 	keyPEM, err := d.getFile("ca.key")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("reading ca.key: %w", err)
 	}
 	key, err := loadKey(keyPEM.Data, pass)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("loading ca key: %w", err)
 	}
 	return []*x509.Certificate{cert}, key, nil
 }
@@ -100,7 +101,11 @@ func (d *fileDepot) Put(cn string, crt *x509.Certificate) error {
 		return err
 	}
 	if err := d.writeDB(cn, serial, filename, crt); err != nil {
-		// TODO : remove certificate in case of writeDB problems
+		// remove the certificate file we just wrote so the on-disk PEM files
+		// stay in sync with index.txt; otherwise a leftover cert file with
+		// no corresponding index entry will desync the depot and cause a
+		// subsequent Put() with the same cn/serial to fail with "file exists".
+		os.Remove(filepath)
 		return err
 	}
 
@@ -115,19 +120,19 @@ func (d *fileDepot) Serial() (*big.Int, error) {
 	if err := d.check("serial"); err != nil {
 		// assuming it doesnt exist, create
 		if err := d.writeSerial(s); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("writing serial: %w", err)
 		}
 		return s, nil
 	}
 	file, err := os.Open(name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("opening serial file: %w", err)
 	}
 	defer file.Close()
 	r := bufio.NewReader(file)
-	data, err := r.ReadString('\r')
+	data, err := r.ReadString('\n')
 	if err != nil && err != io.EOF {
-		return nil, err
+		return nil, fmt.Errorf("reading serial file: %w", err)
 	}
 	data = strings.TrimSuffix(data, "\r")
 	data = strings.TrimSuffix(data, "\n")
@@ -136,7 +141,7 @@ func (d *fileDepot) Serial() (*big.Int, error) {
 		return nil, errors.New("could not convert " + data + " to serial number")
 	}
 	if err := d.incrementSerial(serial); err != nil {
-		return serial, err
+		return serial, fmt.Errorf("incrementing serial: %w", err)
 	}
 	return serial, nil
 }
@@ -236,7 +241,7 @@ func (d *fileDepot) HasCN(_ string, allowTime int, cert *x509.Certificate, revok
 			return false, errors.New("DN " + dn + " already exists")
 		}
 		if revokeOldCertificate {
-			fmt.Println("Revoking certificate with serial " + key + " from DB. Recreation of CRL needed.")
+			slog.Info("revoking certificate from DB, recreation of CRL needed", "serial", key)
 			entries := strings.Split(value, "\t")
 			addDB.WriteString("R\t" + entries[1] + "\t" + makeOpenSSLTime(time.Now()) + "\t" + strings.ToUpper(entries[3]) + "\t" + entries[4] + "\t" + entries[5] + "\n")
 		}
@@ -354,14 +359,17 @@ func (d *fileDepot) check(path string) error {
 
 func (d *fileDepot) getFile(path string) (*file, error) {
 	if err := d.check(path); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("checking %s: %w", path, err)
 	}
 	fi, err := os.Stat(d.path(path))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stat %s: %w", path, err)
 	}
 	b, err := ioutil.ReadFile(d.path(path))
-	return &file{fi, b}, err
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return &file{fi, b}, nil
 }
 
 func (d *fileDepot) path(name string) string {

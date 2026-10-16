@@ -97,7 +97,7 @@ const Software = ({
                   data={(isSoftwareEnabled && software?.software) || []}
                   isLoading={isSoftwareFetching}
                   pageIndex={softwarePageIndex}
-                  defaultSortHeader={SOFTWARE_DEFAULT_SORT_DIRECTION}
+                  defaultSortHeader={SOFTWARE_DEFAULT_SORT_HEADER}
                   defaultSortDirection={SOFTWARE_DEFAULT_SORT_DIRECTION}
                   resultsTitle="software"
                   emptyComponent={() => <EmptySoftwareTable />}

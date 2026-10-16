@@ -24,10 +24,12 @@ var (
 	moduserenv  *windows.LazyDLL = windows.NewLazySystemDLL("userenv.dll")
 
 	procWTSEnumerateSessionsW        *windows.LazyProc = modwtsapi32.NewProc("WTSEnumerateSessionsW")
+	procWTSFreeMemory                *windows.LazyProc = modwtsapi32.NewProc("WTSFreeMemory")
 	procWTSGetActiveConsoleSessionId *windows.LazyProc = modkernel32.NewProc("WTSGetActiveConsoleSessionId")
 	procWTSQueryUserToken            *windows.LazyProc = modwtsapi32.NewProc("WTSQueryUserToken")
 	procDuplicateTokenEx             *windows.LazyProc = modadvapi32.NewProc("DuplicateTokenEx")
 	procCreateEnvironmentBlock       *windows.LazyProc = moduserenv.NewProc("CreateEnvironmentBlock")
+	procDestroyEnvironmentBlock      *windows.LazyProc = moduserenv.NewProc("DestroyEnvironmentBlock")
 	procCreateProcessAsUser          *windows.LazyProc = modadvapi32.NewProc("CreateProcessAsUserW")
 )
 
@@ -171,11 +173,17 @@ func wtsEnumerateSessions() ([]*WTS_SESSION_INFO, error) {
 	if returnCode, _, err := procWTSEnumerateSessionsW.Call(WTS_CURRENT_SERVER_HANDLE, 0, 1, uintptr(unsafe.Pointer(&sessionInformation)), uintptr(unsafe.Pointer(&sessionCount))); returnCode == 0 {
 		return nil, fmt.Errorf("call native WTSEnumerateSessionsW: %s", err)
 	}
+	defer procWTSFreeMemory.Call(uintptr(sessionInformation)) //nolint:errcheck
 
 	structSize := unsafe.Sizeof(WTS_SESSION_INFO{})
 	current := uintptr(sessionInformation)
 	for i := 0; i < sessionCount; i++ {
-		sessionList = append(sessionList, (*WTS_SESSION_INFO)(unsafe.Pointer(current)))
+		sessionInfo := (*WTS_SESSION_INFO)(unsafe.Pointer(current))
+		sessionList = append(sessionList, &WTS_SESSION_INFO{
+			SessionID:      sessionInfo.SessionID,
+			WinStationName: sessionInfo.WinStationName,
+			State:          sessionInfo.State,
+		})
 		current += structSize
 	}
 
@@ -228,10 +236,12 @@ func startProcessAsCurrentUser(appPath, cmdLine, workDir string) error {
 	if userToken, err = duplicateUserTokenFromSessionID(sessionId); err != nil {
 		return fmt.Errorf("get duplicate user token for current user session: %s", err)
 	}
+	defer windows.CloseHandle(windows.Handle(userToken)) //nolint:errcheck
 
 	if returnCode, _, err := procCreateEnvironmentBlock.Call(uintptr(unsafe.Pointer(&envInfo)), uintptr(userToken), 1); returnCode == 0 {
 		return fmt.Errorf("create environment details for process: %s", err)
 	}
+	defer procDestroyEnvironmentBlock.Call(uintptr(envInfo)) //nolint:errcheck
 
 	// TODO(lucas): Test out creation flags and startup info values.
 	creationFlags := CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE
@@ -251,6 +261,8 @@ func startProcessAsCurrentUser(appPath, cmdLine, workDir string) error {
 	); returnCode == 0 {
 		return fmt.Errorf("create process as user: %s", err)
 	}
+	windows.CloseHandle(processInfo.Process) //nolint:errcheck
+	windows.CloseHandle(processInfo.Thread)  //nolint:errcheck
 
 	return nil
 }
