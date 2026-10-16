@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	MigrationClient.AddMigration(Up_20250723111413, Down_20250723111413)
+	MigrationClient.AddMigration(Up_20250731151000, Down_20250731151000)
 }
 
 // enforceFileVaultAtLogin is used to set
@@ -31,6 +31,7 @@ func enforceFileVaultAtLogin(original []byte) ([]byte, error) {
 		return nil, errors.New("failed to access PayloadContent element")
 	}
 
+	found := false
 	for _, c := range payloadContent {
 		payload, ok := c.(map[string]interface{})
 		if !ok {
@@ -39,7 +40,12 @@ func enforceFileVaultAtLogin(original []byte) ([]byte, error) {
 
 		if payload["PayloadType"] == "com.apple.MCX.FileVault2" {
 			payload["DeferForceAtUserLoginMaxBypassAttempts"] = 0
+			found = true
 		}
+	}
+
+	if !found {
+		return nil, errors.New("failed to find com.apple.MCX.FileVault2 payload in profile")
 	}
 
 	out, err := plist.MarshalIndent(configuration, "  ")
@@ -50,7 +56,7 @@ func enforceFileVaultAtLogin(original []byte) ([]byte, error) {
 	return out, nil
 }
 
-func Up_20250723111413(tx *sql.Tx) error {
+func Up_20250731151000(tx *sql.Tx) error {
 	// Idempotent migration.
 	txx := sqlx.Tx{Tx: tx, Mapper: reflectx.NewMapperFunc("db", sqlx.NameMapper)}
 
@@ -79,7 +85,7 @@ CREATE TABLE IF NOT EXISTS legacy_host_filevault_profiles (
 		return err
 	}
 
-	_, err = txx.Exec(`
+	res, err := txx.Exec(`
 		INSERT IGNORE INTO legacy_host_filevault_profiles
 			(host_uuid, status, operation_type, profile_uuid, detail, command_uuid, scope, created_at, updated_at)
 		SELECT 
@@ -97,6 +103,25 @@ CREATE TABLE IF NOT EXISTS legacy_host_filevault_profiles (
 	`)
 	if err != nil {
 		return fmt.Errorf("inserting legacy filevault profile hosts %w", err)
+	}
+
+	legacyRowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("getting rows affected for legacy filevault profile hosts insert: %w", err)
+	}
+
+	var legacyHostCount int
+	if err := txx.Get(&legacyHostCount, `
+		SELECT COUNT(*) FROM host_mdm_apple_profiles WHERE profile_identifier = 'com.fleetdm.fleet.mdm.filevault'
+	`); err != nil {
+		return fmt.Errorf("counting host_mdm_apple_profiles filevault rows: %w", err)
+	}
+
+	if legacyHostCount > 0 && legacyRowsAffected == 0 {
+		return fmt.Errorf(
+			"expected to back up %d filevault host profile rows into legacy_host_filevault_profiles but inserted 0",
+			legacyHostCount,
+		)
 	}
 
 	fvProfiles := []struct {
@@ -132,6 +157,6 @@ CREATE TABLE IF NOT EXISTS legacy_host_filevault_profiles (
 	return nil
 }
 
-func Down_20250723111413(tx *sql.Tx) error {
+func Down_20250731151000(tx *sql.Tx) error {
 	return nil
 }
