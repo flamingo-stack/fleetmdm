@@ -89,7 +89,10 @@ func Up_20240221112844(tx *sql.Tx) error {
 					} else if err != nil {
 						// We do not update this row -- it can be updated next time the policy is modified. This should be very rare.
 						// Lack of update can happen if duplicate name is 255 characters, or all of the nearly 10000 names we tried are already taken.
-						logger.Warn.Printf("failed to update policy id %d", id)
+						// The error is intentionally not returned/propagated (see comment above); it is wrapped here only for
+						// logging context so the original cause is not lost from observability.
+						wrappedErr := fmt.Errorf("failed to update policy id %d (row left for next modification): %w", id, err)
+						logger.Warn.Printf("%s", wrappedErr)
 					}
 					break
 				}
@@ -105,3 +108,4 @@ func Up_20240221112844(tx *sql.Tx) error {
 func Down_20240221112844(tx *sql.Tx) error {
 	return nil
 }
+

@@ -38,7 +38,7 @@ var _ depot.Depot = (*HostIdentitySCEPDepot)(nil)
 // NewHostIdentitySCEPDepot creates and returns a *HostIdentitySCEPDepot.
 func NewHostIdentitySCEPDepot(db *sqlx.DB, ds fleet.Datastore, logger *slog.Logger, cfg *config.FleetConfig) (*HostIdentitySCEPDepot, error) {
 	if err := db.Ping(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("pinging host identity depot database: %w", err)
 	}
 	return &HostIdentitySCEPDepot{
 		db:     db,
@@ -68,11 +68,11 @@ func (d *HostIdentitySCEPDepot) Serial() (*big.Int, error) {
 	// Insert an empty row to generate a new auto-incremented serial number
 	result, err := d.db.Exec(`INSERT INTO host_identity_scep_serials () VALUES ();`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("inserting host identity scep serial: %w", err)
 	}
 	lid, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting last insert id for host identity scep serial: %w", err)
 	}
 	return big.NewInt(lid), nil
 }
@@ -131,7 +131,7 @@ func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
 			SET revoked = 1 
 			WHERE name = ?`, name)
 		if err != nil {
-			return err
+			return fmt.Errorf("revoking existing host identity certificates: %w", err)
 		}
 		rowsAffected, _ := result.RowsAffected()
 		if rowsAffected > 0 {
@@ -150,6 +150,9 @@ func (d *HostIdentitySCEPDepot) Put(name string, crt *x509.Certificate) error {
 			certPEM,
 			pubKeyRaw,
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("inserting host identity scep certificate: %w", err)
+		}
+		return nil
 	}, d.logger)
 }

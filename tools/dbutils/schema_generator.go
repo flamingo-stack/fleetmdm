@@ -31,9 +31,9 @@ func getTestAddress() string {
 	return "localhost:3307"
 }
 
-func panicif(err error) {
+func panicif(err error, context string) {
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", context, err))
 	}
 }
 
@@ -50,10 +50,10 @@ func main() {
 		"mysql",
 		fmt.Sprintf("%s:%s@tcp(%s)/?multiStatements=true", testUsername, testPassword, testAddress),
 	)
-	panicif(err)
+	panicif(err, "opening mysql connection")
 	defer db.Close()
 	_, err = db.Exec("DROP DATABASE IF EXISTS schemadb; CREATE DATABASE schemadb;")
-	panicif(err)
+	panicif(err, "creating schemadb database")
 
 	// Create a datastore client in order to run migrations as usual
 	config := config.MysqlConfig{
@@ -63,19 +63,19 @@ func main() {
 		Database: "schemadb",
 	}
 	ds, err := mysql.New(config, clock.NewMockClock(), mysql.Logger(slog.New(slog.DiscardHandler)), mysql.LimitAttempts(1))
-	panicif(err)
+	panicif(err, "creating datastore client")
 	defer ds.Close()
-	panicif(ds.MigrateTables(context.Background()))
+	panicif(ds.MigrateTables(context.Background()), "running migrations")
 
 	// Set created_at/updated_at for migrations and app_config_json to prevent the schema from being changed every time
 	// This schema is to test anyway
 	fixedDate := time.Date(2020, 01, 01, 01, 01, 01, 01, time.UTC)
 	_, err = db.Exec(`USE schemadb`)
-	panicif(err)
+	panicif(err, "selecting schemadb database")
 	_, err = db.Exec(`UPDATE app_config_json SET created_at = ?, updated_at = ?`, fixedDate, fixedDate)
-	panicif(err)
+	panicif(err, "updating app_config_json timestamps")
 	_, err = db.Exec(`UPDATE migration_status_tables SET tstamp = ?`, fixedDate)
-	panicif(err)
+	panicif(err, "updating migration_status_tables timestamp")
 
 	// Dump schema to dumpfile
 	// --set-gtid-purged=OFF omits replication transaction IDs from the dump, making it
@@ -87,7 +87,7 @@ func main() {
 	)
 	var stdoutBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
-	panicif(cmd.Run())
+	panicif(cmd.Run(), "running mysqldump command")
 
-	panicif(os.WriteFile(os.Args[1], stdoutBuf.Bytes(), 0o655))
+	panicif(os.WriteFile(os.Args[1], stdoutBuf.Bytes(), 0o655), "writing schema dump to file")
 }

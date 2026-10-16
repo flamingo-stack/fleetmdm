@@ -134,11 +134,11 @@ func (ac *AppCommander) expectToChangeFileSystem(ctx context.Context, changer fu
 
 	switch {
 	case preListError != nil && postListError != nil:
-		listError = fmt.Errorf("app pre list: %v, app post list: %v", preListError, postListError)
+		listError = fmt.Errorf("app pre list: %w, app post list: %v", preListError, postListError)
 	case preListError != nil:
-		listError = fmt.Errorf("app pre list: %v", preListError)
+		listError = fmt.Errorf("app pre list: %w", preListError)
 	case postListError != nil:
-		listError = fmt.Errorf("app post list: %v", postListError)
+		listError = fmt.Errorf("app post list: %w", postListError)
 	}
 
 	return appPath, changerError, listError

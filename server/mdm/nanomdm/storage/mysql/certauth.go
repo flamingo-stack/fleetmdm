@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,7 +15,10 @@ import (
 func (s *MySQLStorage) queryRowContextRowExists(ctx context.Context, query string, args ...interface{}) (bool, error) {
 	var ct int
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(&ct)
-	return ct > 0, err
+	if err != nil {
+		return false, fmt.Errorf("querying row exists: %w", err)
+	}
+	return ct > 0, nil
 }
 
 func (s *MySQLStorage) EnrollmentHasCertHash(r *mdm.Request, _ string) (bool, error) {
@@ -53,7 +57,10 @@ UPDATE
 		strings.ToLower(hash),
 		certNotValidAfter,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("associating cert hash: %w", err)
+	}
+	return nil
 }
 
 func (s *MySQLStorage) EnrollmentFromHash(ctx context.Context, hash string) (string, error) {
@@ -66,5 +73,8 @@ func (s *MySQLStorage) EnrollmentFromHash(ctx context.Context, hash string) (str
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
-	return id, err
+	if err != nil {
+		return "", fmt.Errorf("querying enrollment from hash: %w", err)
+	}
+	return id, nil
 }

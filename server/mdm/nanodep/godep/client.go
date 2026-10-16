@@ -143,14 +143,14 @@ func (c *Client) do(ctx context.Context, name, method, path string, in interface
 	if in != nil {
 		bodyBytes, err := json.Marshal(in)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("marshaling dep request body: %w", err)
 		}
 		body = bytes.NewBuffer(bodyBytes)
 	}
 
 	req, err := depclient.NewRequestWithContext(ctx, name, c.store, method, path, body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating dep request: %w", err)
 	}
 	req.Header.Set("User-Agent", userAgent)
 	if body != nil {
@@ -162,7 +162,7 @@ func (c *Client) do(ctx context.Context, name, method, path string, in interface
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return req, err
+		return req, fmt.Errorf("executing dep request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -175,7 +175,7 @@ func (c *Client) do(ctx context.Context, name, method, path string, in interface
 	if out != nil {
 		err := json.NewDecoder(resp.Body).Decode(out)
 		if err != nil {
-			return req, err
+			return req, fmt.Errorf("decoding dep response body: %w", err)
 		}
 	}
 
