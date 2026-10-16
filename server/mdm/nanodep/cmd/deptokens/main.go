@@ -1,21 +1,30 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/fleetdm/fleet/v4/server/mdm/nanodep/tokenpki"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
 	defaultCN   = "deptokens"
 	defaultDays = 1
+
+	pemEncryptedType = "ENCRYPTED RSA PRIVATE KEY"
+	pbkdf2Iterations = 100000
+	pbkdf2SaltLen    = 16
 )
 
 // overridden by -ldflags -X
@@ -60,7 +69,9 @@ func main() {
 }
 
 // encodeEncryptedKeyPEM generates a PEM structure for key optionally
-// encrypting it with password.
+// encrypting it with password. Encryption, when used, is performed with
+// AES-256-GCM using a PBKDF2-derived key, rather than the legacy/deprecated
+// PEM encryption (which relies on 3DES/PBKDF1 and is not considered secure).
 func encodeEncryptedKeyPEM(key *rsa.PrivateKey, password string) ([]byte, error) {
 	keyBytes := x509.MarshalPKCS1PrivateKey(key)
 	var block *pem.Block
@@ -70,34 +81,88 @@ func encodeEncryptedKeyPEM(key *rsa.PrivateKey, password string) ([]byte, error)
 			Bytes: keyBytes,
 		}
 	} else {
-		var err error
-		block, err = x509.EncryptPEMBlock(rand.Reader, "RSA PRIVATE KEY", keyBytes, []byte(password), x509.PEMCipher3DES)
+		salt := make([]byte, pbkdf2SaltLen)
+		if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+			return nil, err
+		}
+		derivedKey := pbkdf2.Key([]byte(password), salt, pbkdf2Iterations, 32, sha256.New)
+		gcmCipher, err := aes.NewCipher(derivedKey)
 		if err != nil {
 			return nil, err
+		}
+		gcm, err := cipher.NewGCM(gcmCipher)
+		if err != nil {
+			return nil, err
+		}
+		nonce := make([]byte, gcm.NonceSize())
+		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+			return nil, err
+		}
+		ciphertext := gcm.Seal(nil, nonce, keyBytes, nil)
+		// layout: salt || nonce || ciphertext
+		payload := make([]byte, 0, len(salt)+len(nonce)+len(ciphertext))
+		payload = append(payload, salt...)
+		payload = append(payload, nonce...)
+		payload = append(payload, ciphertext...)
+		block = &pem.Block{
+			Type:  pemEncryptedType,
+			Bytes: payload,
 		}
 	}
 	return pem.EncodeToMemory(block), nil
 }
 
 // decodeEncryptedKeyPEM decodes an private key in pemBytes optionally
-// decrypting it with password.
+// decrypting it with password. Supports both the modern AES-256-GCM format
+// written by encodeEncryptedKeyPEM and legacy x509 PEM-encrypted blocks for
+// backwards compatibility with previously generated keys.
 func decodeEncryptedKeyPEM(pemBytes []byte, password string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode(pemBytes)
-	if block.Type != "RSA PRIVATE KEY" {
-		return nil, errors.New("PEM type is not RSA PRIVATE KEY")
-	}
-	keyBytes := block.Bytes
-	if x509.IsEncryptedPEMBlock(block) {
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		keyBytes := block.Bytes
+		if x509.IsEncryptedPEMBlock(block) { //nolint:staticcheck // retained for backwards compatibility with legacy encrypted keys
+			if password == "" {
+				return nil, errors.New("no password supplied for encrypted PEM")
+			}
+			var err error
+			keyBytes, err = x509.DecryptPEMBlock(block, []byte(password)) //nolint:staticcheck // retained for backwards compatibility with legacy encrypted keys
+			if err != nil {
+				return nil, err
+			}
+		}
+		return x509.ParsePKCS1PrivateKey(keyBytes)
+	case pemEncryptedType:
 		if password == "" {
 			return nil, errors.New("no password supplied for encrypted PEM")
 		}
-		var err error
-		keyBytes, err = x509.DecryptPEMBlock(block, []byte(password))
+		if len(block.Bytes) < pbkdf2SaltLen {
+			return nil, errors.New("invalid encrypted PEM: too short")
+		}
+		salt := block.Bytes[:pbkdf2SaltLen]
+		rest := block.Bytes[pbkdf2SaltLen:]
+		derivedKey := pbkdf2.Key([]byte(password), salt, pbkdf2Iterations, 32, sha256.New)
+		gcmCipher, err := aes.NewCipher(derivedKey)
 		if err != nil {
 			return nil, err
 		}
+		gcm, err := cipher.NewGCM(gcmCipher)
+		if err != nil {
+			return nil, err
+		}
+		if len(rest) < gcm.NonceSize() {
+			return nil, errors.New("invalid encrypted PEM: too short")
+		}
+		nonce := rest[:gcm.NonceSize()]
+		ciphertext := rest[gcm.NonceSize():]
+		keyBytes, err := gcm.Open(nil, nonce, ciphertext, nil)
+		if err != nil {
+			return nil, err
+		}
+		return x509.ParsePKCS1PrivateKey(keyBytes)
+	default:
+		return nil, errors.New("PEM type is not RSA PRIVATE KEY")
 	}
-	return x509.ParsePKCS1PrivateKey(keyBytes)
 }
 
 // generateKeyPair creates and saves a keypair checking whether they exist first.

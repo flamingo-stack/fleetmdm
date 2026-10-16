@@ -24,6 +24,13 @@ func printf(format string, a ...any) {
 	fmt.Printf(time.Now().UTC().Format("2006-01-02T15:04:05Z")+": "+format, a...)
 }
 
+// logErrorAndContinue reports a transient API error without aborting the
+// entire (potentially multi-hour) load test run. Callers should decide
+// whether to skip the current unit of work and continue with the rest.
+func logErrorAndContinue(format string, a ...any) {
+	printf("ERROR (continuing): "+format+"\n", a...)
+}
+
 func main() {
 	fleetURL := flag.String("fleet_url", "", "URL (with protocol and port of Fleet server)")
 	apiToken := flag.String("api_token", "", "API authentication token to use on API calls")
@@ -56,7 +63,7 @@ func main() {
 		printfAndPrompt("Cleaning up all (%d) teams...", len(teams))
 		for _, team := range teams {
 			if err := apiClient.DeleteTeam(team.ID); err != nil {
-				log.Fatalf("delete team %s: %s", team.Name, err)
+				logErrorAndContinue("delete team %s: %s", team.Name, err)
 			}
 		}
 		return
@@ -91,7 +98,8 @@ func main() {
 			Name: ptr.String(fmt.Sprintf("Team %d", t)),
 		})
 		if err != nil {
-			log.Fatalf("team create: %s", err)
+			logErrorAndContinue("team create: %s", err)
+			continue
 		}
 		teams = append(teams, team)
 	}
@@ -101,8 +109,11 @@ func main() {
 	start = time.Now()
 
 	for i, host := range hosts {
+		if i >= len(teams) {
+			break
+		}
 		if err := apiClient.TransferHosts([]string{host.Hostname}, "", "", "", teams[i].Name); err != nil {
-			log.Fatalf("transfer host %s to team %s: %s", host.Hostname, teams[i].Name, err)
+			logErrorAndContinue("transfer host %s to team %s: %s", host.Hostname, teams[i].Name, err)
 		}
 	}
 	printf("2. Duration: %s\n", time.Since(start))
@@ -113,7 +124,7 @@ func main() {
 	for _, team := range teams {
 		printf("Applying profiles to team %s...\n", team.Name)
 		if err := apiClient.ApplyTeamProfiles(team.Name, profiles, fleet.ApplyTeamSpecOptions{}); err != nil {
-			log.Fatalf("apply profiles to team %s: %s", team.Name, err)
+			logErrorAndContinue("apply profiles to team %s: %s", team.Name, err)
 		}
 	}
 	printf("3a. Duration: %s\n", time.Since(start))
@@ -133,7 +144,9 @@ func main() {
 				}
 				teamSummary, err := apiClient.GetConfigProfilesSummary(&team.ID)
 				if err != nil {
-					log.Fatalf("get config profile summary for team %s: %s", team.Name, err)
+					logErrorAndContinue("get config profile summary for team %s: %s", team.Name, err)
+					doneCount++
+					continue
 				}
 				teamSummaries[team.ID] = *teamSummary
 				if summaryDone(*teamSummary) {
@@ -160,19 +173,22 @@ func main() {
 	for _, team := range teams {
 		teamProfiles, err := apiClient.ListProfiles(ptr.Uint(team.ID))
 		if err != nil {
-			log.Fatalf("load team %s profiles: ", team.Name)
+			logErrorAndContinue("load team %s profiles: %s", team.Name, err)
+			continue
 		}
 		if len(teamProfiles) != len(profiles) {
-			log.Fatalf("invalid number of profiles in team %s: %d", team.Name, len(teamProfiles))
+			logErrorAndContinue("invalid number of profiles in team %s: %d", team.Name, len(teamProfiles))
+			continue
 		}
 		// Remove the last profile.
 		lastProfile := teamProfiles[len(teamProfiles)-1]
 		if err := apiClient.DeleteProfile(lastProfile.ProfileID); err != nil {
-			log.Fatalf("delete profile %s for team %s", lastProfile.Identifier, team.Name)
+			logErrorAndContinue("delete profile %s for team %s: %s", lastProfile.Identifier, team.Name, err)
+			continue
 		}
 		// Add a new profile.
 		if _, err := apiClient.AddProfile(team.ID, newProfile); err != nil {
-			log.Fatalf("upload new profile for team %s", team.Name)
+			logErrorAndContinue("upload new profile for team %s: %s", team.Name, err)
 		}
 	}
 	printf("4a. Duration: %s\n", time.Since(start))
@@ -192,7 +208,8 @@ func main() {
 				Name: ptr.String(fmt.Sprintf("Team Extra %d", t)),
 			})
 			if err != nil {
-				log.Fatalf("team create: %s", err)
+				logErrorAndContinue("team create: %s", err)
+				continue
 			}
 			extraTeams = append(extraTeams, team)
 		}
@@ -202,8 +219,11 @@ func main() {
 		start = time.Now()
 
 		for t := 0; t < *teamExtraCount; t++ {
+			if t >= len(extraTeams) || t >= len(hosts) {
+				break
+			}
 			if err := apiClient.TransferHosts([]string{hosts[t].Hostname}, "", "", "", extraTeams[t].Name); err != nil {
-				log.Fatalf("transfer host %s to team %s: %s", hosts[t].Hostname, extraTeams[t].Name, err)
+				logErrorAndContinue("transfer host %s to team %s: %s", hosts[t].Hostname, extraTeams[t].Name, err)
 			}
 		}
 		printf("6a. Duration: %s\n", time.Since(start))
@@ -218,7 +238,7 @@ func main() {
 
 		for _, team := range extraTeams {
 			if err := apiClient.ApplyTeamProfiles(team.Name, profiles, fleet.ApplyTeamSpecOptions{}); err != nil {
-				log.Fatalf("apply profiles to extra team %s: %s", team.Name, err)
+				logErrorAndContinue("apply profiles to extra team %s: %s", team.Name, err)
 			}
 		}
 		printf("7a. Duration: %s\n", time.Since(start))
@@ -233,7 +253,7 @@ func main() {
 
 		for _, extraTeam := range extraTeams {
 			if err := apiClient.DeleteTeam(extraTeam.ID); err != nil {
-				log.Fatalf("delete extra team %s: %s", extraTeam.Name, err)
+				logErrorAndContinue("delete extra team %s: %s", extraTeam.Name, err)
 			}
 		}
 		printf("8. Duration: %s\n", time.Since(start))

@@ -19,9 +19,8 @@ func Up_20251124162948(tx *sql.Tx) error {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("add last_restarted_at to hosts: %w", err)
 		}
-	}
 
-	updateStmt := `
+		updateStmt := `
 		UPDATE hosts
 		SET last_restarted_at =
 			CASE
@@ -29,8 +28,9 @@ func Up_20251124162948(tx *sql.Tx) error {
 				ELSE DATE_SUB(detail_updated_at, INTERVAL uptime/1000 MICROSECOND)
 			END
 	`
-	if _, err := tx.Exec(updateStmt); err != nil {
-		return fmt.Errorf("update last_restarted_at in hosts: %w", err)
+		if _, err := tx.Exec(updateStmt); err != nil {
+			return fmt.Errorf("update last_restarted_at in hosts: %w", err)
+		}
 	}
 	return nil
 }

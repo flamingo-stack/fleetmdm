@@ -47,6 +47,41 @@ const generateDescriptionHelpText = (immutableFields: string[]) => {
   return `Label ${allButLast}, and ${last} ${SUFFIX}`;
 };
 
+// Merges freshly-computed validation for a single changed field into the
+// previously-shown validation state: existing errors are preserved unless
+// the field that just changed is now valid, in which case its error is
+// cleared. No new errors are introduced until the next full validation
+// (e.g. on blur or submit).
+const mergeFieldValidation = (
+  prev: ILabelFormValidation,
+  fullValidation: ILabelFormValidation,
+  fieldName: string
+): ILabelFormValidation => {
+  const next: ILabelFormValidation = { ...prev, isValid: true };
+
+  // start from previous errors
+  if (prev.name) next.name = prev.name;
+  if (prev.description) next.description = prev.description;
+
+  // ONLY CLEAR existing error on this field if it is now valid.
+  // Do NOT set a new error if there wasn't one before.
+  if (fieldName === "name") {
+    if (prev.name && fullValidation.name?.isValid) {
+      next.name = undefined; // clear existing name error
+    }
+  } else if (fieldName === "description") {
+    if (prev.description && fullValidation.description?.isValid) {
+      next.description = undefined; // clear existing description error
+    }
+  }
+
+  // recompute isValid from remaining errors
+  const fields = [next.name, next.description];
+  next.isValid = fields.every((f) => !f || f.isValid);
+
+  return next;
+};
+
 const LabelForm = ({
   defaultName = "",
   defaultDescription = "",
@@ -83,31 +118,9 @@ const LabelForm = ({
     // full validation for new data
     const fullValidation = validateLabelFormData(nextData);
 
-    setFormValidation((prev) => {
-      const next: ILabelFormValidation = { ...prev, isValid: true };
-
-      // start from previous errors
-      if (prev.name) next.name = prev.name;
-      if (prev.description) next.description = prev.description;
-
-      // ONLY CLEAR existing error on this field if it is now valid.
-      // Do NOT set a new error if there wasn't one before.
-      if (fieldName === "name") {
-        if (prev.name && fullValidation.name?.isValid) {
-          next.name = undefined; // clear existing name error
-        }
-      } else if (fieldName === "description") {
-        if (prev.description && fullValidation.description?.isValid) {
-          next.description = undefined; // clear existing description error
-        }
-      }
-
-      // recompute isValid from remaining errors
-      const fields = [next.name, next.description];
-      next.isValid = fields.every((f) => !f || f.isValid);
-
-      return next;
-    });
+    setFormValidation((prev) =>
+      mergeFieldValidation(prev, fullValidation, fieldName)
+    );
   };
 
   const onInputBlur = ({ name: fieldName, value }: ParsedTarget) => {

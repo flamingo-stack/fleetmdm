@@ -32,6 +32,16 @@ module.exports = {
       // Add the requesting socket to the room.
       sails.sockets.join(this.req, roomId);
     }
+
+    // Bound the length of the user-supplied question and strip backtick sequences
+    // and other characters that could be used to break out of the template literal
+    // or inject additional instructions into the prompt.
+    const MAX_NATURAL_LANGUAGE_QUESTION_LENGTH = 1000;
+    let sanitizedNaturalLanguageQuestion = naturalLanguageQuestion
+    .slice(0, MAX_NATURAL_LANGUAGE_QUESTION_LENGTH)
+    .replace(/`/g, '\'')
+    .replace(/\$\{/g, '');
+
     let completeTables = sails.config.builtStaticContent.schemaTables;
     let prunedTables = completeTables.map((table)=>{
       let newTable = _.pick(table,['name','description','platforms', 'examples']);
@@ -44,7 +54,7 @@ module.exports = {
 
     Here is the question:
     \`\`\`
-    ${naturalLanguageQuestion}
+    ${sanitizedNaturalLanguageQuestion}
     \`\`\`
 
     Provided context:
@@ -136,7 +146,7 @@ module.exports = {
 
     Here is the question:
     \`\`\`
-    ${naturalLanguageQuestion}
+    ${sanitizedNaturalLanguageQuestion}
     \`\`\`
 
     When generating the SQL:

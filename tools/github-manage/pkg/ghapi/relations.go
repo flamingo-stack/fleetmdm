@@ -45,9 +45,15 @@ func GetRelatedIssueNumbers(issueNumber int) ([]int, error) {
 
 	// Fallback: parse task list references in the issue body.
 	bodyRelated := getTaskListIssueRefs(issueNumber)
-	relatedIssuesCache.Lock()
-	relatedIssuesCache.data[issueNumber] = bodyRelated
-	relatedIssuesCache.Unlock()
+	// Only cache the fallback result when the GraphQL attempt succeeded (even with
+	// zero sub-issues). If GraphQL failed outright, the empty/partial fallback result
+	// is not cached, so a transient GraphQL failure does not permanently suppress
+	// subIssues-based results for the rest of the process run.
+	if err == nil {
+		relatedIssuesCache.Lock()
+		relatedIssuesCache.data[issueNumber] = bodyRelated
+		relatedIssuesCache.Unlock()
+	}
 	return bodyRelated, nil
 }
 
