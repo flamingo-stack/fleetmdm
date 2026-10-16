@@ -229,7 +229,10 @@ spec:
         {{- if .Values.database.tls.enabled }}
         - name: mysql-tls
           secret:
-            # >>> OPENFRAME(helm): the server CA rides in the same externally managed Secret as
+            # >>> OPENFRAME(helm): the server CA, client cert and client key all live in the
+            # same externally managed Secret referenced by database.existingSecret (or the
+            # chart-managed database.secretName fallback), so this volume mounts that single
+            # Secret and FLEET_MYSQL_TLS_CA/CERT/KEY above select the individual keys from it.
             secretName: "{{ default .Values.database.secretName .Values.database.existingSecret }}"
             # <<< OPENFRAME(helm)
         {{- end }}

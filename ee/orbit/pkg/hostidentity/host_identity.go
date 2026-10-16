@@ -96,6 +96,9 @@ func Setup(
 		return nil, fmt.Errorf("failed to load secure hardware key: %w", err)
 	}
 
+	// >>> OPENFRAME(host-identity-renewal): Certificate renewal on approaching expiry and
+	// scheduled restart timer are fork-specific extensions to the upstream SCEP issuance flow.
+	// See openframe/docs/host-identity-renewal.md
 	clientCert, err := loadSCEPClientCert(metadataDir)
 	switch {
 	case err == nil && certNeedsRenewal(clientCert, certificateRenewalThreshold):
@@ -111,6 +114,7 @@ func Setup(
 			clientCert = renewedCert
 			logger.Info().Msg("Certificate renewal completed successfully")
 		}
+	// <<< OPENFRAME(host-identity-renewal)
 	case errors.Is(err, os.ErrNotExist):
 		// We don't have a certificate, let's issue one using SCEP.
 		opts := []scep.Option{
@@ -164,6 +168,8 @@ func Setup(
 	}
 	logger.Debug().Msg("secure HW key matches certificate public key")
 
+	// >>> OPENFRAME(host-identity-renewal): scheduled restart timer for certificate renewal.
+	// See openframe/docs/host-identity-renewal.md
 	// Start a goroutine with a timer to trigger restart for certificate renewal
 	if restartFunc != nil {
 		go func() {
@@ -193,6 +199,7 @@ func Setup(
 			restartFunc("host identity certificate renewal")
 		}()
 	}
+	// <<< OPENFRAME(host-identity-renewal)
 
 	return credentials, nil
 }
@@ -225,6 +232,10 @@ func saveSCEPClientCert(metadataDir string, cert *x509.Certificate) error {
 	}
 	return nil
 }
+
+// >>> OPENFRAME(host-identity-renewal): certificate renewal helper functions are
+// fork-specific extensions on top of the upstream SCEP issuance flow.
+// See openframe/docs/host-identity-renewal.md
 
 // certNeedsRenewal checks if the certificate expires within the given duration
 func certNeedsRenewal(cert *x509.Certificate, renewalThreshold time.Duration) bool {
@@ -261,8 +272,10 @@ func RenewCertificate(
 
 	// Ensure we restore the backup if something goes wrong, like we cannot connect to Fleet server to get a cert
 	defer func() {
-		if _, err := os.Stat(oldKeyPath); err == nil {
-			_ = os.Rename(oldKeyPath, keyPath)
+		if _, statErr := os.Stat(oldKeyPath); statErr == nil {
+			if renameErr := os.Rename(oldKeyPath, keyPath); renameErr != nil {
+				logger.Error().Err(renameErr).Msg("failed to restore key backup after failed certificate renewal; host may be left without a usable key")
+			}
 		}
 	}()
 
@@ -358,3 +371,5 @@ func fetchCertWithRenewal(
 	// Fetch the certificate with the renewal extension in the CSR
 	return scepClient.FetchCert(ctx)
 }
+
+// <<< OPENFRAME(host-identity-renewal)

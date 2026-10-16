@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +28,7 @@ type AppsList struct {
 	Apps    []appListing `json:"apps"`
 }
 
+// >>> OPENFRAME(fma-cdn-fallback): fork-specific primary/fallback CDN fetch for FMA manifests — openframe/docs/fma-cdn-fallback.md
 const fmaOutputsBase = "https://maintained-apps.fleetdm.com/manifests"
 const fmaOutputsFallbackBase = "https://raw.githubusercontent.com/fleetdm/fleet/refs/heads/main/ee/maintained-apps/outputs"
 
@@ -93,7 +93,7 @@ func doFetch(ctx context.Context, baseURL, path string) ([]byte, error) {
 	case http.StatusOK:
 		return body, nil
 	case http.StatusNotFound:
-		return nil, errors.New("not found (HTTP 404)")
+		return nil, ctxerr.New(ctx, "not found (HTTP 404)")
 	default:
 		if len(body) > 512 {
 			body = body[:512]
@@ -101,6 +101,8 @@ func doFetch(ctx context.Context, baseURL, path string) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP status %d: %s", res.StatusCode, string(body))
 	}
 }
+
+// <<< OPENFRAME(fma-cdn-fallback)
 
 // SyncAppsList fetches the latest FMA apps list and updates the apps list copy cached in the DB
 func SyncAppsList(ctx context.Context, ds fleet.Datastore) error {
@@ -113,10 +115,12 @@ func SyncAppsList(ctx context.Context, ds fleet.Datastore) error {
 }
 
 func FetchAppsList(ctx context.Context) (*AppsList, error) {
+	// >>> OPENFRAME(fma-cdn-fallback): fetch via primary/fallback CDN helper instead of upstream single-CDN fetch — openframe/docs/fma-cdn-fallback.md
 	body, err := fetchManifestFile(ctx, "/apps.json")
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "fetch apps list")
 	}
+	// <<< OPENFRAME(fma-cdn-fallback)
 
 	var appsList AppsList
 	if err := json.Unmarshal(body, &appsList); err != nil {
@@ -125,6 +129,13 @@ func FetchAppsList(ctx context.Context) (*AppsList, error) {
 	if appsList.Version != 2 {
 		return nil, ctxerr.New(ctx, "apps list is an incompatible version")
 	}
+
+	for i := range appsList.Apps {
+		if appsList.Apps[i].UniqueIdentifier == "" {
+			appsList.Apps[i].UniqueIdentifier = appsList.Apps[i].Name
+		}
+	}
+
 	return &appsList, nil
 }
 
@@ -204,10 +215,12 @@ func Hydrate(ctx context.Context, app *fleet.MaintainedApp, version string, team
 		return app, nil
 	}
 
+	// >>> OPENFRAME(fma-cdn-fallback): fetch via primary/fallback CDN helper instead of upstream single-CDN fetch — openframe/docs/fma-cdn-fallback.md
 	body, err := fetchManifestFile(ctx, fmt.Sprintf("/%s.json", app.Slug))
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "fetch app manifest")
 	}
+	// <<< OPENFRAME(fma-cdn-fallback)
 
 	var manifest ma.FMAManifestFile
 	if err := json.Unmarshal(body, &manifest); err != nil {

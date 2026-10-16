@@ -1,7 +1,10 @@
 package mail
 
+// >>> OPENFRAME(mfa-mailer): MFA email support is a fork-specific addition not present in upstream fleetdm/fleet — openframe/docs/mfa.md
+
 import (
 	"bytes"
+	"fmt"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"html/template"
 	"time"
@@ -24,12 +27,14 @@ func (i *MFAMailer) Message() ([]byte, error) {
 	i.TTLInMinutes = fleet.MFALinkTTL.Truncate(time.Minute).Minutes() // better to show a whole, rounded-down number
 	t, err := server.GetTemplate("server/mail/templates/mfa.html", "email_template")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get mfa email template: %w", err)
 	}
 
 	var msg bytes.Buffer
 	if err = t.Execute(&msg, i); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("execute mfa email template: %w", err)
 	}
 	return msg.Bytes(), nil
 }
+
+// <<< OPENFRAME(mfa-mailer)
