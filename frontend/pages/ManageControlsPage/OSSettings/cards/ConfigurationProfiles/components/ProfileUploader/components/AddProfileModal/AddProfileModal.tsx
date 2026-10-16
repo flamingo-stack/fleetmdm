@@ -182,11 +182,11 @@ const AddProfileModal = ({
       });
       renderFlash("success", "Successfully uploaded.");
       onUpload();
+      onDone();
     } catch (e) {
       renderFlash("error", getErrorMessage(e as AxiosResponse<IApiError>));
     } finally {
       setIsLoading(false);
-      onDone();
     }
   };
 

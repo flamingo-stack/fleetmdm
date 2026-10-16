@@ -28,4 +28,3 @@ export const generateResultsCountText = (
   return `${resultsCount.toLocaleString()} ${name}`;
 };
 
-export default { generateResultsCountText };

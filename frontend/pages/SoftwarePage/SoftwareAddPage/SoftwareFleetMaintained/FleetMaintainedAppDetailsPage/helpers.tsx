@@ -53,6 +53,12 @@ export const getFleetAppPolicyQuery = (name: string) => {
   return getFleetAppData(name)?.automatic_policy_query;
 };
 
+// NOTE: This logic is duplicated (with minor variations) in
+// SoftwareCustomPackage/helpers.tsx and SoftwareAddPage/helpers.tsx. If you
+// change the timeout detection, the "already available" handling, or the
+// secret-variable handling here, please make the equivalent change in those
+// sibling files as well. TODO: extract a shared base implementation with
+// pluggable extra-branch callbacks so this only needs to be maintained once.
 export const getErrorMessage = (err: unknown) => {
   const isTimeout =
     isAxiosError(err) &&

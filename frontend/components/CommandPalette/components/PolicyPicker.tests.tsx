@@ -158,9 +158,10 @@ describe("PolicyPicker", () => {
   });
 
   describe("Patch badge", () => {
-    // Unique search values per test sidestep React Query cache pollution
-    // from earlier empty-state tests, which registered an empty result
-    // under queryKey ["commandPalettePolicies", ..., "<search>"].
+    // Each test uses its own QueryClient (via renderPickerInCommand ->
+    // createCustomRenderer) so results from earlier tests registered under
+    // queryKey ["commandPalettePolicies", ...] cannot leak into these
+    // assertions.
     it("renders the Patch badge when policy.type === 'patch'", async () => {
       mockedGlobal.loadAllNew.mockResolvedValue({
         policies: [

@@ -230,6 +230,19 @@ func TranslateCPEToCVE(
 		return nil, nil
 	}
 
+	// Detect corrupted/empty CVE feed files up front by validating the feed shape/size
+	// directly, rather than inferring corruption from zero downstream vulnerability matches
+	// (which can legitimately happen on well-patched fleets). A feed file is considered
+	// invalid if it is empty (zero bytes) on disk.
+	feedFilesInvalid := false
+	for _, file := range files {
+		info, statErr := os.Stat(file)
+		if statErr != nil || info.Size() == 0 {
+			feedFilesInvalid = true
+			break
+		}
+	}
+
 	// get all the software CPEs from the database
 	CPEs, err := ds.ListSoftwareCPEs(ctx)
 	if err != nil {
@@ -276,9 +289,10 @@ func TranslateCPEToCVE(
 	// NVD feed file.
 	softwareVulns := make(map[string]fleet.SoftwareVulnerability)
 	osVulns := make(map[string]fleet.OSVulnerability)
+	totalCVEsSeen := 0
 	for _, file := range files {
 
-		foundSoftwareVulns, foundOSVulns, err := checkCVEs(
+		foundSoftwareVulns, foundOSVulns, cveCount, err := checkCVEs(
 			ctx,
 			logger,
 			interfaceParsed,
@@ -288,6 +302,7 @@ func TranslateCPEToCVE(
 		if err != nil {
 			return nil, err
 		}
+		totalCVEsSeen += cveCount
 
 		for _, e := range foundSoftwareVulns {
 			softwareVulns[e.Key()] = e
@@ -322,11 +337,12 @@ func TranslateCPEToCVE(
 		osInsertErr = true
 	}
 
-	// Detect corrupted/empty CVE feeds. If we had CPE/OS inputs to match against but produced
-	// zero results across every feed file, the feed is almost certainly empty or corrupted
-	// (e.g., a failed/corrupted artifact from GitHub) — skip the deletes so we don't wipe
-	// legitimate existing software_cve rows that will be re-matched on the next good sync.
-	feedProducedNoData := len(allSoftwareVulns) == 0 && len(allOSVulns) == 0
+	// Detect corrupted/empty CVE feeds by validating the feed shape/size directly (empty feed
+	// files on disk, or zero CVE entries parsed across all feed files) instead of inferring
+	// corruption from zero downstream vulnerability matches. Legitimate feeds can produce zero
+	// new vulnerability matches (e.g., on small or well-patched fleets), and that alone should
+	// not prevent stale-vulnerability cleanup.
+	feedProducedNoData := feedFilesInvalid || totalCVEsSeen == 0
 
 	// Delete any stale vulnerabilities. A vulnerability is stale iff the last time it was
 	// updated was more than `2 * periodicity` ago. This assumes that the whole vulnerability
@@ -345,8 +361,8 @@ func TranslateCPEToCVE(
 		}
 	}
 	if feedProducedNoData {
-		logger.ErrorContext(ctx, "NVD scan produced no matches with non-empty input; skipping deletes to preserve existing software_cve rows (feed may be corrupted)",
-			"software_cpes", len(parsed), "os_cpes", len(cpes), "feed_files", len(files))
+		logger.ErrorContext(ctx, "NVD feed appears empty or corrupted; skipping deletes to preserve existing software_cve rows",
+			"software_cpes", len(parsed), "os_cpes", len(cpes), "feed_files", len(files), "cve_count", totalCVEsSeen)
 	}
 
 	return newVulns, nil
@@ -419,10 +435,10 @@ func checkCVEs(
 	cpeItems []itemWithNVDMeta,
 	jsonFile string,
 	knownNVDBugRules CPEMatchingRules,
-) ([]fleet.SoftwareVulnerability, []fleet.OSVulnerability, error) {
+) ([]fleet.SoftwareVulnerability, []fleet.OSVulnerability, int, error) {
 	dict, err := cvefeed.LoadJSONDictionary(jsonFile)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	// Group dictionary by vendor using a map.
@@ -564,7 +580,7 @@ func checkCVEs(
 	logger.DebugContext(ctx, "cpes pushed")
 	wg.Wait()
 
-	return foundSoftwareVulns, foundOSVulns, nil
+	return foundSoftwareVulns, foundOSVulns, len(dict), nil
 }
 
 var pythonVersionWithUpdate = regexp.MustCompile(`(alpha|beta|rc)(\d+)`)
