@@ -16,6 +16,9 @@ module Puppet::Util
     # [1]: https://www.puppet.com/docs/puppet/8/server/config_file_puppetserver.html
     @instance_mutex = Mutex.new
 
+    # Maximum time, in seconds, that a cached entry is considered valid.
+    CACHE_TTL = 60
+
     def self.instance
       return @instance if @instance
       @instance_mutex.synchronize do
@@ -138,9 +141,12 @@ module Puppet::Util
 
       if cached
         @cache_mutex.synchronize do
-          unless @cache[path].nil?
-            return @cache[path]
+          entry = @cache[path]
+          if !entry.nil? && (Time.now - entry[:cached_at]) < CACHE_TTL
+            return entry[:value]
           end
+
+          @cache.delete(path) unless entry.nil?
         end
       end
 
@@ -171,11 +177,11 @@ module Puppet::Util
 
         if cached && out['error'].empty?
           @cache_mutex.synchronize do
-            @cache[path] = out
+            @cache[path] = { value: out, cached_at: Time.now }
           end
         end
       rescue => e
-        out['error'] = e
+        out['error'] = e.message
       end
 
       out
@@ -195,8 +201,8 @@ module Puppet::Util
       if (400...600).cover?(response.code.to_i)
         message = 'server returned a non-ok status code without an error'
 
-        if response.body
-          body = JSON.parse(response.body)
+        if out['body'].is_a?(Hash) && !out['body'].empty?
+          body = out['body']
           message = body['message']
 
           unless body['errors'].nil?

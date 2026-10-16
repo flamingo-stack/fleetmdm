@@ -9,7 +9,7 @@ run(){
 	flags+="--disable-open-folder"
 
   #Read flags
-	while getopts s:p:u:f:d:o:x flag
+	while getopts s:p:u:a:d:o:x flag
 	 do
 		case "${flag}" in
 			f) #path to file containing team names. Must end with newline char.
@@ -18,7 +18,7 @@ run(){
 				types+=($OPTARG);;
 			u) #Fleet server url
 				url=($OPTARG);;
-			f) #Additional flags to apply to `fleetctl package`
+			a) #Additional flags to apply to `fleetctl package`
 				flags+=($OPTARG);;
 			d) #include Fleet Desktop
 				flags+="--desktop";;
@@ -55,7 +55,12 @@ create_teams(){
   #Loop over file contents and generate a secret for each team, then create the team and generate packages
 	while IFS=",", read -r name
 		do
-		  secret=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/random | head -c 24);
+		  secret=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 24);
+		  if [ -z "$secret" ] || [ ${#secret} -lt 24 ]
+		  	then
+		  		echo "Failed to generate a valid enrollment secret for $name"
+		  		return 1
+		  fi
 		  team_name=$name
 
 		  create_team

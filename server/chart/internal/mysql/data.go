@@ -97,12 +97,29 @@ func (ds *Datastore) recordAccumulate(
 		entityIDs = append(entityIDs, id)
 	}
 
+	// The read-then-ODKU-write sequence below is wrapped in a single
+	// transaction with SELECT ... FOR UPDATE so concurrent callers merging
+	// against the same (dataset, bucketStart, entity_id) rows serialize on
+	// the row lock instead of racing to compute independent OR-merges that
+	// could silently clobber one another via ODKU.
+	tx, err := ds.writer(ctx).BeginTxx(ctx, nil)
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "begin accumulate transaction")
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
 	// Fetch the current in-bucket bitmaps so we can OR-merge before writing.
 	existing := make(map[string]*roaring.Bitmap, len(entityIDs))
 	if len(entityIDs) > 0 {
 		query, args, err := sqlx.In(
 			`SELECT entity_id, host_bitmap, encoding_type FROM host_scd_data
-			 WHERE dataset = ? AND valid_from = ? AND entity_id IN (?)`,
+			 WHERE dataset = ? AND valid_from = ? AND entity_id IN (?)
+			 FOR UPDATE`,
 			dataset, bucketStart, entityIDs)
 		if err != nil {
 			return ctxerr.Wrap(ctx, err, "expand accumulate select args")
@@ -115,10 +132,14 @@ func (ds *Datastore) recordAccumulate(
 			EncodingType uint8  `db:"encoding_type"`
 		}
 		var rows []row
-		// Using writer here since a stale read would OR-merge against an older
-		// bitmap, then ODKU would overwrite the row with the partial merge — silently
-		// dropping hosts from any sample the replica hadn't replicated yet.
-		if err := sqlx.SelectContext(ctx, ds.writer(ctx), &rows, query, args...); err != nil {
+		// Using the writer, within the transaction above, with FOR UPDATE:
+		// a stale read would OR-merge against an older bitmap, then ODKU
+		// would overwrite the row with the partial merge — silently
+		// dropping hosts from any sample the replica hadn't replicated yet
+		// or from a concurrent writer's merge. The row lock held until
+		// commit ensures concurrent accumulate calls for the same rows
+		// serialize instead of racing.
+		if err := sqlx.SelectContext(ctx, tx, &rows, query, args...); err != nil {
 			return ctxerr.Wrap(ctx, err, "fetch in-bucket bitmaps")
 		}
 		for _, r := range rows {
@@ -154,10 +175,15 @@ func (ds *Datastore) recordAccumulate(
 		stmt := `INSERT INTO host_scd_data (dataset, entity_id, host_bitmap, encoding_type, valid_from, valid_to) VALUES ` + //nolint:gosec // G202
 			strings.Join(placeholders, ", ") +
 			` ON DUPLICATE KEY UPDATE host_bitmap = VALUES(host_bitmap), encoding_type = VALUES(encoding_type)`
-		if _, err := ds.writer(ctx).ExecContext(ctx, stmt, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
 			return ctxerr.Wrap(ctx, err, "upsert accumulate rows")
 		}
 	}
+
+	if err := tx.Commit(); err != nil {
+		return ctxerr.Wrap(ctx, err, "commit accumulate transaction")
+	}
+	committed = true
 	return nil
 }
 
@@ -237,6 +263,20 @@ func (ds *Datastore) recordSnapshot(
 		}
 	}
 
+	// The close UPDATE and the reopening INSERT ... ON DUPLICATE KEY UPDATE
+	// are wrapped in a single transaction so a reader can never observe an
+	// entity with its row closed but not yet reopened.
+	tx, err := ds.writer(ctx).BeginTxx(ctx, nil)
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "begin snapshot transaction")
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
 	if len(toClose) > 0 {
 		closeQuery, closeArgs, err := sqlx.In(
 			`UPDATE host_scd_data SET valid_to = ?
@@ -246,7 +286,7 @@ func (ds *Datastore) recordSnapshot(
 			return ctxerr.Wrap(ctx, err, "expand close SCD query args")
 		}
 		closeQuery = ds.rebind(closeQuery)
-		if _, err := ds.writer(ctx).ExecContext(ctx, closeQuery, closeArgs...); err != nil {
+		if _, err := tx.ExecContext(ctx, closeQuery, closeArgs...); err != nil {
 			return ctxerr.Wrap(ctx, err, "close stale SCD rows")
 		}
 	}
@@ -269,11 +309,15 @@ func (ds *Datastore) recordSnapshot(
 		stmt := `INSERT INTO host_scd_data (dataset, entity_id, host_bitmap, encoding_type, valid_from) VALUES ` + //nolint:gosec // G202
 			strings.Join(placeholders, ", ") +
 			` ON DUPLICATE KEY UPDATE host_bitmap = VALUES(host_bitmap), encoding_type = VALUES(encoding_type)`
-		if _, err := ds.writer(ctx).ExecContext(ctx, stmt, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
 			return ctxerr.Wrap(ctx, err, "upsert snapshot rows")
 		}
 	}
 
+	if err := tx.Commit(); err != nil {
+		return ctxerr.Wrap(ctx, err, "commit snapshot transaction")
+	}
+	committed = true
 	return nil
 }
 
@@ -299,7 +343,8 @@ func (ds *Datastore) recordSnapshot(
 //
 // The caller is responsible for passing bucket-aligned startDate/endDate (e.g.
 // local-midnight-aligned for tz-sensitive rendering); the walker does not
-// truncate.
+// truncate. If the requested range is not an exact multiple of bucketSize, an
+// error is returned rather than silently discarding the remainder.
 func (ds *Datastore) GetSCDData(
 	ctx context.Context,
 	dataset string,
@@ -312,7 +357,11 @@ func (ds *Datastore) GetSCDData(
 	startDate = startDate.UTC()
 	endDate = endDate.UTC()
 
-	numBuckets := int(endDate.Sub(startDate) / bucketSize)
+	totalRange := endDate.Sub(startDate)
+	if totalRange > 0 && bucketSize > 0 && totalRange%bucketSize != 0 {
+		return nil, ctxerr.Errorf(ctx, "date range %s is not an exact multiple of bucket size %s", totalRange, bucketSize)
+	}
+	numBuckets := int(totalRange / bucketSize)
 	if numBuckets <= 0 {
 		return nil, nil
 	}

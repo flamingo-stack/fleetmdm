@@ -271,21 +271,6 @@ data "aws_iam_policy_document" "aws_backup_policy" {
     ]
     resources = ["*"]
   }
-
-  statement {
-    effect = "Allow"
-    actions = [
-      "backup:TagResource"
-    ]
-    resources = ["arn:aws:backup:*:*:recovery-point:*"]
-    condition {
-      test     = "ForAnyValue:StringEquals"
-      variable = "aws:PrincipalAccount"
-      values = [
-        "&{aws:ResourceAccount}"
-      ]
-    }
-  }
 }
 
 data "aws_iam_policy_document" "aws_restore_policy" {
@@ -519,7 +504,7 @@ resource "aws_backup_selection" "snapshot_selection" {
   iam_role_arn = resource.aws_iam_role.aws_backup.arn
   plan_id      = resource.aws_backup_plan.snapshot_backup_plan.id
   resources = [
-    "arn:aws:rds:us-east-2:160035666661:cluster:*"
+    "arn:aws:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:cluster:*"
   ]
   condition {
     string_equals {
@@ -600,3 +585,5 @@ resource "aws_backup_selection" "s3_selection" {
     }
   }
 }
+
+CURRENT>>>

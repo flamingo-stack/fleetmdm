@@ -270,10 +270,10 @@ func udidIncludedByPercentage(udid string, percentage int) bool {
 	return int(index) < percentage //nolint:gosec // G115 false positive
 }
 
-func makeExistingProxy(existingURL, existingDNSName string) *httputil.ReverseProxy {
+func makeExistingProxy(existingURL, existingDNSName string) (*httputil.ReverseProxy, error) {
 	targetURL, err := url.Parse(existingURL)
 	if err != nil {
-		panic("failed to parse fleet-url: " + err.Error())
+		return nil, fmt.Errorf("failed to parse existing-url: %w", err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
@@ -282,13 +282,13 @@ func makeExistingProxy(existingURL, existingDNSName string) *httputil.ReversePro
 	transport.TLSClientConfig.ServerName = existingDNSName
 	proxy.Transport = transport
 
-	return proxy
+	return proxy, nil
 }
 
-func makeFleetProxy(fleetURL string, debug bool) *httputil.ReverseProxy {
+func makeFleetProxy(fleetURL string, debug bool) (*httputil.ReverseProxy, error) {
 	targetURL, err := url.Parse(fleetURL)
 	if err != nil {
-		panic("failed to parse fleet-url: " + err.Error())
+		return nil, fmt.Errorf("failed to parse fleet-url: %w", err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	if debug {
@@ -309,7 +309,7 @@ func makeFleetProxy(fleetURL string, debug bool) *httputil.ReverseProxy {
 		}
 	}
 
-	return proxy
+	return proxy, nil
 }
 
 func main() {
@@ -330,6 +330,15 @@ func main() {
 		panic(err)
 	}
 
+	existingProxy, err := makeExistingProxy(*existingURL, *existingHostname)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fleetProxy, err := makeFleetProxy(*fleetURL, *debug)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	proxy := mdmProxy{
 		token:             *authToken,
 		existingServerURL: *existingURL,
@@ -337,8 +346,8 @@ func main() {
 		existingHostname:  *existingHostname,
 		migratePercentage: *migratePercentage,
 		migrateUDIDs:      udids,
-		existingProxy:     makeExistingProxy(*existingURL, *existingHostname),
-		fleetProxy:        makeFleetProxy(*fleetURL, *debug),
+		existingProxy:     existingProxy,
+		fleetProxy:        fleetProxy,
 		debug:             *debug,
 		logSkipped:        *logSkipped,
 	}

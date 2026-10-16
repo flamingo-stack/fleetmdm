@@ -9,6 +9,8 @@ import FormField from "components/forms/FormField";
 import Button from "components/buttons/Button";
 import Icon from "components/Icon";
 
+import { InputFieldOnChange } from "interfaces/form_field";
+
 const baseClass = "input-field";
 
 export interface IInputFieldProps {
@@ -27,7 +29,7 @@ export interface IInputFieldProps {
    * parseTarget is true. See IInputFieldParseTarget and InputFieldOnChange
    * in interfaces/form_field.ts for caller-side typing helpers.
    */
-  onChange?: (value: any) => void;
+  onChange?: InputFieldOnChange;
   onBlur?: (
     evt: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => void;
@@ -126,7 +128,7 @@ const InputField = ({
   const onClickCopy = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      stringToClipboard(value).then(() => {
+      stringToClipboard(String(value ?? "")).then(() => {
         setCopied(true);
         setTimeout(() => {
           setCopied(false);
@@ -163,26 +165,30 @@ const InputField = ({
                 Copied!
               </span>
             )}
-            <button
-              type="button"
+            <Button
+              variant="icon"
               className={`${baseClass}__action-button`}
               onClick={onClickCopy}
+              size="small"
+              iconStroke
               aria-label="Copy to clipboard"
             >
               <Icon name="copy" />
-            </button>
+            </Button>
           </div>
         )}
         {enableShowSecret && (
-          <button
-            type="button"
+          <Button
+            variant="icon"
             className={`${baseClass}__action-button`}
             onClick={onToggleSecret}
+            size="small"
+            iconStroke
             aria-label={showSecret ? "Hide secret" : "Show secret"}
             aria-pressed={showSecret}
           >
             <Icon name="eye" />
-          </button>
+          </Button>
         )}
       </div>
     );

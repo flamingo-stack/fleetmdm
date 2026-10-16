@@ -333,9 +333,9 @@ func TestMaybeUpdateSetupExperience(t *testing.T) {
 
 		for _, tt := range testCases {
 			t.Run(tt.name, func(t *testing.T) {
-				ds.MaybeUpdateSetupExperienceScriptStatusFunc = func(ctx context.Context, hostUUID string, executionID string, status fleet.SetupExperienceStatusResultStatus) (bool, error) {
-					require.Equal(t, hostUUID, hostUUID)
-					require.Equal(t, executionID, scriptUUID)
+				ds.MaybeUpdateSetupExperienceScriptStatusFunc = func(ctx context.Context, gotHostUUID string, executionID string, status fleet.SetupExperienceStatusResultStatus) (bool, error) {
+					require.Equal(t, hostUUID, gotHostUUID)
+					require.Equal(t, scriptUUID, executionID)
 					require.Equal(t, tt.expected, status)
 					require.True(t, status.IsValid())
 					return true, nil
@@ -388,9 +388,9 @@ func TestMaybeUpdateSetupExperience(t *testing.T) {
 
 		for _, tt := range testCases {
 			t.Run(tt.name, func(t *testing.T) {
-				ds.MaybeUpdateSetupExperienceSoftwareInstallStatusFunc = func(ctx context.Context, hostUUID string, executionID string, status fleet.SetupExperienceStatusResultStatus) (bool, error) {
-					require.Equal(t, hostUUID, hostUUID)
-					require.Equal(t, executionID, softwareUUID)
+				ds.MaybeUpdateSetupExperienceSoftwareInstallStatusFunc = func(ctx context.Context, gotHostUUID string, executionID string, status fleet.SetupExperienceStatusResultStatus) (bool, error) {
+					require.Equal(t, hostUUID, gotHostUUID)
+					require.Equal(t, softwareUUID, executionID)
 					require.Equal(t, tt.expectStatus, status)
 					require.True(t, status.IsValid())
 					require.True(t, status.IsTerminalStatus())

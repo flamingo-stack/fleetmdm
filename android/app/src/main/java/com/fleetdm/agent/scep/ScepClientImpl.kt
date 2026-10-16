@@ -1,5 +1,6 @@
 package com.fleetdm.agent.scep
 
+import android.util.Log
 import com.fleetdm.agent.GetCertificateTemplateResponse
 import org.bouncycastle.asn1.DERPrintableString
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers
@@ -40,6 +41,7 @@ class ScepClientImpl : ScepClient {
         // Sending null causes jScep to omit the parameter; the server returns its default CA.
         private val SCEP_PROFILE: String? = null
         private const val SELF_SIGNED_CERT_VALIDITY_DAYS = 100L
+        private const val TAG = "ScepClientImpl"
 
         init {
             // Ensure BouncyCastle provider is loaded
@@ -75,19 +77,25 @@ class ScepClientImpl : ScepClient {
                 throw ScepNetworkException("Invalid SCEP URL: $scepUrl", e)
             }
 
-            // OptimisticCertificateVerifier is used intentionally because:
-            // 1. SCEP URL is provided by the authenticated MDM server
-            // 2. Challenge password authenticates the enrollment request
-            // 3. Enterprise SCEP servers often use internal CAs not in system trust stores
-            // 4. The enrolled certificate itself is validated when used
+            // NOTE: OptimisticCertificateVerifier accepts any server certificate presented
+            // during enrollment without validation. This is a known weakness: if scepUrl or
+            // DNS resolution is ever manipulated, the client could complete enrollment
+            // against an attacker-controlled CA and leak the challenge password embedded in
+            // the CSR. A proper fix requires pinning against a known certificate/fingerprint
+            // supplied by the MDM server when available. Until that plumbing exists, we keep
+            // OptimisticCertificateVerifier as a fallback but this should be revisited.
             val verifier = OptimisticCertificateVerifier()
             val client = Client(server, verifier)
 
             // Step 5: Build Certificate Signing Request (CSR)
+            val challenge = config.scepChallenge
+            if (challenge.isNullOrEmpty()) {
+                throw ScepCsrException("SCEP challenge password is missing; refusing to enroll without it")
+            }
             val csr = buildCsr(
                 entity,
                 keyPair,
-                config.scepChallenge ?: "",
+                challenge,
                 config.signatureAlgorithm,
                 config.subjectAlternativeName,
             )
@@ -139,10 +147,10 @@ class ScepClientImpl : ScepClient {
                 }
             }
         } catch (e: ScepException) {
-            // Re-throw ScepException as-is (Log.e removed to avoid test failures)
+            Log.e(TAG, "SCEP enrollment failed: ${e.message}", e)
             throw e
         } catch (e: Exception) {
-            // Wrap unexpected exceptions in ScepException (Log.e removed to avoid test failures)
+            Log.e(TAG, "Unexpected SCEP enrollment error: ${e.message}", e)
             throw ScepException("Unexpected SCEP enrollment error: ${e.message}", e)
         }
     }

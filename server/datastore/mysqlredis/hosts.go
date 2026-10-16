@@ -39,10 +39,11 @@ func (d *Datastore) SyncEnrolledHostIDs(ctx context.Context) error {
 		return ctxerr.Wrap(ctx, err, "count enrolled hosts from the database")
 	}
 
-	conn := redis.ConfigureDoer(d.pool, d.pool.Get())
-	defer conn.Close()
-
-	redisCount, err := redigo.Int(conn.Do("SCARD", enrolledHostsSetKey))
+	redisCount, err := func() (int, error) {
+		conn := redis.ConfigureDoer(d.pool, d.pool.Get())
+		defer conn.Close()
+		return redigo.Int(conn.Do("SCARD", enrolledHostsSetKey))
+	}()
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "count enrolled hosts from redis")
 	}
@@ -57,15 +58,43 @@ func (d *Datastore) SyncEnrolledHostIDs(ctx context.Context) error {
 		return ctxerr.Wrap(ctx, err, "get enrolled host IDs from the database")
 	}
 
-	if _, err := conn.Do("DEL", enrolledHostsSetKey); err != nil {
-		return ctxerr.Wrap(ctx, err, "clear redis enrolled hosts set")
+	if err := replaceEnrolledHostIDs(ctx, d.pool, ids...); err != nil {
+		return ctxerr.Wrap(ctx, err, "replace redis enrolled hosts set")
+	}
+	return nil
+}
+
+// replaceEnrolledHostIDs atomically clears the enrolled hosts set and
+// repopulates it with the given IDs, using a single connection and a
+// MULTI/EXEC transaction so that a crash or dropped connection between the
+// clear and the repopulate cannot leave the set empty.
+func replaceEnrolledHostIDs(ctx context.Context, pool fleet.RedisPool, hostIDs ...uint) error {
+	conn := redis.ConfigureDoer(pool, pool.Get())
+	defer conn.Close()
+
+	if err := conn.Send("MULTI"); err != nil {
+		return ctxerr.Wrap(ctx, err, "start redis transaction")
+	}
+	if err := conn.Send("DEL", enrolledHostsSetKey); err != nil {
+		return ctxerr.Wrap(ctx, err, "queue clear redis enrolled hosts set")
 	}
 
-	// return the connection to the pool so it can be reused in addHosts
-	conn.Close()
+	for len(hostIDs) > 0 {
+		maxSize := len(hostIDs)
+		if maxSize > redisSetMembersBatchSize {
+			maxSize = redisSetMembersBatchSize
+		}
 
-	if err := addHosts(ctx, d.pool, ids...); err != nil {
-		return ctxerr.Wrap(ctx, err, "add database host IDs to the redis set")
+		args := redigo.Args{enrolledHostsSetKey}
+		args = args.AddFlat(hostIDs[:maxSize])
+		if err := conn.Send("SADD", args...); err != nil {
+			return ctxerr.Wrap(ctx, err, "queue add database host IDs to the redis set")
+		}
+		hostIDs = hostIDs[maxSize:]
+	}
+
+	if _, err := conn.Do("EXEC"); err != nil {
+		return ctxerr.Wrap(ctx, err, "execute redis transaction")
 	}
 	return nil
 }
@@ -162,7 +191,7 @@ func (d *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreEn
 func (d *Datastore) DeleteHost(ctx context.Context, hid uint) error {
 	err := d.Datastore.DeleteHost(ctx, hid)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete host: %w", err)
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, hid); err != nil {
@@ -178,7 +207,7 @@ func (d *Datastore) DeleteHost(ctx context.Context, hid uint) error {
 func (d *Datastore) DeleteHosts(ctx context.Context, ids []uint) error {
 	err := d.Datastore.DeleteHosts(ctx, ids)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete hosts: %w", err)
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, ids...); err != nil {
@@ -193,7 +222,7 @@ func (d *Datastore) DeleteHosts(ctx context.Context, ids []uint) error {
 func (d *Datastore) CleanupExpiredHosts(ctx context.Context) ([]fleet.DeletedHostDetails, error) {
 	details, err := d.Datastore.CleanupExpiredHosts(ctx)
 	if err != nil {
-		return details, err
+		return details, fmt.Errorf("cleanup expired hosts: %w", err)
 	}
 	ids := make([]uint, len(details))
 	for i, detail := range details {
@@ -211,7 +240,7 @@ func (d *Datastore) CleanupExpiredHosts(ctx context.Context) ([]fleet.DeletedHos
 func (d *Datastore) CleanupIncomingHosts(ctx context.Context, now time.Time) ([]uint, error) {
 	ids, err := d.Datastore.CleanupIncomingHosts(ctx, now)
 	if err != nil {
-		return ids, err
+		return ids, fmt.Errorf("cleanup incoming hosts: %w", err)
 	}
 	if d.enforceHostLimit > 0 {
 		if err := removeHosts(ctx, d.pool, ids...); err != nil {
