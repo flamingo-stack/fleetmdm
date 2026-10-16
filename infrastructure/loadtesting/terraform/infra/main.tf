@@ -29,6 +29,19 @@ resource "aws_route53_record" "main" {
   }
 }
 
+# NOTE: fleet-terraform module refs used in this file (root + addons) are pinned
+# to the following versions, verified as a compatible set at the time of this
+# change. Any bump to one of these refs MUST be accompanied by a review of the
+# others (and, for the root module, of rds_config.snapshot_identifier and
+# rds_config.engine_version below, which are tightly coupled to this ref) since
+# there is no automated CI check enforcing cross-module version compatibility:
+#   root (byo-vpc):            tf-mod-root-v1.26.1
+#   addons/ses:                 tf-mod-addon-ses-v1.4.1
+#   addons/migrations:          tf-mod-addon-migrations-v2.2.2
+#   addons/external-vuln-scans: tf-mod-addon-external-vuln-scans-v2.5.0
+#   addons/mdm:                 tf-mod-addon-mdm-v2.0.0
+#   addons/osquery-carve:       tf-mod-addon-osquery-carve-v1.3.1
+#   addons/logging-alb:         tf-mod-addon-logging-alb-v2.2.2
 module "loadtest" {
   source = "github.com/fleetdm/fleet-terraform//byo-vpc?ref=tf-mod-root-v1.26.1"
   vpc_config = {
@@ -42,6 +55,9 @@ module "loadtest" {
     name                         = local.customer
     instance_class               = var.database_instance_size
     replicas                     = var.database_instance_count
+    # engine_version and snapshot_identifier below are coupled to the
+    # tf-mod-root-v1.26.1 ref pinned above; do not change one without
+    # verifying compatibility with the other and with the root module ref.
     engine_version               = "8.0.mysql_aurora.3.10.3"
     snapshot_identifier          = "arn:aws:rds:us-east-2:917007347864:cluster-snapshot:cleaned-8-0-teams-fixes-v4-55-0-minimum"
     preferred_maintenance_window = "fri:04:00-fri:05:00"
@@ -277,3 +293,4 @@ module "logging_alb" {
   alt_path_prefix = local.customer
   enable_athena   = true
 }
+
