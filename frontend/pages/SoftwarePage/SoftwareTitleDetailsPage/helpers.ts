@@ -33,10 +33,14 @@ export interface InstallerCardInfo {
 // eslint-disable-next-line import/prefer-default-export
 export const getInstallerCardInfo = (
   softwareTitle: ISoftwareTitleDetails
-): InstallerCardInfo => {
+): InstallerCardInfo | null => {
   const installerData = softwareTitle.software_package
     ? softwareTitle.software_package
     : (softwareTitle.app_store_app as IAppStoreApp);
+
+  if (!installerData) {
+    return null;
+  }
 
   const isPackage = isSoftwarePackage(installerData);
 

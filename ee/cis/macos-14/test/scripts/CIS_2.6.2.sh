@@ -14,8 +14,7 @@ Support/CrashReporter/DiagnosticMessagesHistory.plist
 
 
 echo "This needs modification"
-sudo -u <username> /usr/bin/defaults write
-/Users/<username>/Library/Preferences/com.apple.assistant.support "Siri DataSharing Opt-In Status" -int 2
+# sudo -u <username> /usr/bin/defaults write /Users/<username>/Library/Preferences/com.apple.assistant.support "Siri DataSharing Opt-In Status" -int 2
 
 # Example:
 # sudo -u sharonkatz /usr/bin/defaults write  /Users/sharonkatz/Library/Preferences/com.apple.assistant.support "Siri Data Sharing Opt-In Status" -int 2

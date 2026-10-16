@@ -5,7 +5,13 @@ set -euo pipefail
 STACK_NAME="${STACK_NAME:-fleet-mysql-iam-test}"
 KEY_NAME="${KEY_NAME:-fleet-mysql-test-key-$(date +%s)}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.micro}"
-DB_PASSWORD="${DB_PASSWORD:-hunter2pass}"
+if [ -z "${DB_PASSWORD:-}" ]; then
+    echo "❌ DB_PASSWORD environment variable is not set." >&2
+    echo "   Please set DB_PASSWORD to a strong password before running this script, e.g.:" >&2
+    echo "   export DB_PASSWORD=\"\$(openssl rand -base64 24)\"" >&2
+    exit 1
+fi
+DB_PASSWORD="${DB_PASSWORD}"
 
 echo "🚀 Deploying test environment for RDS MySQL/MariaDB IAM authentication"
 

@@ -243,6 +243,10 @@ const PolicyAutomationsFields = forwardRef<
           return { isValid: false, isDirty: false };
         }
 
+        const calendarChanged = calendarEvent !== initialCalendar;
+        const conditionalAccessChanged =
+          conditionalAccess !== initialConditionalAccess;
+
         const perPolicyDirty =
           !isGlobalPolicy &&
           (installSoftware !== initialInstallSoftware ||
@@ -250,8 +254,8 @@ const PolicyAutomationsFields = forwardRef<
               (policy.install_software?.software_title_id ?? null) ||
             runScript !== initialRunScript ||
             scriptId !== (policy.run_script?.id ?? null) ||
-            calendarEvent !== initialCalendar ||
-            conditionalAccess !== initialConditionalAccess ||
+            calendarChanged ||
+            conditionalAccessChanged ||
             continuousEnabled !== initialContinuous);
         const webhookDirty = webhookOrTicketEnabled !== initialWebhookOrTicket;
 
@@ -263,14 +267,17 @@ const PolicyAutomationsFields = forwardRef<
                 software_title_id: installSoftware ? softwareTitleId : null,
                 script_id: runScript ? scriptId : null,
                 // When the team has the feature disabled, the row is locked
-                // and the user can't toggle it — so we omit the field instead
-                // of carrying the stale state through to the PATCH. That
-                // preserves the policy's stored intent for if/when the team
-                // admin re-enables the feature.
-                ...(isCalendarEnabledForTeam && {
+                // and the user can't toggle it via the UI. Still, if the
+                // user's in-memory value differs from the policy's stored
+                // value (e.g. it changed before the feature became
+                // disabled), send it through rather than silently dropping
+                // the change — otherwise isDirty could be true while this
+                // delta vanishes with no feedback to the user.
+                ...((isCalendarEnabledForTeam || calendarChanged) && {
                   calendar_events_enabled: calendarEvent,
                 }),
-                ...(isConditionalAccessEnabledForTeam && {
+                ...((isConditionalAccessEnabledForTeam ||
+                  conditionalAccessChanged) && {
                   conditional_access_enabled: conditionalAccess,
                 }),
                 continuous_automations_enabled: continuousEnabled,

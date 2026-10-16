@@ -11,6 +11,13 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// GetACMEEnrollment retrieves an ACME enrollment by its path identifier.
+//
+// NOTE: This method does not implement the api.DirectoryNonceService
+// interface (NewNonce, GetDirectory). It is kept in this file for now, but
+// callers wiring up DirectoryNonceService should not expect this method to
+// satisfy that interface. Consider relocating this method to a file more
+// aligned with enrollment lookups (e.g. enrollment.go) in a follow-up change.
 func (ds *Datastore) GetACMEEnrollment(ctx context.Context, pathIdentifier string) (*types.Enrollment, error) {
 	ctx, span := tracer.Start(ctx, "acme.mysql.GetACMEEnrollment")
 	defer span.End()

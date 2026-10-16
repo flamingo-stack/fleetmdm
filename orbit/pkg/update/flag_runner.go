@@ -241,12 +241,22 @@ func getFlagsFromJSON(flags json.RawMessage) (map[string]string, error) {
 			result["--"+k] = strconv.FormatBool(t)
 		case float64:
 			result["--"+k] = fmt.Sprintf("%.f", v)
+		case nil:
+			result["--"+k] = flagValuelessMarker
 		default:
 			result["--"+k] = fmt.Sprintf("%v", v)
 		}
 	}
 	return result, nil
 }
+
+// flagValuelessMarker is used internally to distinguish a flag that was
+// explicitly provided with no value (e.g. a JSON `null` value, meaning the
+// flag should be written as a bare key with no "=value") from a flag that
+// was explicitly set to the empty string, which must round-trip through
+// writeFlagFile/readFlagFile as "--flag=" rather than being collapsed to a
+// bare "--flag" key.
+const flagValuelessMarker = "\x00valueless\x00"
 
 // writeFlagFile writes the contents of the data map as a osquery flagfile to disk
 // given a map[string]string, of the form: {"--foo":"bar","--value":"5"}
@@ -256,10 +266,13 @@ func writeFlagFile(rootDir string, data map[string]string) error {
 	flagfile := filepath.Join(rootDir, "osquery.flags")
 	var sb strings.Builder
 	for k, v := range data {
-		if k != "" && v != "" {
-			sb.WriteString(k + "=" + v + "\n")
-		} else if v == "" {
+		if k == "" {
+			continue
+		}
+		if v == flagValuelessMarker {
 			sb.WriteString(k + "\n")
+		} else {
+			sb.WriteString(k + "=" + v + "\n")
 		}
 	}
 	if err := os.WriteFile(flagfile, []byte(sb.String()), constant.DefaultFileMode); err != nil {
@@ -312,7 +325,7 @@ func readFlagFile(rootDir string) (map[string]string, error) {
 			result[str[0]] = str[1]
 		}
 		if len(str) == 1 {
-			result[str[0]] = ""
+			result[str[0]] = flagValuelessMarker
 		}
 	}
 	return result, nil

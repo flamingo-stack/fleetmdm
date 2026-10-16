@@ -41,14 +41,14 @@ ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CUR
 	// add an index to prevent further duplicates
 	if !indexExistsTx(tx, "mdm_idp_accounts", "unique_idp_email") {
 		if _, err := tx.Exec(addIdxStmt); err != nil {
-			return fmt.Errorf("failed to delete duplicated emails in mdm_idp_accounts table: %w", err)
+			return fmt.Errorf("failed to add unique index on mdm_idp_accounts.email: %w", err)
 		}
 	}
 
 	// add missing timestamps
 	if !columnsExists(tx, "mdm_idp_accounts", "created_at", "updated_at") {
 		if _, err := tx.Exec(addTimestampsStmt); err != nil {
-			return fmt.Errorf("failed to delete duplicated emails in mdm_idp_accounts table: %w", err)
+			return fmt.Errorf("failed to add created_at/updated_at columns to mdm_idp_accounts table: %w", err)
 		}
 	}
 

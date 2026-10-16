@@ -61,6 +61,7 @@ const LivePolicyPage = ({
     setLastEditedQueryLabelsIncludeAny,
     setLastEditedQueryLabelsIncludeAll,
     setLastEditedQueryLabelsExcludeAny,
+    setLastEditedQueryLabelsExcludeAll,
   } = useContext(PolicyContext);
 
   const [queryParamHostsAdded, setQueryParamHostsAdded] = useState(false);
@@ -113,6 +114,9 @@ const LivePolicyPage = ({
         );
         setLastEditedQueryLabelsExcludeAny(
           returnedPolicy.labels_exclude_any || []
+        );
+        setLastEditedQueryLabelsExcludeAll(
+          returnedPolicy.labels_exclude_all || []
         );
       },
       onError: (error) => handlePageError(error),

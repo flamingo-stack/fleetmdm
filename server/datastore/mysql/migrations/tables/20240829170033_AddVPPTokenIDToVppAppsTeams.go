@@ -3,6 +3,7 @@ package tables
 import (
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/pkg/errors"
 )
@@ -19,6 +20,8 @@ ALTER TABLE vpp_apps_teams
 	ADD COLUMN vpp_token_id int(10) UNSIGNED NOT NULL`
 
 		stmtFindToken := `SELECT id FROM vpp_tokens LIMIT 1` //nolint:gosec
+
+		stmtCountAssociations := `SELECT COUNT(*) FROM vpp_apps_teams`
 
 		stmtCleanAssociations := `DELETE FROM vpp_apps_teams`
 
@@ -43,6 +46,13 @@ ALTER TABLE vpp_apps_teams
 				return fmt.Errorf("failed to associate vpp apps with first token: %w", err)
 			}
 		} else {
+			var associationCount int
+			if err := tx.QueryRow(stmtCountAssociations).Scan(&associationCount); err != nil {
+				return fmt.Errorf("failed to count existing VPP team associations: %w", err)
+			}
+			if associationCount > 0 {
+				log.Printf("WARNING: no VPP token found; deleting %d orphaned VPP team association(s) from vpp_apps_teams", associationCount)
+			}
 			if _, err := tx.Exec(stmtCleanAssociations); err != nil {
 				return fmt.Errorf("failed clean orphaned VPP team associations: %w", err)
 			}

@@ -70,6 +70,8 @@ const SoftwareSummaryCard = ({
     !!softwareTitle.hosts_count &&
     !NO_VERSION_OR_HOST_DATA_SOURCES.includes(softwareTitle.source);
 
+  const isIPadOSOrIOSApp = isIpadOrIphoneSoftwareSource(softwareTitle.source);
+
   // If there is no installer (no package/app), bail out of installer‑related UI.
   if (!installerResult) {
     // when no installer, no edit actions:
@@ -94,9 +96,7 @@ const SoftwareSummaryCard = ({
               data={softwareTitle.versions ?? []}
               isLoading={isLoading}
               teamIdForApi={teamId}
-              isIPadOSOrIOSApp={isIpadOrIphoneSoftwareSource(
-                softwareTitle.source
-              )}
+              isIPadOSOrIOSApp={isIPadOSOrIOSApp}
               isAvailableForInstall={isAvailableForInstall}
               countsUpdatedAt={softwareTitle.counts_updated_at}
             />
@@ -179,7 +179,7 @@ const SoftwareSummaryCard = ({
             data={softwareTitle.versions ?? []}
             isLoading={isLoading}
             teamIdForApi={teamId}
-            isIPadOSOrIOSApp={isIosOrIpadosApp}
+            isIPadOSOrIOSApp={isIPadOSOrIOSApp}
             isAvailableForInstall={isAvailableForInstall}
             countsUpdatedAt={softwareTitle.counts_updated_at}
           />

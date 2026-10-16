@@ -86,6 +86,40 @@ func Up_20240905200001(tx *sql.Tx) error {
 	return nil
 }
 
+// Down_20240905200001 is intentionally a best-effort rollback.
+//
+// NOTE: This migration is not fully reversible without ambiguity: after Up_20240905200001
+// runs, rows with inherited_team_id = NULL may represent either the original "global domain"
+// rows (inherited_team_id was already NULL) or former "No team" rows that had inherited_team_id = 0
+// prior to the migration. That distinction is lost once the UPDATE in Up_20240905200001 runs, so
+// there is no way to accurately restore which NULL rows should become 0 again. Given that, this
+// Down migration restores the schema (recreates the unique index and drops the generated column)
+// but cannot safely restore the original data for previously-0 rows, since doing so risks
+// clobbering legitimate global-domain rows that were NULL before the Up migration ran.
 func Down_20240905200001(tx *sql.Tx) error {
+	if columnExists(tx, "policy_stats", "inherited_team_id_char") {
+		if indexExistsTx(tx, "policy_stats", "policy_id") {
+			if _, err := tx.Exec(`ALTER TABLE policy_stats DROP INDEX policy_id`); err != nil {
+				return fmt.Errorf("failed to drop policy_id index on policy_stats: %w", err)
+			}
+		}
+		if _, err := tx.Exec(`
+		ALTER TABLE policy_stats
+		DROP COLUMN inherited_team_id_char;
+	`); err != nil {
+			return fmt.Errorf("failed to drop inherited_team_id_char column on policy_stats: %w", err)
+		}
+	}
+
+	if !indexExistsTx(tx, "policy_stats", "policy_team_unique") {
+		if _, err := tx.Exec(`
+		ALTER TABLE policy_stats
+		ADD UNIQUE KEY policy_team_unique (policy_id, inherited_team_id);
+	`); err != nil {
+			return fmt.Errorf("failed to recreate policy_team_unique index on policy_stats: %w", err)
+		}
+	}
+
 	return nil
 }
+

@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -210,8 +211,18 @@ func GuessProfileExtension(profile []byte) string {
 	}
 }
 
+// deriveAESKey derives a fixed-length 32-byte AES-256 key from an
+// arbitrary-length symmetric key/passphrase using SHA-256. This ensures the
+// key passed to aes.NewCipher always has a valid AES key length regardless
+// of the length or entropy of the input, avoiding unpredictable
+// aes.KeySizeError failures.
+func deriveAESKey(symmetricKey string) []byte {
+	sum := sha256.Sum256([]byte(symmetricKey))
+	return sum[:]
+}
+
 func EncryptAndEncode(plainText string, symmetricKey string) (string, error) {
-	block, err := aes.NewCipher([]byte(symmetricKey))
+	block, err := aes.NewCipher(deriveAESKey(symmetricKey))
 	if err != nil {
 		return "", fmt.Errorf("create new cipher: %w", err)
 	}
@@ -235,7 +246,7 @@ func DecodeAndDecrypt(base64CipherText string, symmetricKey string) (string, err
 		return "", fmt.Errorf("base64 decode: %w", err)
 	}
 
-	block, err := aes.NewCipher([]byte(symmetricKey))
+	block, err := aes.NewCipher(deriveAESKey(symmetricKey))
 	if err != nil {
 		return "", fmt.Errorf("create new cipher: %w", err)
 	}
