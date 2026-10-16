@@ -4,8 +4,9 @@ examples: |-
   useful when looking to see if vulnerable software is exposed to networks. 
 
   ```
-  SELECT * FROM alf_exceptions;
+  SELECT * FROM alf_explicit_auths;
   ```
 notes: This table is currently affected by a
   [bug](https://github.com/osquery/osquery/issues/2322) and not returning
   applications visible in the preferences interface.
+

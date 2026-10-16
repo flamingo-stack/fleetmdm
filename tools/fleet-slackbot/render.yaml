@@ -25,7 +25,7 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
-        value: claude-opus-4-6
+        value: claude-opus-4-1
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: PORT
@@ -38,3 +38,4 @@ services:
         sync: false
       - key: FLEET_MCP_AUTH_TOKEN
         sync: false
+

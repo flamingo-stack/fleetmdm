@@ -162,15 +162,15 @@ func (c *FleetDMClient) CreateTeam(name string, description string) (*TeamGetRes
 
 // GetTeam returns the team with the provided ID.
 func (c *FleetDMClient) GetTeam(id int64) (*TeamGetResponse, error) {
-	url := teamPrefix + "/" + strconv.FormatInt(id, 10)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	teamPath := teamPrefix + "/" + strconv.FormatInt(id, 10)
+	req, err := http.NewRequest(http.MethodGet, teamPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GET request for %s: %w",
-			url, err)
+			teamPath, err)
 	}
 	resp, err := c.do(req, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to GET %s: %w", url, err)
+		return nil, fmt.Errorf("failed to GET %s: %w", teamPath, err)
 	}
 	defer resp.Body.Close()
 
