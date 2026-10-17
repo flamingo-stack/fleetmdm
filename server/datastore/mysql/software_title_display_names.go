@@ -21,7 +21,7 @@ func updateSoftwareTitleDisplayName(ctx context.Context, tx sqlx.ExtContext, tea
 		ON DUPLICATE KEY UPDATE
 			display_name = VALUES(display_name)`, tmID, titleID, displayName)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "upsert software title display name")
 	}
 
 	return nil
@@ -63,7 +63,7 @@ func (ds *Datastore) getDisplayNamesByTeamAndTitleIds(ctx context.Context, teamI
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get display names by team and title ids")
 	}
 
 	return namesBySoftwareTitleID, nil
@@ -87,3 +87,4 @@ func (ds *Datastore) getSoftwareTitleDisplayName(ctx context.Context, teamID uin
 
 	return displayName, nil
 }
+

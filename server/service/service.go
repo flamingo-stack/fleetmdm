@@ -4,7 +4,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"html/template"
 	"log/slog"
 	"sync"
@@ -13,6 +12,7 @@ import (
 	"github.com/WatchBeam/clock"
 	"github.com/fleetdm/fleet/v4/server/authz"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/android"
 	apple_mdm "github.com/fleetdm/fleet/v4/server/mdm/apple"
@@ -158,7 +158,7 @@ func NewService(
 ) (fleet.Service, error) {
 	authorizer, err := authz.NewAuthorizer()
 	if err != nil {
-		return nil, fmt.Errorf("new authorizer: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "new authorizer")
 	}
 
 	svc := &Service{

@@ -2,7 +2,6 @@ package mail
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ses"
 	"github.com/aws/aws-sdk-go-v2/service/ses/types"
 	"github.com/fleetdm/fleet/v4/server/aws_common"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
@@ -38,7 +38,7 @@ func getFromSES(e fleet.Email, senderDomain string) (string, error) {
 
 func (s *sesSender) SendEmail(ctx context.Context, e fleet.Email) error {
 	if s.client == nil {
-		return errors.New("ses sender not configured")
+		return ctxerr.New(ctx, "ses sender not configured")
 	}
 	msg, err := getMessageBody(e, func(e fleet.Email) (string, error) {
 		return getFromSES(e, s.senderDomain)
@@ -106,7 +106,7 @@ func (s *sesSender) sendMail(ctx context.Context, e fleet.Email, msg []byte) err
 		SourceArn:    &s.sourceArn,
 	})
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "send raw email via ses")
 	}
 	return nil
 }

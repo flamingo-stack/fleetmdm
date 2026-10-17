@@ -3,13 +3,14 @@ package winoffice
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 )
 
 const (
@@ -36,26 +37,26 @@ type SecurityRelease struct {
 func ScrapeSecurityUpdates(ctx context.Context, client *http.Client) ([]SecurityRelease, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", SecurityUpdatesURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating request with context: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "creating request with context")
 	}
 	// Request markdown format
 	req.Header.Set("Accept", "text/markdown")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching page: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "fetching page")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		return nil, ctxerr.New(ctx, fmt.Sprintf("unexpected status: %d", resp.StatusCode))
 	}
 
-	return parseSecurityMarkdown(resp.Body)
+	return parseSecurityMarkdown(ctx, resp.Body)
 }
 
 // parseSecurityMarkdown parses the markdown content
-func parseSecurityMarkdown(r io.Reader) ([]SecurityRelease, error) {
+func parseSecurityMarkdown(ctx context.Context, r io.Reader) ([]SecurityRelease, error) {
 	var releases []SecurityRelease
 	var current *SecurityRelease
 
@@ -104,7 +105,7 @@ func parseSecurityMarkdown(r io.Reader) ([]SecurityRelease, error) {
 	releases = appendIfValid(releases, current)
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "scanning")
 	}
 
 	return releases, nil
@@ -333,7 +334,7 @@ func FetchBulletin(ctx context.Context, client *http.Client) (*BulletinFile, err
 	}
 
 	if len(releases) == 0 {
-		return nil, errors.New("no releases found")
+		return nil, ctxerr.New(ctx, "no releases found")
 	}
 
 	return BuildBulletinFile(releases), nil

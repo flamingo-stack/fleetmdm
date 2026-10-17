@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/fleetdm/fleet/v4/pkg/fleethttp"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/datastore/mysql"
 	"github.com/fleetdm/fleet/v4/server/dev_mode"
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -101,7 +101,7 @@ func reconcileAppleMDMAPNsAndSCEPAssets(
 		return
 	}
 	if len(cfg.Server.PrivateKey) == 0 {
-		initFatal(errors.New("inserting MDM APNs and SCEP assets"),
+		initFatal(ctxerr.New(ctx, "inserting MDM APNs and SCEP assets"),
 			"missing required private key. Learn how to configure the private key here: https://fleetdm.com/learn-more-about/fleet-server-private-key")
 		return
 	}
@@ -197,7 +197,7 @@ func reconcileAppleMDMABMAssets(
 		return
 	}
 	if len(cfg.Server.PrivateKey) == 0 {
-		initFatal(errors.New("inserting MDM ABM assets"),
+		initFatal(ctxerr.New(ctx, "inserting MDM ABM assets"),
 			"missing required private key. Learn how to configure the private key here: https://fleetdm.com/learn-more-about/fleet-server-private-key")
 		return
 	}
@@ -251,3 +251,4 @@ func reconcileAppleMDMABMAssets(
 		initFatal(err, "save ABM token")
 	}
 }
+

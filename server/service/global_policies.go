@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,7 +55,7 @@ func (svc Service) NewGlobalPolicy(ctx context.Context, p fleet.PolicyPayload) (
 	}
 	vc, ok := viewer.FromContext(ctx)
 	if !ok {
-		return nil, errors.New("user must be authenticated to create fleet policies")
+		return nil, ctxerr.New(ctx, "user must be authenticated to create fleet policies")
 	}
 
 	if err := p.Verify(); err != nil {
@@ -457,7 +456,7 @@ func (svc *Service) ApplyPolicySpecs(ctx context.Context, policies []*fleet.Poli
 
 	vc, ok := viewer.FromContext(ctx)
 	if !ok {
-		return errors.New("user must be authenticated to apply policies")
+		return ctxerr.New(ctx, "user must be authenticated to apply policies")
 	}
 
 	// After the authorization check, check the policy fields.

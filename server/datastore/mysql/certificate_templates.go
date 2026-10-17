@@ -326,7 +326,7 @@ func (ds *Datastore) BatchDeleteCertificateTemplates(ctx context.Context, certif
 
 func (ds *Datastore) GetHostCertificateTemplates(ctx context.Context, hostUUID string) ([]fleet.HostCertificateTemplate, error) {
 	if hostUUID == "" {
-		return nil, errors.New("hostUUID cannot be empty")
+		return nil, ctxerr.New(ctx, "hostUUID cannot be empty")
 	}
 
 	stmt := `
@@ -341,7 +341,7 @@ WHERE host_uuid = ?`
 
 	var hTemplates []fleet.HostCertificateTemplate
 	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &hTemplates, stmt, hostUUID); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "getting host certificate templates")
 	}
 	return hTemplates, nil
 }
@@ -495,3 +495,4 @@ func (ds *Datastore) ResendHostCertificateTemplate(ctx context.Context, hostID u
 
 	return nil
 }
+

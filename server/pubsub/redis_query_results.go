@@ -41,7 +41,7 @@ func (r *redisQueryResults) Pool() fleet.RedisPool {
 	return r.pool
 }
 
-func (r *redisQueryResults) WriteResult(result fleet.DistributedQueryResult) error {
+func (r *redisQueryResults) WriteResult(ctx context.Context, result fleet.DistributedQueryResult) error {
 	// pub-sub can publish and listen on any node in the cluster
 	conn := redis.ReadOnlyConn(r.pool, r.pool.Get())
 	defer conn.Close()
@@ -50,7 +50,7 @@ func (r *redisQueryResults) WriteResult(result fleet.DistributedQueryResult) err
 
 	jsonVal, err := json.Marshal(&result)
 	if err != nil {
-		return fmt.Errorf("marshalling JSON for result: %w", err)
+		return ctxerr.Wrap(ctx, err, "marshalling JSON for result")
 	}
 
 	hasSubs, err := redis.PublishHasListeners(r.pool, conn, channelName, string(jsonVal))
@@ -61,7 +61,7 @@ func (r *redisQueryResults) WriteResult(result fleet.DistributedQueryResult) err
 	}
 
 	if err != nil {
-		return fmt.Errorf("PUBLISH failed to channel "+channelName+": %w", err)
+		return ctxerr.Wrap(ctx, err, "PUBLISH failed to channel "+channelName)
 	}
 	if !hasSubs {
 		return noSubscriberError{channelName}
@@ -202,12 +202,12 @@ func (r *redisQueryResults) ReadChannel(ctx context.Context, query fleet.Distrib
 
 // HealthCheck verifies that the redis backend can be pinged, returning an error
 // otherwise.
-func (r *redisQueryResults) HealthCheck() error {
+func (r *redisQueryResults) HealthCheck(ctx context.Context) error {
 	conn := r.pool.Get()
 	defer conn.Close()
 
 	if _, err := conn.Do("PING"); err != nil {
-		return fmt.Errorf("reading from redis: %w", err)
+		return ctxerr.Wrap(ctx, err, "reading from redis")
 	}
 	return nil
 }
