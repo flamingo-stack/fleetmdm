@@ -83,11 +83,11 @@ func (s *Service) commonAuthenticateMessage(ctx context.Context, message *api_ht
 	// "url" field validation: https://datatracker.ietf.org/doc/html/rfc8555/#section-6.4.1
 	baseURL, err := s.getACMEBaseURL(ctx)
 	if err != nil {
-		return ctxerr.New(ctx, "get base ACME URL")
+		return ctxerr.Wrap(ctx, err, "get base ACME URL")
 	}
 	expectedURL, err := commonmdm.ResolveURL(baseURL, message.HTTPPath, true)
 	if err != nil {
-		return ctxerr.New(ctx, "get expected ACME URL")
+		return ctxerr.Wrap(ctx, err, "get expected ACME URL")
 	}
 	if message.JWSHeaderURL != expectedURL {
 		err = types.UnauthorizedError("invalid url in JWS protected header")
