@@ -115,14 +115,14 @@ func challengeMiddleware(ds fleet.Datastore, next scepserver.CSRSignerContext) s
 		}
 
 		if m.ChallengePassword == "" {
-			return nil, errors.New("missing challenge")
+			return nil, ctxerr.New(ctx, "missing challenge")
 		}
 		_, err := ds.VerifyEnrollSecret(ctx, m.ChallengePassword)
 		switch {
 		case fleet.IsNotFound(err):
-			return nil, errors.New("invalid challenge")
+			return nil, ctxerr.New(ctx, "invalid challenge")
 		case err != nil:
-			return nil, fmt.Errorf("verifying enrollment secret: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "verifying enrollment secret")
 		}
 		return next.SignCSRContext(ctx, m)
 	}
@@ -147,7 +147,7 @@ func renewalMiddleware(ds fleet.Datastore, logger *slog.Logger, next scepserver.
 		for _, ext := range m.CSR.Extensions {
 			if ext.Id.Equal(types.RenewalExtensionOID) {
 				if err := json.Unmarshal(ext.Value, &renewalData); err != nil {
-					return nil, fmt.Errorf("invalid renewal extension: %w", err)
+					return nil, ctxerr.Wrap(ctx, err, "invalid renewal extension")
 				}
 				found = true
 				break
@@ -165,31 +165,31 @@ func renewalMiddleware(ds fleet.Datastore, logger *slog.Logger, next scepserver.
 		serialBigInt := new(big.Int)
 		_, success := serialBigInt.SetString(strings.TrimPrefix(renewalData.SerialNumber, "0x"), 16)
 		if !success {
-			return nil, fmt.Errorf("invalid serial number format: %s", renewalData.SerialNumber)
+			return nil, ctxerr.Errorf(ctx, "invalid serial number format: %s", renewalData.SerialNumber)
 		}
 
 		// Retrieve the old certificate data
 		oldCertData, err := ds.GetHostIdentityCertBySerialNumber(ctx, serialBigInt.Uint64())
 		if err != nil {
-			return nil, fmt.Errorf("retrieving old certificate: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "retrieving old certificate")
 		}
 
 		// Get the public key from the stored data
 		pubKey, err := oldCertData.UnmarshalPublicKey()
 		if err != nil {
-			return nil, fmt.Errorf("unmarshaling public key: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "unmarshaling public key")
 		}
 
 		// Verify the signature
 		sigBytes, err := base64.StdEncoding.DecodeString(renewalData.Signature)
 		if err != nil {
-			return nil, fmt.Errorf("decoding signature: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "decoding signature")
 		}
 
 		// Verify the signature
 		hash := sha256.Sum256([]byte(renewalData.SerialNumber))
 		if !ecdsa.VerifyASN1(pubKey, hash[:], sigBytes) {
-			return nil, errors.New("invalid renewal signature")
+			return nil, ctxerr.New(ctx, "invalid renewal signature")
 		}
 
 		logger.InfoContext(ctx, "renewal signature verified", "serial", renewalData.SerialNumber, "cn", oldCertData.CommonName)
@@ -197,7 +197,7 @@ func renewalMiddleware(ds fleet.Datastore, logger *slog.Logger, next scepserver.
 		// Issue the new certificate
 		newCert, err := next.SignCSRContext(ctx, m)
 		if err != nil {
-			return nil, fmt.Errorf("signing renewal CSR: %w", err)
+			return nil, ctxerr.Wrap(ctx, err, "signing renewal CSR")
 		}
 
 		// Update the new certificate's host_id to match the old certificate
@@ -256,7 +256,7 @@ func (svc *service) GetCACaps(_ context.Context) ([]byte, error) {
 func (svc *service) GetCACert(ctx context.Context, _ string) ([]byte, int, error) {
 	cert, err := caKeyPair(ctx, svc.ds)
 	if err != nil {
-		return nil, 0, fmt.Errorf("retrieving host identity SCEP CA certificate (GetCACert): %w", err)
+		return nil, 0, ctxerr.Wrap(ctx, err, "retrieving host identity SCEP CA certificate (GetCACert)")
 	}
 	return cert.Leaf.Raw, 1, nil
 }
@@ -271,26 +271,26 @@ func (svc *service) PKIOperation(ctx context.Context, data []byte) ([]byte, erro
 	}
 	msg, err := scep.ParsePKIMessage(data, scep.WithLogger(kitlogadapter.NewLogger(svc.logger)))
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "parsing PKI message")
 	}
 
 	cert, err := caKeyPair(ctx, svc.ds)
 	if err != nil {
-		return nil, fmt.Errorf("retrieving host identity SCEP CA certificate: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "retrieving host identity SCEP CA certificate")
 	}
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, errors.New("private key not in RSA format")
+		return nil, ctxerr.New(ctx, "private key not in RSA format")
 	}
 
 	if err := msg.DecryptPKIEnvelope(cert.Leaf, pk); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "decrypting PKI envelope")
 	}
 
 	crt, err := svc.signer.SignCSRContext(ctx, msg.CSRReqMessage)
 	if err == nil && crt == nil {
-		err = errors.New("signer returned nil certificate without error")
+		err = ctxerr.New(ctx, "signer returned nil certificate without error")
 	}
 	if err != nil {
 		svc.logger.ErrorContext(ctx, "failed to sign CSR", "err", err)
