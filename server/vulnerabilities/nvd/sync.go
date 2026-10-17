@@ -176,7 +176,7 @@ func DownloadCISAKnownExploitsFeed(vulnPath string, cisaKnownExploitsURL string)
 
 	u, err := url.Parse(cisaKnownExploitsURL)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse cisa known exploits url: %w", err)
 	}
 
 	client := fleethttp.NewClient()
@@ -200,7 +200,7 @@ func CVEMetaFromNVDFeedFiles(ctx context.Context, metaMap map[string]fleet.CVEMe
 		// Load json files one at a time. Attempting to load them all uses too much memory, > 1 GB.
 		dict, err := cvefeed.LoadJSONDictionary(file)
 		if err != nil {
-			return err
+			return fmt.Errorf("load json dictionary %s: %w", file, err)
 		}
 
 		for cve := range dict {
@@ -261,7 +261,7 @@ func CVEMetaFromCISAFeedFiles(metaMap map[string]fleet.CVEMeta, vulnPath string,
 	path := filepath.Join(vulnPath, cisaKnownExploitsFilename)
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read cisa known exploits file %s: %w", path, err)
 	}
 
 	var catalog knownExploitedVulnerabilitiesCatalog

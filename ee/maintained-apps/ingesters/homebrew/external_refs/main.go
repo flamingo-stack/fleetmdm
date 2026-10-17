@@ -105,15 +105,16 @@ func WhatsAppInstallerURL(app *maintained_apps.FMAManifestApp) (*maintained_apps
 	return app, nil
 }
 
-func EnrichManifest(app *maintained_apps.FMAManifestApp) {
+func EnrichManifest(app *maintained_apps.FMAManifestApp) error {
 	// Enrich the app manifest with additional metadata
 	if enrichers, ok := Funcs[app.Slug]; ok {
 		for _, enricher := range enrichers {
 			var err error
 			app, err = enricher(app)
 			if err != nil {
-				fmt.Printf("Error enriching app %s: %v\n", app.UniqueIdentifier, err)
+				return fmt.Errorf("enriching app %s: %w", app.UniqueIdentifier, err)
 			}
 		}
 	}
+	return nil
 }

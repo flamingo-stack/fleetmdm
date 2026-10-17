@@ -14,10 +14,16 @@ type OpenframeEncryptionService struct {
 	decryptErrCount int
 }
 
-func NewOpenframeEncryptionService(encryptionKey string) *OpenframeEncryptionService {
+func NewOpenframeEncryptionService(encryptionKey string) (*OpenframeEncryptionService, error) {
+	switch len(encryptionKey) {
+	case 16, 24, 32:
+		// valid AES-128/192/256 key length
+	default:
+		return nil, fmt.Errorf("invalid encryption key length %d: must be 16, 24, or 32 bytes", len(encryptionKey))
+	}
 	return &OpenframeEncryptionService{
 		encryptionKey: encryptionKey,
-	}
+	}, nil
 }
 
 func (es *OpenframeEncryptionService) Decrypt(data string) ([]byte, error) {
@@ -63,3 +69,4 @@ func (es *OpenframeEncryptionService) Decrypt(data string) ([]byte, error) {
 
 	return plaintext, nil
 }
+

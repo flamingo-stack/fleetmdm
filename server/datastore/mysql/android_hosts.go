@@ -51,7 +51,10 @@ func (ds *AndroidDatastore) deleteDuplicate(ctx context.Context, device *android
 func (ds *AndroidDatastore) deleteDevice(ctx context.Context, tx sqlx.ExtContext, id uint) error {
 	deleteStmt := `DELETE FROM android_devices WHERE id = ?`
 	_, err := tx.ExecContext(ctx, deleteStmt, id)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "deleting android device")
+	}
+	return nil
 }
 
 func (ds *AndroidDatastore) insertDevice(ctx context.Context, device *android.Device, tx sqlx.ExtContext) (*android.Device, error) {

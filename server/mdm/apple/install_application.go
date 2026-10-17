@@ -191,7 +191,16 @@ type InstallApplicationParams struct {
 // supplies non-empty configuration bytes. For macOS, configuration is always
 // omitted regardless of the input — that's intentional and matches the
 // service-layer silent-drop behavior.
+//
+// Exactly one of params.ITunesStoreID / params.ManifestURL must be set;
+// BuildInstallApplicationCommand panics otherwise, since this function has no
+// error return and silently emitting a command with neither identifier would
+// produce a plist Apple rejects with no diagnostic surfaced here.
 func BuildInstallApplicationCommand(params InstallApplicationParams) []byte {
+	if (params.ITunesStoreID == "") == (params.ManifestURL == "") {
+		panic("apple_mdm: BuildInstallApplicationCommand requires exactly one of ITunesStoreID or ManifestURL")
+	}
+
 	var managementFlags int
 	if fleet.IsAppleMobilePlatform(params.HostPlatform) {
 		// Mobile: remove the app when MDM is removed.

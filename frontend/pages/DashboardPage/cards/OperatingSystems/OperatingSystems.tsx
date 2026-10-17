@@ -128,7 +128,16 @@ const OperatingSystems = ({
     }
     setTitleDescription?.(null);
     setTitleDetail?.(null);
-  }, [isLoading, osInfo, setTitleDescription, setTitleDetail]);
+  }, [
+    isLoading,
+    osInfo,
+    setTitleDescription,
+    setTitleDetail,
+    setShowTitle,
+    osVersions,
+    selectedPlatform,
+    showDescription,
+  ]);
 
   // Renders opaque information as host information is loading
   const opacity = isLoading || !showTitle ? { opacity: 0 } : { opacity: 1 };

@@ -159,10 +159,10 @@ var userAllowedOrderKeys = common_mysql.OrderKeyAllowlist{
 // ListUsers lists all users with team ID, limit, sort and offset passed in with
 // UserListOptions.
 func (ds *Datastore) ListUsers(ctx context.Context, opt fleet.UserListOptions) ([]*fleet.User, error) {
-	sqlStatement := `
-		SELECT * FROM users
+	sqlStatement := fmt.Sprintf(`
+		SELECT %s FROM users
 		WHERE TRUE
-	`
+	`, userSelectColumns)
 	var params []interface{}
 	if opt.TeamID != 0 {
 		sqlStatement += " AND id IN (SELECT user_id FROM user_teams WHERE team_id = ?)"

@@ -37,7 +37,7 @@ func (ds *Datastore) ConditionalAccessMicrosoftMarkSetupDone(ctx context.Context
 	if _, err := ds.writer(ctx).ExecContext(ctx,
 		`UPDATE microsoft_compliance_partner_integrations SET setup_done = true;`,
 	); err != nil {
-		return ctxerr.Wrap(ctx, err, "deleting microsoft_compliance_partner_integrations")
+		return ctxerr.Wrap(ctx, err, "marking microsoft_compliance_partner_integrations setup done")
 	}
 	return nil
 }
