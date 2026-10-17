@@ -55,7 +55,7 @@ func (ds *Datastore) UpdateHostCertificates(ctx context.Context, hostID uint, ho
 		cert.Origin = origin
 		if cert.HostID != hostID {
 			// caller should ensure this does not happen
-			ds.logger.DebugContext(ctx, fmt.Sprintf("host certificates: host ID does not match provided certificate: %d %d", hostID, cert.HostID))
+			ds.logger.DebugContext(ctx, "host certificates: host ID does not match provided certificate", "expected_host_id", hostID, "cert_host_id", cert.HostID)
 		}
 
 		// Validate and truncate certificate fields
@@ -134,7 +134,7 @@ func (ds *Datastore) UpdateHostCertificates(ctx context.Context, hostID uint, ho
 		if hasExisting && existing.NotValidBefore.Equal(incoming.NotValidBefore) && existing.NotValidAfter.Equal(incoming.NotValidAfter) {
 			// TODO: should we always update existing records? skipping updates reduces db load but
 			// osquery is using sha1 so we consider subtleties
-			ds.logger.DebugContext(ctx, fmt.Sprintf("host certificates: already exists: %s", sha1), "host_id", hostID) // TODO: silence this log after initial rollout period
+			ds.logger.DebugContext(ctx, "host certificates: already exists", "sha1", sha1, "host_id", hostID) // TODO: silence this log after initial rollout period
 		} else {
 			toInsert = append(toInsert, incoming)
 			toInsertBySHA1[sha1] = incoming
