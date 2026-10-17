@@ -72,6 +72,10 @@ func parsePMSetOutput(output []byte) map[string]interface{} {
 			result[curKey] = make(map[string]string)
 			continue
 		}
+		if curKey == "" {
+			log.Debug().Str("line", line).Msg("indented line before any key header, ignoring")
+			continue
+		}
 		line = strings.TrimSpace(line)
 		loc := linePattern.FindStringSubmatch(line)
 		if loc == nil {
@@ -82,7 +86,11 @@ func parsePMSetOutput(output []byte) map[string]interface{} {
 			log.Debug().Str("line", line).Msg("invalid number of submatches")
 			continue
 		}
-		m := result[curKey].(map[string]string)
+		m, ok := result[curKey].(map[string]string)
+		if !ok {
+			log.Debug().Str("line", line).Msg("current key does not have a map value, ignoring")
+			continue
+		}
 		m[loc[1]] = loc[2]
 	}
 

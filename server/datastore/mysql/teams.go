@@ -431,9 +431,11 @@ WHERE
 func (ds *Datastore) ListTeams(ctx context.Context, filter fleet.TeamFilter, opt fleet.ListOptions) ([]*fleet.Team, error) {
 	whereClause := ds.whereFilterTeams(filter, "t")
 	// >>> OPENFRAME(mysql-multitenancy): a tenant may only list its own team on a shared DB. The
-	// pinned id is a trusted uint (not user input), inlined like the team filter above. No-op when unpinned.
+	// pinned id is bound as a query parameter below. No-op when unpinned.
+	var tenantParams []interface{}
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
-		whereClause = fmt.Sprintf("(%s) AND t.id = %d", whereClause, teamID)
+		whereClause = fmt.Sprintf("(%s) AND t.id = ?", whereClause)
+		tenantParams = append(tenantParams, teamID)
 	}
 	// <<< OPENFRAME(mysql-multitenancy)
 	query := fmt.Sprintf(`
@@ -447,7 +449,7 @@ func (ds *Datastore) ListTeams(ctx context.Context, filter fleet.TeamFilter, opt
 	)
 	// We must normalize the name for full Unicode support (Unicode equivalence).
 	matchQuery := norm.NFC.String(opt.MatchQuery)
-	query, params := searchLike(query, nil, matchQuery, teamSearchColumns...)
+	query, params := searchLike(query, tenantParams, matchQuery, teamSearchColumns...)
 	query, params, err := appendListOptionsWithCursorToSQLSecure(query, params, &opt, teamsAllowedOrderKeys)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "list teams")

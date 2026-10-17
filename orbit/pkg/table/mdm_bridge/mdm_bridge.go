@@ -172,7 +172,7 @@ func Generate(ctx context.Context, queryContext table.QueryContext) ([]map[strin
 			"enrollment_status":      deviceEnrollmentStatus,
 			"enrolled_user":          enrollmentURI,
 			"mdm_command_input":      "",
-			"mdm_command_ouput":      "",
+			"mdm_command_output":     "",
 			"raw_mdm_command_output": "",
 		},
 	}, nil

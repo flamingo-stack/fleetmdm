@@ -18,8 +18,9 @@ func (c *Client) Down(db *sql.DB, dir string) error {
 
 	current, err := migrations.Current(currentVersion)
 	if err != nil {
-		return fmt.Errorf("no migration %v", currentVersion)
+		return fmt.Errorf("no migration %v: %w", currentVersion, err)
 	}
 
 	return c.runMigration(db, current, migrateDown)
 }
+
