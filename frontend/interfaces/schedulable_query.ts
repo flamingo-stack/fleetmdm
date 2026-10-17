@@ -117,6 +117,9 @@ export interface ICreateQueryFormData {
   logging?: QueryLoggingOption;
   labels_include_any?: string[];
   labels_include_all?: string[];
+  // >>> OPENFRAME(managed-queries): platform-owned flag, forced to true on create — openframe/docs/managed-queries.md
+  openframe_managed?: boolean;
+  // <<< OPENFRAME(managed-queries)
 }
 
 // response is ISchedulableQuery
