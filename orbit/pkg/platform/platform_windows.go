@@ -322,7 +322,7 @@ func hardwareGetSMBiosUUID() (string, error) {
 			// UUID sanity check
 			isValidUUID, err := isValidUUID(uuidBytes)
 			if err != nil {
-				return "", fmt.Errorf("%v", err)
+				return "", fmt.Errorf("uuid validation: %w", err)
 			}
 
 			if !isValidUUID {
@@ -570,3 +570,4 @@ func PreUpdateQuirks() {
 func IsInvalidReparsePoint(err error) bool {
 	return errors.Is(err, windows.ERROR_NOT_A_REPARSE_POINT)
 }
+

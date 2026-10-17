@@ -115,15 +115,15 @@ func generateKeyPair(certFile, keyFile, password string, force bool) error {
 	if err != nil {
 		return fmt.Errorf("generating keypair: %w", err)
 	}
-	err = os.WriteFile(certFile, tokenpki.PEMCertificate(cert.Raw), 0644)
+	keyPEM, err := encodeEncryptedKeyPEM(key, password)
 	if err != nil {
+		return fmt.Errorf("encoding key: %w", err)
+	}
+	if err := os.WriteFile(certFile, tokenpki.PEMCertificate(cert.Raw), 0644); err != nil {
 		return fmt.Errorf("writing cert: %w", err)
 	}
-	keyPEM, err := encodeEncryptedKeyPEM(key, password)
-	if err == nil {
-		err = os.WriteFile(keyFile, keyPEM, 0600)
-	}
-	if err != nil {
+	if err := os.WriteFile(keyFile, keyPEM, 0600); err != nil {
+		_ = os.Remove(certFile)
 		return fmt.Errorf("writing key: %w", err)
 	}
 	return nil

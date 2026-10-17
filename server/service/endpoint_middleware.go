@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -86,10 +87,14 @@ func authenticatedDevice(svc fleet.Service, logger *slog.Logger, next endpoint.E
 			if err == nil {
 				authnMethod = authz_ctx.AuthnDeviceToken
 			} else {
+				tokenAuthErr := err
 				// Fallback to UUID auth for iOS/iPadOS self-service via URL.
 				// The identifier (from {token}) is treated as the device UUID.
 				host, debug, err = svc.AuthenticateIDeviceByURL(ctx, identifier)
 				authnMethod = authz_ctx.AuthnDeviceURL
+				if err != nil {
+					err = fmt.Errorf("token auth: %w; URL auth: %w", tokenAuthErr, err)
+				}
 			}
 		}
 
