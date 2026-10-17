@@ -51,7 +51,7 @@ func main() {
 			} `json:"host"`
 		}
 		if err := json.Unmarshal(body, &deviceInfo); err != nil {
-			slog.With("device_uuid", deviceInfo.Host.UUID, "error", err).Error("failed to unmarshal request body")
+			slog.With("raw_body", string(body), "error", err).Error("failed to unmarshal request body")
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
