@@ -114,6 +114,10 @@ Usage:
 			})
 		}
 
+		if len(bugDetails) == 0 {
+			return fmt.Errorf("no bugs remain after applying --without-milestone filters")
+		}
+
 		averageDays := totalDays / float64(len(bugDetails))
 		roundedAverage := int(math.Round(averageDays))
 
@@ -123,10 +127,12 @@ Usage:
 		case "json":
 			output := struct {
 				TotalBugs                         int     `json:"totalBugs"`
+				FilteredBugs                       int     `json:"filteredBugs"`
 				AverageNumberOfDaysBugsAreOpenFor int     `json:"averageNumberOfDaysBugsAreOpenFor"`
 				AverageDaysExact                  float64 `json:"averageDaysExact"`
 			}{
 				TotalBugs:                         len(bugs),
+				FilteredBugs:                       len(bugDetails),
 				AverageNumberOfDaysBugsAreOpenFor: roundedAverage,
 				AverageDaysExact:                  averageDays,
 			}

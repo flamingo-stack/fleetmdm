@@ -118,6 +118,11 @@ func main() {
 						continue // Skip this event but finish the loop to make sure we don't miss something
 					}
 					if item.Summary == eventTitle {
+						if item.Start == nil || item.End == nil {
+							// All-day events (or events without a dateTime) do not have Start/End
+							// populated with a DateTime field; skip them to avoid a nil pointer panic.
+							continue
+						}
 						item.Start.DateTime = dateTime.Format(time.RFC3339)
 						item.End.DateTime = dateTime.Add(30 * time.Minute).Format(time.RFC3339)
 						_, err := withRetry(

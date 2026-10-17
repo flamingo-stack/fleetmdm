@@ -124,7 +124,10 @@ func (ds *Datastore) DeleteLUKSData(ctx context.Context, hostID, keySlot uint) e
 	return ds.withTx(ctx, func(tx sqlx.ExtContext) error {
 		_, err := tx.ExecContext(ctx, `
 DELETE FROM host_disk_encryption_keys WHERE host_id = ? AND key_slot = ?`, hostID, keySlot)
-		return err
+		if err != nil {
+			return ctxerr.Wrap(ctx, err, "deleting LUKS data")
+		}
+		return nil
 	})
 }
 
@@ -168,7 +171,7 @@ VALUES
 		case errors.As(err, &mysqlErr) && mysqlErr.Number == 1062:
 			ds.logger.ErrorContext(ctx, "Primary key already exists in LUKS host_disk_encryption_keys. Falling back to update",
 				"host_id",
-				host)
+				host.ID)
 			// This should never happen unless there is a bug in the code or an infra issue (like huge replication lag).
 		default:
 			return false, ctxerr.Wrap(ctx, err, "inserting LUKS key")
@@ -200,7 +203,10 @@ func (ds *Datastore) IsHostPendingEscrow(ctx context.Context, hostID uint) bool 
 
 func (ds *Datastore) ClearPendingEscrow(ctx context.Context, hostID uint) error {
 	_, err := ds.writer(ctx).ExecContext(ctx, `UPDATE host_disk_encryption_keys SET reset_requested = FALSE WHERE host_id = ?`, hostID)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "clearing pending escrow")
+	}
+	return nil
 }
 
 func (ds *Datastore) ReportEscrowError(ctx context.Context, hostID uint, errorMessage string) error {
@@ -208,7 +214,10 @@ func (ds *Datastore) ReportEscrowError(ctx context.Context, hostID uint, errorMe
 INSERT INTO host_disk_encryption_keys
   (host_id, base64_encrypted, client_error) VALUES (?, '', ?) ON DUPLICATE KEY UPDATE client_error = VALUES(client_error)
 `, hostID, errorMessage)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "reporting escrow error")
+	}
+	return nil
 }
 
 func (ds *Datastore) QueueEscrow(ctx context.Context, hostID uint) error {
@@ -216,7 +225,10 @@ func (ds *Datastore) QueueEscrow(ctx context.Context, hostID uint) error {
 INSERT INTO host_disk_encryption_keys
   (host_id, base64_encrypted, reset_requested) VALUES (?, '', TRUE) ON DUPLICATE KEY UPDATE reset_requested = TRUE
 `, hostID)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "queueing escrow")
+	}
+	return nil
 }
 
 func (ds *Datastore) AssertHasNoEncryptionKeyStored(ctx context.Context, hostID uint) error {
@@ -269,10 +281,13 @@ func (ds *Datastore) SetHostsDiskEncryptionKeyStatus(
 		decryptable, hostIDs, threshold,
 	)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "building query")
 	}
 	_, err = ds.writer(ctx).ExecContext(ctx, query, args...)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "setting hosts disk encryption key status")
+	}
+	return nil
 }
 
 func (ds *Datastore) GetHostDiskEncryptionKey(ctx context.Context, hostID uint) (*fleet.HostDiskEncryptionKey, error) {
@@ -380,5 +395,8 @@ func bulkDeleteHostDiskEncryptionKeysDB(ctx context.Context, tx sqlx.ExtContext,
 	}
 
 	_, err = tx.ExecContext(ctx, deleteStmt, deleteArgs...)
-	return err
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "bulk deleting host disk encryption keys")
+	}
+	return nil
 }

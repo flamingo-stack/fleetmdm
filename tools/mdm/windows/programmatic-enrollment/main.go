@@ -144,5 +144,7 @@ func main() {
 		fmt.Printf("Host was successfully enrolled into MDM server %s through user %s\n", *targetDiscoveryUrl, *targetUserEmail)
 	} else {
 		fmt.Printf(" There was a problem enrolling into MDM server %s through user %s - Error %s\n", *targetDiscoveryUrl, *targetUserEmail, err)
+		os.Exit(1)
 	}
 }
+

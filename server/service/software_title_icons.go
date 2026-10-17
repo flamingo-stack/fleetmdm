@@ -298,10 +298,10 @@ func deleteSoftwareTitleIconEndpoint(ctx context.Context, request interface{}, s
 	req := request.(*deleteSoftwareTitleIconRequest)
 
 	if req.TeamID == nil {
-		return getSoftwareTitleIconsResponse{Err: &fleet.BadRequestError{Message: "team_id is required"}}, nil
+		return deleteSoftwareTitleIconResponse{Err: &fleet.BadRequestError{Message: "team_id is required"}}, nil
 	}
 	if req.TitleID == 0 {
-		return getSoftwareTitleIconsResponse{Err: &fleet.BadRequestError{Message: "invalid title_id"}}, nil
+		return deleteSoftwareTitleIconResponse{Err: &fleet.BadRequestError{Message: "invalid title_id"}}, nil
 	}
 
 	err := svc.DeleteSoftwareTitleIcon(ctx, *req.TeamID, req.TitleID)

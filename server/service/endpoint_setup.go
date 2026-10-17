@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fleetdm/fleet/v4/pkg/spec"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
@@ -114,8 +115,13 @@ func ApplyStarterLibrary(
 ) error {
 	logger.DebugContext(ctx, "Applying starter library")
 
+	// Only skip TLS certificate verification when explicitly opted into via
+	// an insecure/dev environment flag. This must not default to true, since
+	// this code path runs during initial, sensitive bootstrap setup.
+	tlsSkipVerify := os.Getenv("FLEET_DEV_SERVER_TLS_SKIP_VERIFY") == "1"
+
 	// Create an authenticated client to fetch app config.
-	client, err := NewClient(serverURL, true, "", "")
+	client, err := NewClient(serverURL, tlsSkipVerify, "", "")
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
@@ -157,8 +163,8 @@ func ApplyStarterLibrary(
 	if err != nil {
 		return fmt.Errorf("failed to create fleetctl config: %w", err)
 	}
-	fmt.Fprintf(configFile, "contexts:\n  default:\n    address: %s\n    tls-skip-verify: true\n    token: %s\n",
-		serverURL, token)
+	fmt.Fprintf(configFile, "contexts:\n  default:\n    address: %s\n    tls-skip-verify: %s\n    token: %s\n",
+		serverURL, strings.ToLower(fmt.Sprintf("%t", tlsSkipVerify)), token)
 	configFile.Close()
 
 	// Build the gitops args: global config first, then team configs (premium only).

@@ -67,6 +67,19 @@ func openframeAppConfigDefaultsOnMissing(ctx context.Context) bool {
 	return pinned || fleet.IsOpenframeMultitenancy()
 }
 
+// openframeAppConfigWriteID resolves the row id a writer must target, mirroring
+// openframeAppConfigSelectDecision so reads and writes from the same context never diverge:
+// pinned -> teamID, unpinned+multitenancy -> openframeGlobalAppConfigID (1), otherwise no id.
+func openframeAppConfigWriteID(ctx context.Context) (uint, bool) {
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		return teamID, true
+	}
+	if fleet.IsOpenframeMultitenancy() {
+		return openframeGlobalAppConfigID, true
+	}
+	return 0, false
+}
+
 // <<< OPENFRAME(mysql-multitenancy)
 
 func (ds *Datastore) AppConfig(ctx context.Context) (*fleet.AppConfig, error) {
@@ -136,12 +149,13 @@ func (ds *Datastore) SaveAppConfig(ctx context.Context, info *fleet.AppConfig) e
 			return ctxerr.Wrap(ctx, err, "marshaling config")
 		}
 
-		// >>> OPENFRAME(mysql-multitenancy): store this tenant's config under id = its team id
-		// so tenants don't overwrite a shared single config row.
-		if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		// >>> OPENFRAME(mysql-multitenancy): store this context's config under the same row id
+		// that openframeAppConfigSelect would read, so writes from pinned OR unpinned
+		// multitenant callers (crons, workers, boot) never silently create a stray row.
+		if id, ok := openframeAppConfigWriteID(ctx); ok {
 			_, err = tx.ExecContext(ctx,
 				`INSERT INTO app_config_json(id, json_value) VALUES(?, ?) ON DUPLICATE KEY UPDATE json_value = VALUES(json_value)`,
-				teamID, configBytes,
+				id, configBytes,
 			)
 		} else {
 			_, err = tx.ExecContext(ctx,

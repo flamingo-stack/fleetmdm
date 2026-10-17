@@ -261,7 +261,8 @@ func (svc *Service) populateSoftwareIconURLs(ctx context.Context, policies []*fl
 			// to (see getPolicySoftwareTitleIconURL), so it's safe to point at it
 			// without risking a 404.
 			if hasCustomIcon || p.VPPAppsTeamsID != nil {
-				t.IconURL = new(getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID))
+				url := getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID)
+				t.IconURL = &url
 			}
 		}
 
@@ -269,7 +270,8 @@ func (svc *Service) populateSoftwareIconURLs(ctx context.Context, policies []*fl
 			// Patch software is always a package installer (never a VPP app), so
 			// it only gets an icon URL when a custom icon was uploaded.
 			if _, ok := icons[t.SoftwareTitleID]; ok {
-				t.IconURL = new(getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID))
+				url := getPolicySoftwareTitleIconURL(teamID, t.SoftwareTitleID)
+				t.IconURL = &url
 			}
 		}
 	}

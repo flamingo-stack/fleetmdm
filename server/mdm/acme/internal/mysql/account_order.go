@@ -49,7 +49,7 @@ func (ds *Datastore) CreateAccount(ctx context.Context, account *types.Account, 
 		if err == nil {
 			if existingAccount.Revoked {
 				err = types.AccountRevokedError(fmt.Sprintf("Account %d is revoked", existingAccount.ID))
-				return ctxerr.Wrap(ctx, err)
+				return ctxerr.Wrap(ctx, err, "account revoked")
 			}
 			account.ID = existingAccount.ID
 			return nil
@@ -58,7 +58,7 @@ func (ds *Datastore) CreateAccount(ctx context.Context, account *types.Account, 
 		// If we got here we didn't find an existing account so, if requested by the caller, return a notFound
 		if onlyReturnExisting {
 			err = types.AccountDoesNotExistError(fmt.Sprintf("No account exists for enrollment id %d with the provided jwk", account.ACMEEnrollmentID))
-			return ctxerr.Wrap(ctx, err)
+			return ctxerr.Wrap(ctx, err, "account does not exist")
 		}
 
 		// check if maximum number of accounts for this enrollment has been reached before creating a new one
@@ -70,7 +70,7 @@ func (ds *Datastore) CreateAccount(ctx context.Context, account *types.Account, 
 		}
 		if accountCount >= maxAccountsPerEnrollment {
 			err = types.TooManyAccountsError(fmt.Sprintf("Enrollment id %d already has %d accounts, which is the maximum allowed", enrollmentID, accountCount))
-			return ctxerr.Wrap(ctx, err)
+			return ctxerr.Wrap(ctx, err, "too many accounts for enrollment")
 		}
 
 		// create the new account
@@ -152,7 +152,7 @@ func (ds *Datastore) CreateOrder(ctx context.Context, order *types.Order, author
 		}
 		if orderCount >= maxOrdersPerAccount {
 			err = types.TooManyOrdersError(fmt.Sprintf("Account id %d already has %d orders, which is the maximum allowed", order.ACMEAccountID, orderCount))
-			return ctxerr.Wrap(ctx, err)
+			return ctxerr.Wrap(ctx, err, "too many orders for account")
 		}
 
 		identifiersSerialized, err := json.Marshal(order.Identifiers)
@@ -220,7 +220,7 @@ func (ds *Datastore) GetOrderByID(ctx context.Context, accountID, orderID uint) 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			err = types.OrderDoesNotExistError(fmt.Sprintf("No order exists with id %d for this account", orderID))
-			return nil, nil, ctxerr.Wrap(ctx, err)
+			return nil, nil, ctxerr.Wrap(ctx, err, "order does not exist")
 		}
 		return nil, nil, ctxerr.Wrap(ctx, err, "select acme order")
 	}
@@ -268,7 +268,7 @@ func (ds *Datastore) GetCertificatePEMByOrderID(ctx context.Context, accountID, 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			err = types.CertificateDoesNotExistError(fmt.Sprintf("No certificate exists for order id %d for this account", orderID))
-			return "", ctxerr.Wrap(ctx, err)
+			return "", ctxerr.Wrap(ctx, err, "certificate does not exist")
 		}
 		return "", ctxerr.Wrap(ctx, err, "select certificate PEM for order")
 	}
@@ -277,7 +277,7 @@ func (ds *Datastore) GetCertificatePEMByOrderID(ctx context.Context, accountID, 
 
 func (ds *Datastore) ListAccountOrderIDs(ctx context.Context, accountID uint) ([]uint, error) {
 	// must not include orders in status 'invalid'
-	const listOrderIDsStmt = `SELECT id FROM acme_orders WHERE acme_account_id = ? AND status != 'invalid'`
+	const listOrderIDsStmt = `SELECT id FROM acme_orders WHERE acme_account_id = ? AND status != 'invalid' ORDER BY id`
 	var ids []uint
 	err := sqlx.SelectContext(ctx, ds.reader(ctx), &ids, listOrderIDsStmt, accountID)
 	if err != nil {

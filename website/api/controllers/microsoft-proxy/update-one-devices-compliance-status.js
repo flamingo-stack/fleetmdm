@@ -98,7 +98,7 @@ module.exports = {
           isCompliant: compliant
         }
       }).intercept((err)=>{
-        return new Error({error: `An error occurred when sending a request to sync a Windows device's compliance status for a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`});
+        throw new Error({error: `An error occurred when sending a request to sync a Windows device's compliance status for a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`});
       });
 
       // Return a 200 response to the Fleet server.
@@ -128,7 +128,7 @@ module.exports = {
           'Authorization': `Bearer ${graphAccessToken}`
         }
       }).intercept((err)=>{
-        return new Error({error: `An error occurred when getting a user ID from a user principal name (${userPrincipalName}) for a complaince status update. Full error: ${require('util').inspect(err, {depth: 3})}`});
+        throw new Error({error: `An error occurred when getting a user ID from a user principal name (${userPrincipalName}) for a complaince status update. Full error: ${require('util').inspect(err, {depth: 3})}`});
       });
 
       if(!informationAboutThisUser.id) {
@@ -181,7 +181,7 @@ module.exports = {
           Content: JSON.stringify(complianceUpdateContent),
         }
       }).intercept((err)=>{
-        return new Error({error: `An error occurred when sending a request to sync a device's compliance status for a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`});
+        throw new Error({error: `An error occurred when sending a request to sync a device's compliance status for a Microsoft compliance tenant. Full error: ${require('util').inspect(err, {depth: 3})}`});
       });
       // Log responses from Micrsoft APIs for Fleet's integration
       if(informationAboutThisTenant.fleetInstanceUrl === 'https://dogfood.fleetdm.com') {
@@ -197,3 +197,4 @@ module.exports = {
 
 
 };
+

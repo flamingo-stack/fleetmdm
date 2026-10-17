@@ -100,7 +100,7 @@ func TestOpenframePolicyHostAssignments(t *testing.T) {
 			return uint(len(hostIDs)), nil
 		}
 		_, err := svc.AddPolicyHosts(adminCtx, 1, []uint{1, 99})
-		require.Error(t, err, "host 99 does not exist")
+		require.ErrorContains(t, err, "host 99 does not exist")
 		require.False(t, ds.AddPolicyHostsFuncInvoked, "validation must run before the write")
 	})
 
@@ -201,7 +201,7 @@ func TestOpenframeQueryHostAssignments(t *testing.T) {
 		require.Equal(t, []uint{2, 3}, gotHostIDs)
 
 		_, err = svc.AddQueryHosts(adminCtx, 1, []uint{99})
-		require.Error(t, err, "host 99 does not exist")
+		require.ErrorContains(t, err, "host 99 does not exist")
 	})
 
 	t.Run("observer cannot write assignments", func(t *testing.T) {

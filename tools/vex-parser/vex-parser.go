@@ -40,18 +40,21 @@ type Product struct {
 func parseOpenVEX(filePath string) (*OpenVEXDocument, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read vex file %q: %w", filePath, err)
 	}
 	var vex OpenVEXDocument
 	err = json.Unmarshal(data, &vex)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal vex file %q: %w", filePath, err)
 	}
 	return &vex, nil
 }
 
 func generateMarkdown(vex *OpenVEXDocument) (string, error) {
 	var sb strings.Builder
+	if len(vex.Statements) == 0 {
+		return "", fmt.Errorf("vex document has no statements")
+	}
 	cve := vex.Statements[0].Vulnerability.Name
 	for _, stmt := range vex.Statements[1:] {
 		if stmt.Vulnerability.Name != cve {

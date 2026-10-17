@@ -67,7 +67,7 @@ func (s *commonFileStore) Get(ctx context.Context, fileID string) (io.ReadCloser
 // Put uploads a file to S3.
 func (s *commonFileStore) Put(ctx context.Context, fileID string, content io.ReadSeeker) error {
 	if fileID == "" {
-		return errors.New("S3 file identifier is empty")
+		return ctxerr.New(ctx, "S3 file identifier is empty")
 	}
 
 	key := s.keyForFile(fileID)
@@ -91,8 +91,11 @@ func (s *commonFileStore) Put(ctx context.Context, fileID string, content io.Rea
 
 		ChecksumAlgorithm: checksumAlgorithm,
 	})
+	if err != nil {
+		return ctxerr.Wrapf(ctx, err, "uploading %s to S3 store", s.fileLabel)
+	}
 
-	return err
+	return nil
 }
 
 // Exists checks if a file exists in the S3 bucket for the ID.

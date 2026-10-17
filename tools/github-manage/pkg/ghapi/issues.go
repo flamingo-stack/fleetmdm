@@ -4,6 +4,7 @@ package ghapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -11,6 +12,10 @@ import (
 
 	"fleetdm/gm/pkg/logger"
 )
+
+// ErrProjectItemNotFound is returned by GetProjectItemID when the issue is
+// not found in the specified project.
+var ErrProjectItemNotFound = errors.New("project item not found")
 
 // ParseJSONtoIssues converts JSON data to a slice of Issue structs.
 func ParseJSONtoIssues(jsonData []byte) ([]Issue, error) {
@@ -124,7 +129,7 @@ func RemoveIssueFromProject(issueNumber int, projectID int) error {
 	itemID, err := GetProjectItemID(issueNumber, projectID)
 	if err != nil {
 		// If the issue is not found in the project, that's not an error
-		if err.Error() == fmt.Sprintf("issue #%d not found in project %d", issueNumber, projectID) {
+		if errors.Is(err, ErrProjectItemNotFound) || err.Error() == fmt.Sprintf("issue #%d not found in project %d", issueNumber, projectID) {
 			return nil
 		}
 		return fmt.Errorf("failed to get project item ID: %v", err)
@@ -371,7 +376,10 @@ listLoop:
 
 	for i, issue := range issues {
 		// if we find an error, we'll drain concurrent executions and then bail
-		if stopError != nil {
+		mu.Lock()
+		currentStopError := stopError
+		mu.Unlock()
+		if currentStopError != nil {
 			break
 		}
 
@@ -395,12 +403,12 @@ listLoop:
 			if !hadLabel {
 				hadLabel, err = IssueHadLabel(repo, iss.Number, labelName, verbose)
 				if err != nil {
+					mu.Lock()
 					if verbose {
-						mu.Lock()
 						fmt.Fprintf(os.Stderr, " ERROR\n")
-						mu.Unlock()
 					}
 					stopError = err
+					mu.Unlock()
 					logger.Errorf("Error checking timeline for issue #%d: %v", iss.Number, err)
 					return
 				}
