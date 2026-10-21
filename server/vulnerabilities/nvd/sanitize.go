@@ -245,6 +245,8 @@ func targetSW(s *fleet.Software) string {
 		return "visual_studio_code"
 	case "jetbrains_plugins":
 		return "intellij"
+	case "android_apps":
+		return "android"
 	}
 	return "*"
 }
