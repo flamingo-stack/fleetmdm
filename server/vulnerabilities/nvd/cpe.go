@@ -637,6 +637,15 @@ func CPEFromSoftware(ctx context.Context, logger *slog.Logger, db *sqlx.DB, soft
 		return "", nil
 	}
 
+	// >>> OPENFRAME(vlc-android-cve-rule): skip the Android OS package — upstream fleetdm/fleet#55058
+	// The Android OS reports itself as package "android". Its vulnerabilities come from the Android
+	// OSV artifacts by security patch level; with target_sw=android it would match every unversioned
+	// Android OS CVE in NVD.
+	if software.Source == "android_apps" && software.ApplicationID != nil && *software.ApplicationID == "android" {
+		return "", nil
+	}
+	// <<< OPENFRAME(vlc-android-cve-rule)
+
 	mutateSoftware(ctx, software, logger) // tweak e.g. software versions prior to CPE matching if needed
 
 	translation, match, err := translations.Translate(reCache, software)
