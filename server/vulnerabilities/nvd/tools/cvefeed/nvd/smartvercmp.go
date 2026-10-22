@@ -47,7 +47,13 @@ func SmartVerCmp(v1, v2 string) int {
 		s1 = s1[skip1:]
 		s2 = s2[skip2:]
 	}
-	// everything is equal so far, the longest wins
+	// >>> OPENFRAME(vuln-version-trailing-zeros): trailing zero parts must not order versions ("157.0" == "157.0.0") — upstream fleetdm/fleet#55051
+	// everything is equal so far, trailing zero parts don't count ("157.0" == "157.0.0"),
+	// otherwise the longest wins
+	if isZeroSuffix(s1) && isZeroSuffix(s2) {
+		return 0
+	}
+	// <<< OPENFRAME(vuln-version-trailing-zeros)
 	if len(s1) > len(s2) {
 		return 1
 	}
@@ -86,6 +92,21 @@ func parseVerParts(v string) (int, int, int) {
 	}
 	return num, skip, skip + 1
 }
+
+// >>> OPENFRAME(vuln-version-trailing-zeros): helper for the trailing-zeros rule in SmartVerCmp — upstream fleetdm/fleet#55051
+// isZeroSuffix reports whether s is made only of zero parts, e.g. "", "0" or "0.0".
+func isZeroSuffix(s string) bool {
+	for len(s) > 0 {
+		num, cmpTo, skip := parseVerParts(s)
+		if num != cmpTo || strings.Trim(s[:cmpTo], "0") != "" {
+			return false
+		}
+		s = s[skip:]
+	}
+	return true
+}
+
+// <<< OPENFRAME(vuln-version-trailing-zeros)
 
 // lpad pads s with n '0's
 func lpad(s string, n int) string {

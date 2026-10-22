@@ -83,6 +83,8 @@ server/datastore/mysql/migrations/openframe/        # separate goose client
 server/datastore/redis/keyprefix.go                 # per-tenant Redis prefix
 server/fleet/openframe.go                           # IsOpenframeMode() gate
 orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-file tests
+orbit/pkg/osquery/openframe_command.go              # osqueryd command without --openframe-secret, for logging
+orbit/pkg/osquery/openframe_command_test.go
 ```
 
 ### New CI / packaging files
@@ -135,7 +137,7 @@ and the heaviest standing rebase cost.
 | osquery host id | `server/fleet/hosts.go` |
 | Query-results TTL cleanup | `server/config/config.go`, `server/fleet/{cron_schedules,datastore}.go`, `server/datastore/mysql/query_results.go`, `cmd/fleet/{cron,serve}.go` |
 | Redis key prefix | `server/datastore/redis/redis.go`, `server/config/config.go`, `cmd/fleet/serve.go` |
-| Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/openframe_identifier_test.go`, `orbit/pkg/constant/constant.go`, `orbit/pkg/osquery/osquery.go`, `client/orbit_client.go`, `server/fleet/api_orbit.go`, `server/fleet/orbit.go`, `server/service/orbit.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
+| Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/openframe_identifier_test.go`, `orbit/pkg/constant/constant.go`, `orbit/pkg/osquery/osquery.go`, `orbit/pkg/osquery/openframe_command.go`, `orbit/pkg/osquery/openframe_command_test.go`, `client/orbit_client.go`, `server/fleet/api_orbit.go`, `server/fleet/orbit.go`, `server/service/orbit.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
 | Agent options kept | `cmd/fleet/serve.go` (starter-library skip under multitenancy), `server/fleet/openframe.go` (trimmed seed/fallback defaults), `server/datastore/mysql/teams_openframe_test.go`, `server/fleet/openframe_test.go` |
 | Agent JSON content-type | `client/orbit_client.go`, `client/device_client.go`, `orbit/cmd/fetch_cert/main.go`, `client/orbit_client_content_type_test.go` |
 | Agent skip setup experience | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/setup_experience/setup_experience.go`, `orbit/cmd/orbit/setup_experience_openframe_test.go`, `orbit/pkg/setup_experience/setup_experience_openframe_test.go` |

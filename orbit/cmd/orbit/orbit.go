@@ -1532,14 +1532,6 @@ func orbitAction(c *cli.Context) error {
 		return fmt.Errorf("create osquery runner: %w", err)
 	}
 
-	// >>> OPENFRAME(agent-openframe-mode): log the full osqueryd command in openframe mode — openframe/docs/agent-openframe-mode.md
-	// Log full command for OpenFrame mode
-	if c.Bool("openframe-mode") {
-		log.Info().
-			Str("full_command", r.GetCommand()).
-			Msg("OpenFrame osquery command created")
-	}
-	// <<< OPENFRAME(agent-openframe-mode)
 	addSubsystem(&g, "osqueryd runner", r)
 
 	checkerClient, err := fleetclient.NewOrbitClient(
