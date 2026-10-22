@@ -245,8 +245,10 @@ func targetSW(s *fleet.Software) string {
 		return "visual_studio_code"
 	case "jetbrains_plugins":
 		return "intellij"
+	// >>> OPENFRAME(vlc-android-cve-rule): tag Android apps with target_sw=android — upstream fleetdm/fleet#55058
 	case "android_apps":
 		return "android"
+		// <<< OPENFRAME(vlc-android-cve-rule)
 	}
 	return "*"
 }
