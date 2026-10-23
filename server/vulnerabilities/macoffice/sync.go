@@ -32,7 +32,7 @@ func sync(
 ) error {
 	remote, url, err := ghClient.MacOfficeReleaseNotes(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("get remote release notes: %w", err)
 	}
 
 	// Nothing published yet on remote repo, so we do nothing.
@@ -42,12 +42,12 @@ func sync(
 
 	local, err := fsClient.MacOfficeReleaseNotes()
 	if err != nil {
-		return err
+		return fmt.Errorf("get local release notes: %w", err)
 	}
 
 	if len(local) == 0 {
 		if _, err := ghClient.Download(url); err != nil {
-			return err
+			return fmt.Errorf("download release notes: %w", err)
 		}
 		return nil
 	}
@@ -58,7 +58,7 @@ func sync(
 
 	if local[0].Before(remote) {
 		if _, err := ghClient.Download(url); err != nil {
-			return err
+			return fmt.Errorf("download release notes: %w", err)
 		}
 	}
 
@@ -66,7 +66,7 @@ func sync(
 	for _, l := range local {
 		if l.Before(remote) {
 			if err := fsClient.Delete(l); err != nil {
-				return err
+				return fmt.Errorf("delete out of date release notes: %w", err)
 			}
 		}
 	}
