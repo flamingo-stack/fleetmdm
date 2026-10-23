@@ -109,16 +109,12 @@ const QueryResults = ({
   }, [queryResults, lastEditedQueryBody]); // Cannot use tableHeaders as it will cause infinite loop with setTableHeaders
 
   useEffect(() => {
-    if (errorColumnConfigs?.length === 0 && !!errors?.length) {
-      setErrorColumnConfigs(generateColumnConfigsFromRows(errors));
+    if (errors && errors.length > 0) {
+      const newErrorColumnConfigs = generateColumnConfigsFromRows(errors);
 
-      if (errorColumnConfigs && errorColumnConfigs.length > 0) {
-        const newErrorColumnConfigs = generateColumnConfigsFromRows(errors);
-
-        // Update errorTableHeaders if new headers are found
-        if (newErrorColumnConfigs !== resultsColumnConfigs) {
-          setErrorColumnConfigs(newErrorColumnConfigs);
-        }
+      // Update errorTableHeaders if new headers are found
+      if (newErrorColumnConfigs !== errorColumnConfigs) {
+        setErrorColumnConfigs(newErrorColumnConfigs);
       }
     }
   }, [errors]); // Cannot use errorTableHeaders as it will cause infinite loop with setErrorTableHeaders

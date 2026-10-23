@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS windows_updates (
 	KEY idx_update_date (host_id, date_epoch)
 )`)
 	if err != nil {
-		return errors.Wrapf(err, "create operating_systems table")
+		return errors.Wrapf(err, "create windows_updates table")
 	}
 	return nil
 }
@@ -30,3 +30,4 @@ CREATE TABLE IF NOT EXISTS windows_updates (
 func Down_20220831100151(tx *sql.Tx) error {
 	return nil
 }
+

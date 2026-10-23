@@ -110,6 +110,8 @@ const OSSettingsResendCell = ({
       } else if (!isAndroidCertificate) {
         await resendRequest(profile.profile_uuid);
         onProfileResent();
+      } else {
+        renderFlash("error", "Couldn't resend. Please try again.");
       }
     } catch (e) {
       renderFlash("error", "Couldn't resend. Please try again.");

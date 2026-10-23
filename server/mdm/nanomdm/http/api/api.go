@@ -280,6 +280,7 @@ func readPEMCertAndKey(input []byte) (cert []byte, key []byte, err error) {
 	// if the PEM blocks are mushed together with no newline then add one
 	input = bytes.ReplaceAll(input, []byte("----------"), []byte("-----\n-----"))
 	var block *pem.Block
+loop:
 	for {
 		block, input = pem.Decode(input)
 		if block == nil {
@@ -291,11 +292,12 @@ func readPEMCertAndKey(input []byte) (cert []byte, key []byte, err error) {
 		case block.Type == "PRIVATE KEY" || strings.HasSuffix(block.Type, " PRIVATE KEY"):
 			if x509.IsEncryptedPEMBlock(block) {
 				err = errors.New("private key PEM appears to be encrypted")
-				break
+				break loop
 			}
 			key = pem.EncodeToMemory(block)
 		default:
 			err = fmt.Errorf("unrecognized PEM type: %q", block.Type)
+			break loop
 		}
 	}
 	return

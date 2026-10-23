@@ -22,7 +22,7 @@ func Up_20250304162702(tx *sql.Tx) error {
 	    UNIQUE KEY idx_ca_config_assets_name (name)
 	) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci`)
 	if err != nil {
-		return fmt.Errorf("failed to create ca_config_assets table: %s", err)
+		return fmt.Errorf("failed to create ca_config_assets table: %w", err)
 	}
 
 	if !columnExists(tx, "host_mdm_managed_certificates", "not_valid_after") {
@@ -31,7 +31,7 @@ func Up_20250304162702(tx *sql.Tx) error {
 	ADD COLUMN not_valid_after DATETIME(6) NULL
 	`)
 		if err != nil {
-			return fmt.Errorf("failed to add not_valid_after column to host_mdm_managed_certificates table: %s", err)
+			return fmt.Errorf("failed to add not_valid_after column to host_mdm_managed_certificates table: %w", err)
 		}
 	}
 	return nil

@@ -95,5 +95,7 @@ func (m *MockLiveQuery) DeleteQueryResultsCount(queryID uint) error {
 	if m.DeleteQueryResultsCountOverride != nil {
 		return m.DeleteQueryResultsCountOverride(queryID)
 	}
-	return nil
+	args := m.Called(queryID)
+	return args.Error(0)
 }
+

@@ -162,9 +162,14 @@ func (h *nanoLibSlogHandler) Handle(_ context.Context, r slog.Record) error {
 		kvs = append(kvs, a.Key, a.Value.Any())
 		return true
 	})
-	if r.Level >= slog.LevelInfo {
+	switch {
+	case r.Level >= slog.LevelError:
+		h.logger.Info(append(kvs, "level", "error")...)
+	case r.Level >= slog.LevelWarn:
+		h.logger.Info(append(kvs, "level", "warn")...)
+	case r.Level >= slog.LevelInfo:
 		h.logger.Info(kvs...)
-	} else {
+	default:
 		h.logger.Debug(kvs...)
 	}
 	return nil

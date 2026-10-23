@@ -62,16 +62,17 @@ func zipFiles(sources []string, target string) error {
 		if err != nil {
 			return err
 		}
-		defer fileToZip.Close()
 
 		// Get the file information.
 		info, err := fileToZip.Stat()
 		if err != nil {
+			fileToZip.Close()
 			return err
 		}
 
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
+			fileToZip.Close()
 			return err
 		}
 
@@ -85,12 +86,16 @@ func zipFiles(sources []string, target string) error {
 
 		writer, err := zipWriter.CreateHeader(header)
 		if err != nil {
+			fileToZip.Close()
 			return err
 		}
 
 		if _, err = io.Copy(writer, fileToZip); err != nil {
+			fileToZip.Close()
 			return err
 		}
+
+		fileToZip.Close()
 	}
 	return nil
 }

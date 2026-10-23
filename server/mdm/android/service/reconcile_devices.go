@@ -72,41 +72,39 @@ func ReconcileAndroidDevices(ctx context.Context, ds fleet.Datastore, logger *sl
 		checked++
 		deviceName := fmt.Sprintf("%s/devices/%s", enterprise.Name(), dev.DeviceID)
 		_, ok := deviceNameMap[deviceName]
-		switch {
-		case ok:
+		if ok {
 			// Device exists, no-op.
 			continue
-		case !ok:
-			// BYO unenroll wipes only the work profile; clear host_mdm_actions before flipping host_mdm.enrolled so the post-ack "Wiped"
-			// badge clears.
-			if cerr := clearAndroidBYOWipeRef(ctx, ds, dev.HostID); cerr != nil {
-				logger.ErrorContext(ctx, "failed to clear android byo wipe-ref during reconcile", "host_id", dev.HostID, "err", cerr)
-				ctxerr.Handle(ctx, cerr)
-				continue
-			}
-
-			if _, derr := ds.SetAndroidHostUnenrolled(ctx, dev.HostID); derr != nil {
-				logger.ErrorContext(ctx, "failed to mark android host unenrolled during reconcile", "host_id", dev.HostID, "err", derr)
-				continue
-			}
-			// Emit system activity to mirror Pub/Sub DELETED handling.
-			var displayName, serial string
-			if hosts, herr := ds.ListHostsLiteByIDs(ctx, []uint{dev.HostID}); herr == nil && len(hosts) == 1 && hosts[0] != nil {
-				displayName = hosts[0].DisplayName()
-				serial = hosts[0].HardwareSerial
-			}
-			if aerr := newActivityFn(ctx, nil, fleet.ActivityTypeMDMUnenrolled{
-				HostID:           dev.HostID,
-				HostSerial:       serial,
-				HostDisplayName:  displayName,
-				InstalledFromDEP: false,
-				Platform:         "android",
-			}); aerr != nil {
-				logger.DebugContext(ctx, "failed to create mdm_unenrolled activity during android reconcile", "host_id", dev.HostID, "err", aerr)
-			}
-			unenrolled++
-			logger.DebugContext(ctx, "android device missing in Google; marked unenrolled", "host_id", dev.HostID, "device", deviceName)
 		}
+
+		// BYO unenroll wipes only the work profile; clear host_mdm_actions before flipping host_mdm.enrolled so the post-ack "Wiped"
+		// badge clears.
+		if cerr := clearAndroidBYOWipeRef(ctx, ds, dev.HostID); cerr != nil {
+			logger.ErrorContext(ctx, "failed to clear android byo wipe-ref during reconcile", "host_id", dev.HostID, "err", cerr)
+			ctxerr.Handle(ctx, cerr)
+		}
+
+		if _, derr := ds.SetAndroidHostUnenrolled(ctx, dev.HostID); derr != nil {
+			logger.ErrorContext(ctx, "failed to mark android host unenrolled during reconcile", "host_id", dev.HostID, "err", derr)
+			continue
+		}
+		// Emit system activity to mirror Pub/Sub DELETED handling.
+		var displayName, serial string
+		if hosts, herr := ds.ListHostsLiteByIDs(ctx, []uint{dev.HostID}); herr == nil && len(hosts) == 1 && hosts[0] != nil {
+			displayName = hosts[0].DisplayName()
+			serial = hosts[0].HardwareSerial
+		}
+		if aerr := newActivityFn(ctx, nil, fleet.ActivityTypeMDMUnenrolled{
+			HostID:           dev.HostID,
+			HostSerial:       serial,
+			HostDisplayName:  displayName,
+			InstalledFromDEP: false,
+			Platform:         "android",
+		}); aerr != nil {
+			logger.DebugContext(ctx, "failed to create mdm_unenrolled activity during android reconcile", "host_id", dev.HostID, "err", aerr)
+		}
+		unenrolled++
+		logger.DebugContext(ctx, "android device missing in Google; marked unenrolled", "host_id", dev.HostID, "device", deviceName)
 	}
 
 	logger.DebugContext(ctx, "android reconcile complete", "checked", checked, "unenrolled", unenrolled)

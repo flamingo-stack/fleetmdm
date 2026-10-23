@@ -252,7 +252,7 @@ func (ds *Datastore) RecordStatisticsSent(ctx context.Context) error {
 func (ds *Datastore) CleanupStatistics(ctx context.Context) error {
 	// reset weekly count of policy violation days
 	if err := ds.InitializePolicyViolationDays(ctx); err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "cleanup statistics: initialize policy violation days")
 	}
 	return nil
 }

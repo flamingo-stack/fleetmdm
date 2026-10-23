@@ -154,7 +154,7 @@ const ScriptLibrary = ({ router, teamId, location }: IScriptLibraryProps) => {
       return <DataError />;
     }
 
-    if (currentPage === 0 && !scripts?.length) {
+    if (!scripts?.length) {
       return null;
     }
 
@@ -211,7 +211,7 @@ const ScriptLibrary = ({ router, teamId, location }: IScriptLibraryProps) => {
       <SectionHeader title="Library" alignLeftHeaderVertically />
       {config.server_settings.scripts_disabled && renderScriptsDisabledBanner()}
       {renderScriptsList()}
-      {!isLoading && !isError && currentPage === 0 && !scripts?.length && (
+      {!isLoading && !isError && !scripts?.length && (
         <EmptyState
           variant="header-list"
           header="No scripts"
