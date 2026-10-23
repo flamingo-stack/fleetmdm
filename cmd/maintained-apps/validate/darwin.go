@@ -28,19 +28,19 @@ func postApplicationInstall(ctx context.Context, appLogger *slog.Logger, appPath
 		return nil
 	}
 
-	appLogger.InfoContext(ctx, fmt.Sprintf("Forcing LaunchServices refresh for: '%s'", appPath))
+	appLogger.InfoContext(ctx, "forcing LaunchServices refresh", "path", appPath)
 	err := forceLaunchServicesRefresh(appPath)
 	if err != nil {
 		return fmt.Errorf("Error forcing LaunchServices refresh: %v. Attempting to continue", err)
 	}
 
-	appLogger.InfoContext(ctx, fmt.Sprintf("Attempting to remove quarantine for: '%s'", appPath))
+	appLogger.InfoContext(ctx, "attempting to remove quarantine", "path", appPath)
 	quarantineResult, err := removeAppQuarantine(appPath)
 
-	appLogger.InfoContext(ctx, fmt.Sprintf("Quarantine output error: %v", quarantineResult.QuarantineOutputError))
-	appLogger.InfoContext(ctx, fmt.Sprintf("Quarantine status: %s", quarantineResult.QuarantineStatus))
-	appLogger.InfoContext(ctx, fmt.Sprintf("Spctl output error: %v", quarantineResult.SpctlOutputError))
-	appLogger.InfoContext(ctx, fmt.Sprintf("spctl status: %s", quarantineResult.SpctlStatus))
+	appLogger.InfoContext(ctx, "quarantine output error", "error", quarantineResult.QuarantineOutputError)
+	appLogger.InfoContext(ctx, "quarantine status", "status", quarantineResult.QuarantineStatus)
+	appLogger.InfoContext(ctx, "spctl output error", "error", quarantineResult.SpctlOutputError)
+	appLogger.InfoContext(ctx, "spctl status", "status", quarantineResult.SpctlStatus)
 	if err != nil {
 		return fmt.Errorf("Error removing app quarantine: %v. Attempting to continue", err)
 	}
@@ -190,7 +190,7 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueAppIdent
 		return false, fmt.Errorf("Invalid character found in appPath: '%w'. Not executing query...", err)
 	}
 
-	logger.InfoContext(ctx, fmt.Sprintf("Looking for app: %s, version: %s", appName, appVersion))
+	logger.InfoContext(ctx, "looking for app", "name", appName, "version", appVersion)
 	query := `
 		SELECT
 		  COALESCE(NULLIF(display_name, ''), NULLIF(bundle_name, ''), NULLIF(bundle_executable, ''), TRIM(name, '.app') ) AS name,
@@ -234,7 +234,7 @@ func appExists(ctx context.Context, logger *slog.Logger, appName, uniqueAppIdent
 			result.Version = software.Version
 			result.Name = software.Name
 
-			logger.InfoContext(ctx, fmt.Sprintf("Found app: '%s' at %s, Version: %s, Bundled Version: %s", result.Name, result.Path, result.Version, result.BundledVersion))
+			logger.InfoContext(ctx, "found app", "name", result.Name, "path", result.Path, "version", result.Version, "bundled_version", result.BundledVersion)
 
 			// OneDrive auto-updates immediately after installation, so the installed version
 			// might be newer than the installer version. For OneDrive, we only verify that
@@ -328,3 +328,4 @@ func executeScript(cfg *Config, scriptContents string) (string, error) {
 	}
 	return result, nil
 }
+
