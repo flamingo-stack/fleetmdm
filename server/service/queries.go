@@ -300,7 +300,7 @@ func (svc *Service) NewQuery(ctx context.Context, p fleet.QueryPayload) (*fleet.
 
 	query, err := svc.ds.NewQuery(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "create query in datastore")
 	}
 
 	var teamID int64
@@ -353,7 +353,7 @@ func (svc *Service) ModifyQuery(ctx context.Context, id uint, p fleet.QueryPaylo
 	query, err := svc.ds.Query(ctx, id)
 	if err != nil {
 		setAuthCheckedOnPreAuthErr(ctx)
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get query from datastore")
 	}
 	if err := svc.authz.Authorize(ctx, query, fleet.ActionWrite); err != nil {
 		return nil, err
@@ -444,7 +444,7 @@ func (svc *Service) ModifyQuery(ctx context.Context, id uint, p fleet.QueryPaylo
 	logging.WithExtras(ctx, "name", query.Name, "sql", query.Query)
 
 	if err := svc.ds.SaveQuery(ctx, query, shouldDiscardQueryResults, shouldDeleteStats); err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "save query")
 	}
 
 	// If the query was modified in a way that requires discarding results,

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +17,7 @@ import (
 	"github.com/elimity-com/scim/schema"
 	"github.com/fleetdm/fleet/v4/server/authz"
 	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/service/middleware/auth"
 	"github.com/fleetdm/fleet/v4/server/service/middleware/log"
@@ -36,7 +36,7 @@ func RegisterSCIM(
 	fleetConfig *config.FleetConfig,
 ) error {
 	if fleetConfig == nil {
-		return errors.New("fleet config is nil")
+		return ctxerr.New(context.Background(), "fleet config is nil")
 	}
 	config := scim.ServiceProviderConfig{
 		DocumentationURI: optional.NewString("https://fleetdm.com/docs/get-started/why-fleet"),
@@ -248,7 +248,7 @@ func RegisterSCIM(
 
 	server, err := scim.NewServer(serverArgs, serverOpts...)
 	if err != nil {
-		return err
+		return ctxerr.Wrap(context.Background(), err, "create scim server")
 	}
 
 	scimErrorHandler := func(w http.ResponseWriter, detail string, status int) {
@@ -256,7 +256,7 @@ func RegisterSCIM(
 	}
 	authorizer, err := authz.NewAuthorizer()
 	if err != nil {
-		return err
+		return ctxerr.Wrap(context.Background(), err, "create scim authorizer")
 	}
 
 	dumpPayloadsEnabled := debugSCIMPayloadsEnabled()

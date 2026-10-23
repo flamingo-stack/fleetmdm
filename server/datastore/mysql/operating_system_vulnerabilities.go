@@ -320,7 +320,7 @@ func (ds *Datastore) InsertOSVulnerabilities(ctx context.Context, vulnerabilitie
 
 func (ds *Datastore) InsertOSVulnerability(ctx context.Context, v fleet.OSVulnerability, s fleet.VulnerabilitySource) (bool, error) {
 	if v.CVE == "" {
-		return false, fmt.Errorf("inserting operating system vulnerability: CVE cannot be empty %#v", v)
+		return false, ctxerr.New(ctx, fmt.Sprintf("inserting operating system vulnerability: CVE cannot be empty %#v", v))
 	}
 
 	var args []interface{}

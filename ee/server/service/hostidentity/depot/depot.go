@@ -52,12 +52,12 @@ func NewHostIdentitySCEPDepot(db *sqlx.DB, ds fleet.Datastore, logger *slog.Logg
 func (d *HostIdentitySCEPDepot) CA(_ []byte) ([]*x509.Certificate, *rsa.PrivateKey, error) {
 	cert, err := assets.KeyPair(context.Background(), d.ds, fleet.MDMAssetHostIdentityCACert, fleet.MDMAssetHostIdentityCAKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting assets: %w", err)
+		return nil, nil, ctxerr.Wrap(context.Background(), err, "getting assets")
 	}
 
 	pk, ok := cert.PrivateKey.(*rsa.PrivateKey)
 	if !ok {
-		return nil, nil, errors.New("private key not in RSA format")
+		return nil, nil, ctxerr.New(context.Background(), "private key not in RSA format")
 	}
 
 	return []*x509.Certificate{cert.Leaf}, pk, nil
@@ -68,11 +68,11 @@ func (d *HostIdentitySCEPDepot) Serial() (*big.Int, error) {
 	// Insert an empty row to generate a new auto-incremented serial number
 	result, err := d.db.Exec(`INSERT INTO host_identity_scep_serials () VALUES ();`)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(context.Background(), err, "inserting host identity scep serial")
 	}
 	lid, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(context.Background(), err, "getting last insert id for host identity scep serial")
 	}
 	return big.NewInt(lid), nil
 }

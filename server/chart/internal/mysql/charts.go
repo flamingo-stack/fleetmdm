@@ -277,18 +277,21 @@ func streamCVEStrings(ctx context.Context, q sqlx.QueryerContext, query string, 
 	// Close() is reached. The defer below provides it.
 	rows, err := q.QueryxContext(ctx, query, args...) //nolint:sqlclosecheck
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "query CVE strings")
 	}
 	defer rows.Close()
 
 	var cve string
 	for rows.Next() {
 		if err := rows.Scan(&cve); err != nil {
-			return err
+			return ctxerr.Wrap(ctx, err, "scan CVE string")
 		}
 		out[cve] = struct{}{}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return ctxerr.Wrap(ctx, err, "iterate CVE strings")
+	}
+	return nil
 }
 
 // streamCVEHostPairs runs a query yielding (cve, host_id) pairs and appends
@@ -312,7 +315,7 @@ func (ds *Datastore) streamCVEHostPairs(ctx context.Context, query string, args 
 	// Close() is reached. The defer below provides it.
 	rows, err := ds.reader(ctx).QueryxContext(ctx, query, args...) //nolint:sqlclosecheck
 	if err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "query CVE-host pairs")
 	}
 	defer rows.Close()
 
@@ -320,11 +323,14 @@ func (ds *Datastore) streamCVEHostPairs(ctx context.Context, query string, args 
 	var hostID uint
 	for rows.Next() {
 		if err := rows.Scan(&cve, &hostID); err != nil {
-			return err
+			return ctxerr.Wrap(ctx, err, "scan CVE-host pair")
 		}
 		out[cve] = append(out[cve], hostID)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return ctxerr.Wrap(ctx, err, "iterate CVE-host pairs")
+	}
+	return nil
 }
 
 // buildHostFilterClauses translates a HostFilter into SQL WHERE clauses for

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -292,7 +291,7 @@ type DeviceLocationResult interface {
 	Longitude() float64
 }
 
-func NewDeviceLocationResult(result *mdm.CommandResults, hostID uint) (DeviceLocationResult, error) {
+func NewDeviceLocationResult(ctx context.Context, result *mdm.CommandResults, hostID uint) (DeviceLocationResult, error) {
 	ret := &deviceLocationResult{
 		hostID: hostID,
 	}
@@ -304,7 +303,7 @@ func NewDeviceLocationResult(result *mdm.CommandResults, hostID uint) (DeviceLoc
 	}
 
 	if err := plist.Unmarshal(result.Raw, &deviceLocResult); err != nil {
-		return nil, fmt.Errorf("device location command result: xml unmarshal: %w", err)
+		return nil, ctxerr.Wrap(ctx, err, "device location command result: xml unmarshal")
 	}
 
 	ret.latitude = deviceLocResult.Latitude
@@ -332,3 +331,4 @@ func NewDeviceLocationResultsHandler(
 		return ctxerr.Wrap(ctx, err, "device location command result: insert host location data")
 	}
 }
+

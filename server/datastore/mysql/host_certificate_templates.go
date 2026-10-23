@@ -357,7 +357,7 @@ func (ds *Datastore) DeleteAllHostCertificateTemplates(ctx context.Context, host
 func (ds *Datastore) UpsertCertificateStatus(ctx context.Context, update *fleet.CertificateStatusUpdate) error {
 	// Validate the status.
 	if !update.Status.IsValid() {
-		return ctxerr.Wrap(ctx, fmt.Errorf("Invalid status '%s'", string(update.Status)))
+		return ctxerr.New(ctx, fmt.Sprintf("invalid status '%s'", string(update.Status)))
 	}
 
 	updateStmt := `
