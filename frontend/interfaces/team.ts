@@ -135,10 +135,12 @@ export interface IRemoveTeamSecretFormData {
 
 export const API_ALL_TEAMS_ID = undefined;
 export const APP_CONTEXT_ALL_TEAMS_ID = -1;
+// >>> OPENFRAME(FLEETMDM-001): rebranded "All teams" summary name to "All fleets"
 export const APP_CONTEXT_ALL_TEAMS_SUMMARY: ITeamSummary = {
   id: APP_CONTEXT_ALL_TEAMS_ID,
   name: "All fleets",
 } as const;
+// <<< OPENFRAME(FLEETMDM-001)
 
 export const API_NO_TEAM_ID = 0;
 export const APP_CONTEXT_NO_TEAM_ID = 0;
@@ -155,7 +157,11 @@ export const getTeamDisplayName = (team: ITokenTeam) =>
     ? APP_CONTEXT_NO_TEAM_SUMMARY.name
     : team.name;
 
+// >>> OPENFRAME(FLEETMDM-001): fork-specific "fleet" rename of getTeamDisplayName
+// added for ITokenFleet; reuses APP_CONTEXT_NO_TEAM_SUMMARY.name for both team
+// and fleet display names. Preserve this block through upstream syncs.
 export const getFleetDisplayName = (fleet: ITokenFleet) =>
   fleet.fleet_id === APP_CONTEXT_NO_TEAM_ID
     ? APP_CONTEXT_NO_TEAM_SUMMARY.name
     : fleet.name;
+// <<< OPENFRAME(FLEETMDM-001)

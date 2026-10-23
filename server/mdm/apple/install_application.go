@@ -1,3 +1,6 @@
+// >>> OPENFRAME(install-application): fork-authored Fleet-variable substitution
+// and InstallApplication command building for managed app configuration; not
+// present in upstream fleetdm/fleet. See FLEETMDM-001 for sentinel policy.
 package apple_mdm
 
 import (
@@ -282,3 +285,5 @@ func stripPlistWrapper(b []byte) []byte {
 	}
 	return []byte(s)
 }
+
+// <<< OPENFRAME(install-application)

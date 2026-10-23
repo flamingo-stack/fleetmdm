@@ -13,6 +13,7 @@ const (
 	ActionCreate = "create"
 	// ActionCancelHostActivity refers to canceling an upcoming activity on a host.
 	ActionCancelHostActivity = "cancel_host_activity"
+	// >>> OPENFRAME(authz-actions): fork-specific authorization actions layered onto upstream authz.go
 	// ActionTransferHost refers to transferring a host between fleets (teams).
 	// This action is permitted for technicians in addition to admin/maintainer/gitops,
 	// so transferring does not require the broader ActionWrite permission.
@@ -21,6 +22,7 @@ const (
 	ActionResend = "resend"
 	// ActionReadSecrets refers to reading secrets/credentials of an entity (e.g. CA private keys, API tokens).
 	ActionReadSecrets = "read_secrets"
+	// <<< OPENFRAME(authz-actions)
 
 	//
 	// User specific actions

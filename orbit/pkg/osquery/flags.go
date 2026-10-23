@@ -35,11 +35,13 @@ func FleetFlags(osqueryVersion string, fleetURL *url.URL) []string {
 		"--carver_block_size=8000000",
 	}
 
+	// >>> OPENFRAME(gzip-flag): enable gzip transport for osquery >= 5.21.0 — openframe/docs/osquery-gzip.md
 	if v, err := semver.NewVersion(osqueryVersion); err == nil {
 		if !semver.New(v.Major(), v.Minor(), v.Patch(), "", "").LessThan(semver.New(5, 21, 0, "", "")) {
 			flags = append(flags, "--tls_accept_gzip=true")
 		}
 	}
+	// <<< OPENFRAME(gzip-flag)
 
 	return flags
 }

@@ -222,6 +222,7 @@ spec:
           # "true" + no tenant UUID ⇒ shared per-request mode (one Fleet per cluster, fail closed).
           - name: FLEET_OPENFRAME_MULTI_TENANCY_ENABLED
             value: {{ .Values.fleet.openframe.multiTenancy.enabled | quote }}
+          {{- if .Values.fleet.openframe.multiTenancy.enabled }}
           - name: FLEET_OPENFRAME_TENANT_UUID
             valueFrom:
               configMapKeyRef:
@@ -230,6 +231,7 @@ spec:
           {{- if .Values.fleet.openframe.multiTenancy.teamId }}
           - name: FLEET_OPENFRAME_TEAM_ID
             value: {{ .Values.fleet.openframe.multiTenancy.teamId | quote }}
+          {{- end }}
           {{- end }}
           # <<< OPENFRAME(mysql-multitenancy)
           ## END FLEET SECTION
@@ -707,3 +709,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
     {{- end }}
+

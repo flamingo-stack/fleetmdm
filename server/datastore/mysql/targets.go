@@ -25,7 +25,7 @@ func (ds *Datastore) CountHostsInTargets(ctx context.Context, filter fleet.TeamF
 	// >>> OPENFRAME(mysql-multitenancy): fence target host resolution to this process's pinned team
 	// so a live query cannot target/count another tenant's hosts on a shared DB. The Redis key
 	// prefix already isolates live-query execution/results; this fences the MySQL target set too,
-	// keeping counts correct and foreign host ids out of campaign targets.
+	// keeping counts correct and foreign host ids out of campaign targets. — openframe/docs/mysql-multitenancy.md
 	openframeTeamCond := ""
 	var openframeTeamArgs []interface{}
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
@@ -148,7 +148,7 @@ func (ds *Datastore) HostIDsInTargets(ctx context.Context, filter fleet.TeamFilt
 
 	// >>> OPENFRAME(mysql-multitenancy): fence target host resolution to this process's pinned team
 	// so a live query cannot distribute to another tenant's hosts on a shared DB. Injected into the
-	// WHERE clause (before ORDER BY).
+	// WHERE clause (before ORDER BY). — openframe/docs/mysql-multitenancy.md
 	openframeTeamCond := ""
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
 		openframeTeamCond = " AND hosts.team_id = ?"
