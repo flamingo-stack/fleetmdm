@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"reflect"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/mdm/acme/api"
 	"github.com/fleetdm/fleet/v4/server/mdm/acme/internal/types"
 	eu "github.com/fleetdm/fleet/v4/server/platform/endpointer"
@@ -34,9 +35,11 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response any) er
 func acmeErrorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
 	var acmeErr *types.ACMEError
 	if !errors.As(err, &acmeErr) {
-		// TODO: If we can get access to a logger, we can log the details here, to help troubleshoot service errors.
 		// if it's not already an ACME error, it is because it is an internal server
 		// error (or a dev error, for 4xx we should always return ACMEError).
+		// Route the original error through ctxerr so it is captured for centralized
+		// observability, without leaking internal details to the client.
+		ctxerr.Handle(ctx, ctxerr.New(ctx, err.Error()))
 		acmeErr = types.InternalServerError("") // not passing err.Error() as we don't want to leak internal details
 	}
 
@@ -133,3 +136,4 @@ func newEndpointerWithNoAuth(svc api.Service, authMiddleware endpoint.Middleware
 		Versions:       versions,
 	}
 }
+

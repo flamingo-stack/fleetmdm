@@ -2,6 +2,7 @@ package endpointer
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,6 +30,9 @@ func NewClientIPStrategy(trustedProxies string) (realclientip.Strategy, error) {
 
 	if trustedProxies == "" {
 		// Empty: legacy behavior for backwards compatibility.
+		log.Println("warning: trusted_proxies is not set; falling back to legacy client IP " +
+			"detection, which trusts spoofable headers (True-Client-IP, X-Real-IP, X-Forwarded-For) " +
+			"unconditionally. Set trusted_proxies to \"none\" if this server is exposed directly to the internet.")
 		return &legacyStrategy{}, nil
 	} else if strings.EqualFold(trustedProxies, "none") {
 		// "none": Trust no one; return (non-spoofable) RemoteAddr only.
@@ -83,3 +87,4 @@ func (s *legacyStrategy) ClientIP(headers http.Header, remoteAddr string) string
 	}
 	return extractIP(r)
 }
+

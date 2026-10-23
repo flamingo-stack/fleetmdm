@@ -28,6 +28,13 @@ type MSRCAPI interface {
 // E.g. September 2024 bulleting was released on the 2nd.
 var FeedNotFound = errors.New("feed not found")
 
+// ErrMinAllowedDate is returned when the requested feed date is before the minimum
+// allowed date supported by MSRC.
+var ErrMinAllowedDate = errors.New("min allowed date")
+
+// ErrFutureDate is returned when the requested feed date is in the future.
+var ErrFutureDate = errors.New("date can't be in the future")
+
 type MSRCClient struct {
 	client  *http.Client
 	workDir string
@@ -59,11 +66,11 @@ func (msrc MSRCClient) GetFeed(month time.Month, year int) (string, error) {
 	minD := time.Date(MSRCMinYear, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 	if d.Before(minD) {
-		return "", fmt.Errorf("min allowed date is %s", minD)
+		return "", fmt.Errorf("%w: %s", ErrMinAllowedDate, minD)
 	}
 
 	if d.After(time.Now().UTC()) {
-		return "", errors.New("date can't be in the future")
+		return "", ErrFutureDate
 	}
 
 	dst := filepath.Join(msrc.workDir, fmt.Sprintf("%s.xml", feedName(d)))

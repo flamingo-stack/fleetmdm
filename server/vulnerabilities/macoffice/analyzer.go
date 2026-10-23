@@ -3,7 +3,6 @@ package macoffice
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ func getLatestReleaseNotes(vulnPath string) (ReleaseNotes, error) {
 
 	files, err := fs.MacOfficeReleaseNotes()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing mac office release notes: %w", err)
 	}
 
 	if len(files) == 0 {
@@ -34,13 +33,13 @@ func getLatestReleaseNotes(vulnPath string) (ReleaseNotes, error) {
 
 	payload, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading mac office release notes file %s: %w", filePath, err)
 	}
 
 	relNotes := ReleaseNotes{}
 	err = json.Unmarshal(payload, &relNotes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshalling mac office release notes file %s: %w", filePath, err)
 	}
 
 	// Ensure the release notes are sorted by release date, this is because the vuln. processing
@@ -87,7 +86,7 @@ func getStoredVulnerabilities(
 ) ([]fleet.SoftwareVulnerability, error) {
 	storedSoftware, err := ds.SoftwareByID(ctx, softwareID, nil, false, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting software by id %d: %w", softwareID, err)
 	}
 
 	var result []fleet.SoftwareVulnerability
@@ -116,7 +115,7 @@ func updateVulnsInDB(
 
 	err := ds.DeleteSoftwareVulnerabilities(ctx, toDelete)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("deleting software vulnerabilities: %w", err)
 	}
 
 	allVulns := make([]fleet.SoftwareVulnerability, 0, len(toInsertSet))
@@ -124,7 +123,12 @@ func updateVulnsInDB(
 		allVulns = append(allVulns, v)
 	}
 
-	return ds.InsertSoftwareVulnerabilities(ctx, allVulns, fleet.MacOfficeReleaseNotesSource)
+	result, err := ds.InsertSoftwareVulnerabilities(ctx, allVulns, fleet.MacOfficeReleaseNotesSource)
+	if err != nil {
+		return nil, fmt.Errorf("inserting software vulnerabilities: %w", err)
+	}
+
+	return result, nil
 }
 
 // Analyze uses the most recent Mac Office release notes asset in 'vulnPath' for detecting
@@ -155,7 +159,7 @@ func Analyze(
 		}
 	}
 	if !hasValid {
-		return nil, errors.New("MacOffice release notes contain no valid security updates (possible corrupted feed)")
+		return nil, ctxerr.New(ctx, "MacOffice release notes contain no valid security updates (possible corrupted feed)")
 	}
 
 	queryParams := fleet.SoftwareIterQueryOptions{IncludedSources: []string{"apps"}}

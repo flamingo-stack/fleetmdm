@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	oval_parsed "github.com/fleetdm/fleet/v4/server/vulnerabilities/oval/parsed"
 	utils "github.com/fleetdm/fleet/v4/server/vulnerabilities/utils"
@@ -43,12 +43,12 @@ func Analyze(
 
 	defs, err := loadDef(platform, vulnPath)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "load oval definitions")
 	}
 
 	rules, err := GetKnownOVALBugRules()
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "get known oval bug rules")
 	}
 
 	// Since hosts and software have a M:N relationship, the following sets are used to
@@ -61,7 +61,7 @@ func Analyze(
 	for {
 		hostIDs, err := ds.HostIDsByOSVersion(ctx, ver, offset, hostsBatchSize)
 		if err != nil {
-			return nil, err
+			return nil, ctxerr.Wrap(ctx, err, "get host IDs by os version")
 		}
 
 		if len(hostIDs) == 0 {
@@ -75,18 +75,18 @@ func Analyze(
 			hostID := hostID
 			software, err := ds.ListSoftwareForVulnDetection(ctx, fleet.VulnSoftwareFilter{HostID: &hostID})
 			if err != nil {
-				return nil, err
+				return nil, ctxerr.Wrap(ctx, err, "list software for vuln detection")
 			}
 
 			evalR, err := defs.Eval(ver, software)
 			if err != nil {
-				return nil, err
+				return nil, ctxerr.Wrap(ctx, err, "eval oval definitions")
 			}
 			foundInBatch[hostID] = evalR
 
 			evalU, err := defs.EvalKernel(software)
 			if err != nil {
-				return nil, err
+				return nil, ctxerr.Wrap(ctx, err, "eval kernel oval definitions")
 			}
 			foundInBatch[hostID] = append(foundInBatch[hostID], evalU...)
 
@@ -111,7 +111,7 @@ func Analyze(
 
 		existingInBatch, err := ds.ListSoftwareVulnerabilitiesByHostIDsSource(ctx, hostIDs, source)
 		if err != nil {
-			return nil, err
+			return nil, ctxerr.Wrap(ctx, err, "list software vulnerabilities by host ids source")
 		}
 
 		for _, hostID := range hostIDs {
@@ -129,7 +129,7 @@ func Analyze(
 		return ds.DeleteSoftwareVulnerabilities(ctx, v)
 	}, vulnBatchSize)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "delete software vulnerabilities")
 	}
 
 	allVulns := make([]fleet.SoftwareVulnerability, 0, len(toInsertSet))
@@ -139,10 +139,10 @@ func Analyze(
 
 	newVulns, err := ds.InsertSoftwareVulnerabilities(ctx, allVulns, source)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(ctx, err, "insert software vulnerabilities")
 	}
 	if !collectVulns {
-		return nil, nil
+		return newVulns, nil
 	}
 
 	return newVulns, nil
@@ -155,26 +155,26 @@ func Analyze(
 // the artifact download from GitHub was corrupted or partially failed.
 func loadDef(platform Platform, vulnPath string) (oval_parsed.Result, error) {
 	if !platform.IsSupported() {
-		return nil, fmt.Errorf("platform %q not supported", platform)
+		return nil, ctxerr.Errorf(context.Background(), "platform %q not supported", platform)
 	}
 
 	fileName := platform.ToFilename(time.Now(), "json")
 	latest, err := utils.LatestFile(fileName, vulnPath)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(context.Background(), err, "get latest oval file")
 	}
 	payload, err := os.ReadFile(latest)
 	if err != nil {
-		return nil, err
+		return nil, ctxerr.Wrap(context.Background(), err, "read oval file")
 	}
 
 	if platform.IsUbuntu() {
 		result := oval_parsed.UbuntuResult{}
 		if err := json.Unmarshal(payload, &result); err != nil {
-			return nil, err
+			return nil, ctxerr.Wrap(context.Background(), err, "unmarshal ubuntu oval result")
 		}
 		if len(result.Definitions) == 0 {
-			return nil, fmt.Errorf("OVAL definition file %q contains no rules (possible corrupted feed)", latest)
+			return nil, ctxerr.Errorf(context.Background(), "OVAL definition file %q contains no rules (possible corrupted feed)", latest)
 		}
 		return result, nil
 	}
@@ -182,13 +182,13 @@ func loadDef(platform Platform, vulnPath string) (oval_parsed.Result, error) {
 	if platform.IsRedHat() {
 		result := oval_parsed.RhelResult{}
 		if err := json.Unmarshal(payload, &result); err != nil {
-			return nil, err
+			return nil, ctxerr.Wrap(context.Background(), err, "unmarshal rhel oval result")
 		}
 		if len(result.Definitions) == 0 {
-			return nil, fmt.Errorf("OVAL definition file %q contains no rules (possible corrupted feed)", latest)
+			return nil, ctxerr.Errorf(context.Background(), "OVAL definition file %q contains no rules (possible corrupted feed)", latest)
 		}
 		return result, nil
 	}
 
-	return nil, fmt.Errorf("don't know how to parse file %q for %q platform", latest, platform)
+	return nil, ctxerr.Errorf(context.Background(), "don't know how to parse file %q for %q platform", latest, platform)
 }
