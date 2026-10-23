@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import { screen } from "@testing-library/react";
 import { createCustomRenderer, renderWithSetup } from "test/test-utils";
 import { noop } from "lodash";
+import { Button } from "@flamingo-stack/openframe-frontend-core";
 import { IHostPolicy } from "interfaces/policy";
 
 import HostPolicies from "./HostPolicies";
@@ -145,9 +146,9 @@ describe("HostPolicies", () => {
 
       return (
         <>
-          <button type="button" onClick={() => openModal(policy)}>
+          <Button type="button" onClick={() => openModal(policy)}>
             open modal
-          </button>
+          </Button>
           {showPolicies && (
             <HostPolicies
               {...baseProps}

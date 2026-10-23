@@ -1,5 +1,6 @@
 import React from "react";
 import { screen } from "@testing-library/react";
+import { Button } from "@flamingo-stack/openframe-frontend-core";
 
 import { createCustomRenderer } from "test/test-utils";
 import { createMockSelfServiceCategory } from "test/handlers/self-service-categories-handlers";
@@ -52,7 +53,7 @@ describe("SelfServiceFilters", () => {
     render(
       <SelfServiceFilters
         {...baseProps}
-        installAllSlot={<button type="button">Slot button</button>}
+        installAllSlot={<Button type="button">Slot button</Button>}
       />
     );
 
