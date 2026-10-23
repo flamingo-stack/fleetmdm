@@ -13,12 +13,12 @@ var Funcs = map[string][]func(*maintained_apps.FMAManifestApp) (*maintained_apps
 	"microsoft-powerpoint/darwin":   {MicrosoftVersionFromReleaseNotes},
 	"microsoft-onenote/darwin":      {MicrosoftVersionFromReleaseNotes},
 	"brave-browser/darwin":          {BraveVersionTransformer},
-	"whatsapp/darwin":               {WhatsAppVersionShortener, WhatsAppInstallerURL},
-	"google-chrome/darwin":          {ChromePKGInstaller},
+	"whatsapp/darwin":               {WhatsAppVersionShortener, WhatsAppInstallerURLOverride("https://web.whatsapp.com/desktop/mac_native/release/?configuration=Release&src=whatsapp_downloads_page")},
+	"google-chrome/darwin":          {PKGInstallerOverride("https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg")},
 	"google-drive/darwin":           {GoogleDriveVersionShortener},
-	"1password/darwin":              {OnePasswordPKGInstaller},
-	"zoom/darwin":                   {ZoomPKGInstaller},
-	"slack/darwin":                  {SlackPKGInstaller},
+	"1password/darwin":              {PKGInstallerOverride("https://downloads.1password.com/mac/1Password.pkg")},
+	"zoom/darwin":                   {PKGInstallerOverride("https://zoom.us/client/latest/ZoomInstallerIT.pkg")},
+	"slack/darwin":                  {PKGInstallerOverride("https://slack.com/api/desktop.latestRelease?redirect=1&variant=pkg&arch=universal")},
 	"omnissa-horizon-client/darwin": {OmnissaHorizonVersionShortener},
 	"8x8-work/darwin":               {EightXEightWorkVersionShortener},
 	"cisco-jabber/darwin":           {CiscoJabberVersionTransformer},
@@ -39,70 +39,35 @@ var Funcs = map[string][]func(*maintained_apps.FMAManifestApp) (*maintained_apps
 	"mysqlworkbench/darwin":         {MySQLWorkbenchVersionTransformer},
 	"lens/darwin":                   {LensVersionTransformer},
 	"grammarly-desktop/darwin":      {GrammarlyDesktopVersionShortener},
-	"logitune/darwin":               {LogiTunePKGInstaller},
+	"logitune/darwin":               {PKGInstallerOverride("https://software.vc.logitech.com/downloads/tune/LogiTuneInstaller.pkg")},
 	"anka-virtualization/darwin":    {AnkaVersionShortener},
 	"pd/darwin":                     {PdVersionTransformer},
 	"sonos/darwin":                  {SonosVersionTransformer},
 }
 
-func ChromePKGInstaller(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
-	// Override installer URL to use Google's PKG installer instead of Homebrew's DMG
-	// Version is kept from Homebrew (not set to "latest")
-	app.InstallerURL = "https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg"
-	// Set SHA256 to "no_check" since we're using a different installer URL than Homebrew
-	app.SHA256 = "no_check"
+// PKGInstallerOverride returns an enricher function that overrides the installer URL
+// to use the given PKG installer URL instead of Homebrew's default (typically a DMG).
+// Version is kept from Homebrew (not set to "latest"). SHA256 is set to "no_check"
+// since the installer URL differs from Homebrew's.
+func PKGInstallerOverride(url string) func(*maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
+	return func(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
+		app.InstallerURL = url
+		app.SHA256 = "no_check"
 
-	return app, nil
+		return app, nil
+	}
 }
 
-func OnePasswordPKGInstaller(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
-	// Override installer URL to use 1Password's Universal PKG installer instead of Homebrew's DMG
-	// Version is kept from Homebrew (not set to "latest")
-	app.InstallerURL = "https://downloads.1password.com/mac/1Password.pkg"
-	// Set SHA256 to "no_check" since we're using a different installer URL than Homebrew
-	app.SHA256 = "no_check"
+// WhatsAppInstallerURLOverride returns an enricher function that overrides the installer URL
+// to always use the given URL. SHA256 is set to "no_check" since the installer URL differs
+// from Homebrew's.
+func WhatsAppInstallerURLOverride(url string) func(*maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
+	return func(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
+		app.InstallerURL = url
+		app.SHA256 = "no_check"
 
-	return app, nil
-}
-
-func SlackPKGInstaller(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
-	// Override installer URL to use Slack's Universal PKG installer instead of Homebrew's DMG
-	// Version is kept from Homebrew (not set to "latest")
-	app.InstallerURL = "https://slack.com/api/desktop.latestRelease?redirect=1&variant=pkg&arch=universal"
-	// Set SHA256 to "no_check" since we're using a different installer URL than Homebrew
-	app.SHA256 = "no_check"
-
-	return app, nil
-}
-
-func ZoomPKGInstaller(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
-	// Override installer URL to use Zoom's Universal PKG installer instead of Homebrew's DMG
-	// Version is kept from Homebrew (not set to "latest")
-	app.InstallerURL = "https://zoom.us/client/latest/ZoomInstallerIT.pkg"
-	// Set SHA256 to "no_check" since we're using a different installer URL than Homebrew
-	app.SHA256 = "no_check"
-
-	return app, nil
-}
-
-func LogiTunePKGInstaller(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
-	// Override installer URL to use Logitech's enterprise PKG installer instead of Homebrew's DMG,
-	// which only contains a GUI installer app with no silent mode.
-	// Version is kept from Homebrew (not set to "latest")
-	app.InstallerURL = "https://software.vc.logitech.com/downloads/tune/LogiTuneInstaller.pkg"
-	// Set SHA256 to "no_check" since we're using a different installer URL than Homebrew
-	app.SHA256 = "no_check"
-
-	return app, nil
-}
-
-func WhatsAppInstallerURL(app *maintained_apps.FMAManifestApp) (*maintained_apps.FMAManifestApp, error) {
-	// Override installer URL to always use the specified URL
-	app.InstallerURL = "https://web.whatsapp.com/desktop/mac_native/release/?configuration=Release&src=whatsapp_downloads_page"
-	// Set SHA256 to "no_check" since we're using a different installer URL than Homebrew
-	app.SHA256 = "no_check"
-
-	return app, nil
+		return app, nil
+	}
 }
 
 func EnrichManifest(app *maintained_apps.FMAManifestApp) {
