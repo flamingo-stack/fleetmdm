@@ -93,11 +93,11 @@ func (svc *Service) GetBlock(ctx context.Context, carveId, blockId int64) ([]byt
 	}
 
 	if metadata.Expired {
-		return nil, errors.New("cannot get block for expired carve")
+		return nil, ctxerr.New(ctx, "cannot get block for expired carve")
 	}
 
 	if blockId > metadata.MaxBlock {
-		return nil, fmt.Errorf("block %d not yet available", blockId)
+		return nil, ctxerr.New(ctx, fmt.Sprintf("block %d not yet available", blockId))
 	}
 
 	data, err := svc.carveStore.GetBlock(ctx, metadata, blockId)
@@ -404,7 +404,7 @@ func (svc *Service) CarveBlock(ctx context.Context, payload fleet.CarveBlockPayl
 	}
 
 	if payload.RequestId != carve.RequestId {
-		return errors.New("request_id does not match")
+		return ctxerr.New(ctx, "request_id does not match")
 	}
 
 	if host, ok := hostctx.FromContext(ctx); ok && host.ID != carve.HostId {

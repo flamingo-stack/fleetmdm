@@ -3,9 +3,10 @@ package certverify
 import (
 	"context"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 )
 
 // CertVerifier is a simple interface for verifying a certificate.
@@ -37,5 +38,6 @@ func (v *FallbackVerifier) Verify(ctx context.Context, cert *x509.Certificate) e
 		}
 		errs = append(errs, fmt.Sprintf("fallback error (%d): %v", i, err))
 	}
-	return errors.New(strings.Join(errs, "; "))
+	return ctxerr.New(ctx, strings.Join(errs, "; "))
 }
+

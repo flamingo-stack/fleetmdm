@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
-	"errors"
-	"fmt"
 
 	"github.com/crewjam/saml"
 	"github.com/fleetdm/fleet/v4/server"
@@ -14,7 +12,7 @@ import (
 
 const cacheLifetimeSeconds = uint(300) // in seconds (5 minutes)
 
-func getDestinationURL(idpMetadata *saml.EntityDescriptor) (string, error) {
+func getDestinationURL(ctx context.Context, idpMetadata *saml.EntityDescriptor) (string, error) {
 	for _, ssoDescriptor := range idpMetadata.IDPSSODescriptors {
 		for _, ssos := range ssoDescriptor.SingleSignOnServices {
 			if ssos.Binding == saml.HTTPRedirectBinding {
@@ -22,7 +20,7 @@ func getDestinationURL(idpMetadata *saml.EntityDescriptor) (string, error) {
 			}
 		}
 	}
-	return "", errors.New("IDP does not support redirect binding")
+	return "", ctxerr.New(ctx, "IDP does not support redirect binding")
 }
 
 // CreateAuthorizationRequest creates a new SAML AuthnRequest and creates a new session in sessionStore.
@@ -37,9 +35,9 @@ func CreateAuthorizationRequest(
 	sessionTTLSeconds uint,
 	requestData SSORequestData,
 ) (sessionID string, idpURL string, err error) {
-	idpURL, err = getDestinationURL(samlProvider.IDPMetadata)
+	idpURL, err = getDestinationURL(ctx, samlProvider.IDPMetadata)
 	if err != nil {
-		return "", "", fmt.Errorf("get idp url: %w", err)
+		return "", "", ctxerr.Wrap(ctx, err, "get idp url")
 	}
 	samlAuthRequest, err := samlProvider.MakeAuthenticationRequest(
 		idpURL,
@@ -56,10 +54,10 @@ func CreateAuthorizationRequest(
 	var metadataWriter bytes.Buffer
 	err = xml.NewEncoder(&metadataWriter).Encode(samlProvider.IDPMetadata)
 	if err != nil {
-		return "", "", fmt.Errorf("encoding metadata creating auth request: %w", err)
+		return "", "", ctxerr.Wrap(ctx, err, "encoding metadata creating auth request")
 	}
 
-	sessionID, err = generateSessionID()
+	sessionID, err = generateSessionID(ctx)
 	if err != nil {
 		return "", "", ctxerr.Wrap(ctx, err, "generate session ID")
 	}
@@ -80,7 +78,7 @@ func CreateAuthorizationRequest(
 		requestData,
 	)
 	if err != nil {
-		return "", "", fmt.Errorf("caching SSO session while creating auth request: %w", err)
+		return "", "", ctxerr.Wrap(ctx, err, "caching SSO session while creating auth request")
 	}
 
 	relayState := "" // Fleet currently doesn't use/set RelayState
@@ -91,11 +89,11 @@ func CreateAuthorizationRequest(
 	return sessionID, idpRedirectURL.String(), nil
 }
 
-func generateSessionID() (string, error) {
+func generateSessionID(ctx context.Context) (string, error) {
 	const sessionIDLength = 24
 	sessionID, err := server.GenerateRandomText(sessionIDLength)
 	if err != nil {
-		return "", fmt.Errorf("create random session ID: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "create random session ID")
 	}
 	return sessionID, nil
 }

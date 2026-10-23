@@ -20,7 +20,7 @@ import (
 func generateAndRenderNonce(ctx context.Context, nonces *redis_nonces_store.RedisNoncesStore, w http.ResponseWriter) error {
 	nonce := types.CreateNonceEncodedForHeader()
 	if err := nonces.Store(ctx, nonce, redis_nonces_store.DefaultNonceExpiration); err != nil {
-		return err
+		return ctxerr.Wrap(ctx, err, "storing ACME replay nonce")
 	}
 	w.Header().Set("Replay-Nonce", nonce)
 	w.Header().Set("Cache-Control", "no-store")
