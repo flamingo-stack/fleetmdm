@@ -91,7 +91,7 @@ export const getUninstallErrorMessage = (e: unknown) => {
       "Couldn't uninstall."
     );
   } else if (reason.startsWith("No uninstall script exists")) {
-    return `${UNINSTALL_SOFTWARE_ERROR_PREFIX}. An uninstall script does not exist for this package.`;
+    return `${UNINSTALL_SOFTWARE_ERROR_PREFIX} An uninstall script does not exist for this package.`;
   }
 
   return DEFAULT_UNINSTALL_ERROR_MESSAGE;

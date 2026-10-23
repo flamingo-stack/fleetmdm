@@ -131,7 +131,13 @@ func (r *teamsResource) Create(ctx context.Context, req resource.CreateRequest, 
 		resp.Diagnostics.Append(diag.NewErrorDiagnostic(
 			"failed to convert fleet api return to TF structs",
 			fmt.Sprintf("failed to convert fleet api return to TF structs: %s", err)))
-		_ = r.client.DeleteTeam(newTeam.Team.ID) // Problematic. :-/
+		if delErr := r.client.DeleteTeam(newTeam.Team.ID); delErr != nil {
+			resp.Diagnostics.Append(diag.NewErrorDiagnostic(
+				"failed to clean up after failed team conversion",
+				fmt.Sprintf("failed to delete team %s while cleaning up "+
+					"failure converting API response: %s. Team will need to be "+
+					"manually deleted.", plan.Name.ValueString(), delErr)))
+		}
 		return
 	}
 
@@ -247,6 +253,19 @@ func (r *teamsResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		}
 	}
 
+	if upTeam == nil {
+		// Nothing was actually updated on the Fleet side (e.g. agent options
+		// changed to an empty string and name/description are unchanged), so
+		// fetch the current team to safely populate state.
+		upTeam, err = r.client.GetTeam(state.Id.ValueInt64())
+		if err != nil {
+			resp.Diagnostics.Append(diag.NewErrorDiagnostic(
+				"Failed to get team",
+				fmt.Sprintf("Failed to get team: %s", err)))
+			return
+		}
+	}
+
 	err = teamModelToTF(ctx, upTeam, &state)
 	if err != nil {
 		resp.Diagnostics.Append(diag.NewErrorDiagnostic(
@@ -297,3 +316,4 @@ func (r *teamsResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	resp.State.RemoveResource(ctx)
 }
+

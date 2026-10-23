@@ -12,7 +12,7 @@ run(){
 	while getopts s:p:u:f:d:o:x flag
 	 do
 		case "${flag}" in
-			f) #path to file containing team names. Must end with newline char.
+			s) #path to file containing team names. Must end with newline char.
 				source=($OPTARG);;
 			p) #types of installers to create. Pass an individual flag for each type
 				types+=($OPTARG);;

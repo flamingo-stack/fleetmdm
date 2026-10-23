@@ -44,11 +44,11 @@ module.exports = {
     let pageTitleForMeta;
     let pageDescriptionForMeta;
 
-    if(thisPage.meta.articleTitle) {
+    if(thisPage.meta && thisPage.meta.articleTitle) {
       pageTitleForMeta = thisPage.meta.articleTitle;
     }
 
-    if(thisPage.meta.description) {
+    if(thisPage.meta && thisPage.meta.description) {
       pageDescriptionForMeta = thisPage.meta.description;
     }
 

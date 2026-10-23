@@ -114,7 +114,7 @@ const InventoryVersion = ({
           );
 
           return (
-            <div className={`${baseClass}__sig-info`}>
+            <div key={path} className={`${baseClass}__sig-info`}>
               <DataSet orientation="horizontal" title="Path" value={path} />
               {sigInfo?.hash_sha256 && (
                 <DataSet
@@ -170,10 +170,12 @@ const InventoryVersions = ({
         </div>
       )}
       <div className={`${baseClass}__versions`}>
-        {installedVersions.map((installedVersion) => {
+        {installedVersions.map((installedVersion, index) => {
           return (
             <InventoryVersion
-              key={installedVersion.version}
+              key={`${index}-${installedVersion.version}-${
+                installedVersion.installed_paths?.join(",") ?? ""
+              }`}
               version={installedVersion}
               source={hostSoftware.source}
               bundleIdentifier={hostSoftware.bundle_identifier}
