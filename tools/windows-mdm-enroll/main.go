@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/fleetdm/fleet/v4/orbit/pkg/update"
 )
@@ -16,14 +17,18 @@ func main() {
 	flag.Parse()
 
 	if *unenroll {
-		err := update.RunWindowsMDMUnenrollment(update.WindowsMDMEnrollmentArgs{})
-		fmt.Println("unenrollment: ", err)
+		if err := update.RunWindowsMDMUnenrollment(update.WindowsMDMEnrollmentArgs{}); err != nil {
+			fmt.Printf("unenrollment failed: %v\n", fmt.Errorf("windows mdm unenrollment: %w", err))
+			os.Exit(1)
+		}
 		return
 	}
 
-	err := update.RunWindowsMDMEnrollment(update.WindowsMDMEnrollmentArgs{
+	if err := update.RunWindowsMDMEnrollment(update.WindowsMDMEnrollmentArgs{
 		DiscoveryURL: *discoveryURL,
 		HostUUID:     *hostUUID,
-	})
-	fmt.Println("enrollment: ", err)
+	}); err != nil {
+		fmt.Printf("enrollment failed: %v\n", fmt.Errorf("windows mdm enrollment: %w", err))
+		os.Exit(1)
+	}
 }
