@@ -104,14 +104,12 @@ const generateTableConfig = (
         let displayedVersion =
           title.software_package?.version || title.app_store_app?.version;
 
-        if (platform === "linux") {
+        if (platform === "linux" && displayedVersion) {
           const packageTypeCopy = getSetupExperienceLinuxPackageCopy(
             title.source
           );
           if (packageTypeCopy) {
-            displayedVersion = (
-              displayedVersion ?? DEFAULT_EMPTY_CELL_VALUE
-            ).concat(` (.${packageTypeCopy})`);
+            displayedVersion = displayedVersion.concat(` (.${packageTypeCopy})`);
           }
         }
         return <TextCell value={displayedVersion} />;

@@ -229,6 +229,7 @@ const WelcomeHost = ({
             if (p.response) {
               return (
                 <Button
+                  key={p.id}
                   variant="unstyled"
                   onClick={() => handlePolicyModal(p.id)}
                 >

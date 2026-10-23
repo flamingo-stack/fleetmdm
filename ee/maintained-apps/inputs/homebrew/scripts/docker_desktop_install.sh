@@ -4,7 +4,7 @@ set -euo pipefail
 
 # variables
 APPDIR="/Applications/"
-TMPDIR=$(dirname "$(realpath "$INSTALLER_PATH")")
+TMPDIR=$(mktemp -d)
 MOUNT_POINT=""
 
 cleanup() {
@@ -14,6 +14,9 @@ cleanup() {
       hdiutil detach "$mp" >/dev/null 2>&1 || true
     fi
     rmdir "$mp" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${TMPDIR:-}" ]]; then
+    rm -rf "$TMPDIR" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -142,3 +145,4 @@ mkdir -p /usr/local/bin
 /bin/ln -h -f -s -- "$APPDIR/Docker.app/Contents/Resources/bin/docker-credential-desktop" "/usr/local/bin/docker-credential-desktop"
 /bin/ln -h -f -s -- "$APPDIR/Docker.app/Contents/Resources/bin/docker-credential-ecr-login" "/usr/local/bin/docker-credential-ecr-login"
 /bin/ln -h -f -s -- "$APPDIR/Docker.app/Contents/Resources/bin/docker-credential-osxkeychain" "/usr/local/bin/docker-credential-osxkeychain"
+

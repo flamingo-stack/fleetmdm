@@ -67,6 +67,9 @@ func parsePMSetOutput(output []byte) map[string]interface{} {
 	curKey := ""
 	for scanner.Scan() {
 		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
 		if line[0] != ' ' {
 			curKey = strings.TrimSpace(line)
 			result[curKey] = make(map[string]string)

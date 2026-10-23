@@ -1,16 +1,12 @@
 #!/bin/bash
 
-sudo /usr/bin/defaults write /Library/Application\
-Support/CrashReporter/DiagnosticMessagesHistory.plist AutoSubmit -bool false
+sudo /usr/bin/defaults write "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist" AutoSubmit -bool false
 
-sudo /usr/bin/defaults write /Library/Application\
-Support/CrashReporter/DiagnosticMessagesHistory.plist ThirdPartyDataSubmit -bool false
+sudo /usr/bin/defaults write "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist" ThirdPartyDataSubmit -bool false
 
-sudo /bin/chmod 644 /Library/Application\
-Support/CrashReporter/DiagnosticMessagesHistory.plist
+sudo /bin/chmod 644 "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"
 
-sudo /usr/sbin/chgrp admin /Library/Application\
-Support/CrashReporter/DiagnosticMessagesHistory.plist
+sudo /usr/sbin/chgrp admin "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"
 
 
 echo "This needs modification"

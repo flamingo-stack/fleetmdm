@@ -66,6 +66,9 @@ func registerGetPolicyCompliance(s *server.MCPServer, fleetClient *FleetClient) 
 			if terr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Failed to resolve fleet %q: %v", fleet, terr)), nil
 			}
+			if len(teamIDs) == 0 {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to resolve fleet %q: no matching team found", fleet)), nil
+			}
 			compliance, err = fleetClient.GetTeamPolicyCompliance(ctx, fmt.Sprintf("%d", teamIDs[0]), policyID)
 		} else {
 			compliance, err = fleetClient.GetPolicyCompliance(ctx, policyID)

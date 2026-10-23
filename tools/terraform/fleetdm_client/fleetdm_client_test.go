@@ -37,6 +37,9 @@ func TestBasic(t *testing.T) {
 	team, err := client.CreateTeam(teamName, defaultDescription)
 	require.NoError(t, err)
 	require.NotNil(t, team)
+	t.Cleanup(func() {
+		_ = client.DeleteTeam(team.Team.ID)
+	})
 	require.Equal(t, teamName, team.Team.Name)
 	require.Equal(t, defaultDescription, team.Team.Description)
 	aoBytes, err := json.Marshal(team.Team.AgentOptions)

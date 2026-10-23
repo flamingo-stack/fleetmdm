@@ -11,7 +11,7 @@ import { ITeam } from "interfaces/team";
 interface ITransferHostModal {
   isGlobalAdmin: boolean;
   teams: ITeam[];
-  onSubmit: (team: ITeam) => void;
+  onSubmit: (team: ITeam | INoTeamOption) => void;
   onCancel: () => void;
   isUpdating: boolean;
   multipleHosts?: boolean;
@@ -73,7 +73,10 @@ const TransferHostModal = ({
   );
 
   const onSubmitTransferHost = useCallback(() => {
-    onSubmit(selectedTeam as ITeam);
+    if (selectedTeam === undefined) {
+      return;
+    }
+    onSubmit(selectedTeam);
   }, [onSubmit, selectedTeam]);
 
   const createTeamDropdownOptions = (): CustomOptionType[] => {
@@ -135,3 +138,4 @@ const TransferHostModal = ({
 };
 
 export default TransferHostModal;
+

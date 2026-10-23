@@ -15,7 +15,7 @@ func TestUp_20250701155654(t *testing.T) {
 
 	hash := sha256.New()
 	_, _ = hash.Write(eulaBytes)
-	sha256 := hash.Sum(nil)
+	expectedHash := hash.Sum(nil)
 
 	execNoErr(t, db,
 		`INSERT INTO eulas (id, bytes, token, name) VALUES (?, ?, ?, ?)`,
@@ -29,5 +29,5 @@ func TestUp_20250701155654(t *testing.T) {
 	err := db.Get(&got, `SELECT sha256 FROM eulas WHERE id = ?`, 1)
 	require.NoError(t, err)
 
-	require.True(t, bytes.Equal(got, sha256))
+	require.True(t, bytes.Equal(got, expectedHash))
 }
