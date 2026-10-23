@@ -2,15 +2,16 @@ package fleet
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/mdm"
 	"github.com/fleetdm/fleet/v4/server/mdm/microsoft/syncml"
 	"github.com/fleetdm/fleet/v4/server/ptr"
@@ -74,6 +75,9 @@ type windowsProfileValidator struct {
 
 	// The decoder which is used for reading the XML tokens.
 	decoder *xml.Decoder
+
+	// ctx is threaded through so that validation errors can be routed through ctxerr for centralised observability.
+	ctx context.Context
 }
 
 var validTopLevelElements = map[string]struct{}{
@@ -98,16 +102,16 @@ var validTopLevelElements = map[string]struct{}{
 //
 // [1]: http://www.w3.org/TR/2006/REC-xml-20060816
 // [2]: https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-MDM/%5bMS-MDM%5d.pdf
-func (m *MDMWindowsConfigProfile) ValidateUserProvided() error {
+func (m *MDMWindowsConfigProfile) ValidateUserProvided(ctx context.Context) error {
 	if len(bytes.TrimSpace(m.SyncML)) == 0 {
-		return errors.New("The file should include valid XML.")
+		return ctxerr.New(ctx, "The file should include valid XML.")
 	}
 	fleetNames := mdm.FleetReservedProfileNames()
 	if _, ok := fleetNames[m.Name]; ok {
-		return fmt.Errorf("Profile name %q is not allowed.", m.Name)
+		return ctxerr.Errorf(ctx, "Profile name %q is not allowed.", m.Name)
 	}
 
-	validator := newWindowsProfileValidator(m.SyncML)
+	validator := newWindowsProfileValidator(ctx, m.SyncML)
 	// Substring match for the secret prefix. A literal "FLEET_SECRET_" appearing in profile data with no "$" sigil would
 	// also flip this flag, but the only consequence is skipping the top-level element check on that upload, which is
 	// acceptable.
@@ -115,7 +119,7 @@ func (m *MDMWindowsConfigProfile) ValidateUserProvided() error {
 	return validator.validate()
 }
 
-func newWindowsProfileValidator(syncML []byte) *windowsProfileValidator {
+func newWindowsProfileValidator(ctx context.Context, syncML []byte) *windowsProfileValidator {
 	dec := xml.NewDecoder(bytes.NewReader(syncML))
 	// use strict mode to check for a variety of common mistakes like
 	// unclosed tags, etc.
@@ -124,6 +128,7 @@ func newWindowsProfileValidator(syncML []byte) *windowsProfileValidator {
 	return &windowsProfileValidator{
 		scepValidator: newWindowsSCEPProfileValidator(),
 		decoder:       dec,
+		ctx:           ctx,
 	}
 }
 
@@ -132,7 +137,7 @@ func (v *windowsProfileValidator) validate() error {
 		tok, err := v.decoder.Token()
 		if err != nil {
 			if err != io.EOF {
-				return fmt.Errorf("The file should include valid XML: %w", err)
+				return ctxerr.Wrap(v.ctx, err, "The file should include valid XML")
 			}
 			break
 		}
@@ -145,10 +150,10 @@ func (v *windowsProfileValidator) validate() error {
 	// If the profile references a Fleet secret variable, the body may be (or contain) a placeholder that expands into the
 	// real SyncML at apply time, so skip the structural top-level element check here.
 	if !v.sawValidTopLevel && !v.containsServerSecret {
-		return errors.New("The file should include valid SyncML XML with at least one supported element.")
+		return ctxerr.New(v.ctx, "The file should include valid SyncML XML with at least one supported element.")
 	}
 
-	return v.scepValidator.finalizeValidation()
+	return v.scepValidator.finalizeValidation(v.ctx)
 }
 
 func (v *windowsProfileValidator) processToken(tok xml.Token) error {
@@ -156,7 +161,7 @@ func (v *windowsProfileValidator) processToken(tok xml.Token) error {
 	// no processing instructions allowed (<?target inst?>)
 	// see #16316 for details
 	case xml.ProcInst:
-		return errors.New("The file should include valid XML: processing instructions are not allowed.")
+		return ctxerr.New(v.ctx, "The file should include valid XML: processing instructions are not allowed.")
 	case xml.Comment:
 		// TODO: Do we really care about comments? Why not allow them everywhere?
 	case xml.StartElement:
@@ -177,12 +182,12 @@ func (v *windowsProfileValidator) handleStartElement(el xml.StartElement) error 
 
 		if _, valid := validTopLevelElements[elementName]; !valid {
 			// We agreed with Design that it's okay to not include <Atomic> in the msg here.
-			return errors.New("Windows configuration profiles can only have <Replace> or <Add> top level elements.")
+			return ctxerr.New(v.ctx, "Windows configuration profiles can only have <Replace> or <Add> top level elements.")
 		}
 
 		// We have an atomic profile and we see another top level element, we don't care what it is.
 		if v.isAtomicProfile != nil && *v.isAtomicProfile {
-			return errors.New("<Atomic> element must wrap all the elements in a Windows configuration profile.")
+			return ctxerr.New(v.ctx, "<Atomic> element must wrap all the elements in a Windows configuration profile.")
 		}
 
 		if elementName == "Atomic" && v.isAtomicProfile == nil {
@@ -190,7 +195,7 @@ func (v *windowsProfileValidator) handleStartElement(el xml.StartElement) error 
 			v.isAtomicProfile = ptr.Bool(true)
 		} else if elementName == "Atomic" && v.isAtomicProfile != nil && !*v.isAtomicProfile {
 			// We are at top level, we have already seen other top level elements, and now we see Atomic
-			return errors.New("Windows configuration profiles can only have <Replace> or <Add> top level elements.")
+			return ctxerr.New(v.ctx, "Windows configuration profiles can only have <Replace> or <Add> top level elements.")
 		}
 
 		v.currentTopLevelElement = elementName
@@ -200,7 +205,7 @@ func (v *windowsProfileValidator) handleStartElement(el xml.StartElement) error 
 			v.isAtomicProfile = ptr.Bool(false)
 		}
 	} else if v.currentElement == "Atomic" && !v.isValidNestedAtomicElement(elementName) {
-		return errors.New("Windows configuration profiles can only include <Replace> or <Add> within the <Atomic> element.")
+		return ctxerr.New(v.ctx, "Windows configuration profiles can only include <Replace> or <Add> within the <Atomic> element.")
 	}
 
 	v.currentElement = elementName
@@ -219,7 +224,7 @@ func (v *windowsProfileValidator) handleEndElement(el xml.EndElement) error {
 	// content. Whitespace-only content is rejected in validateLocURIFormat.
 	if elementName == "LocURI" && !v.locURIHasContent {
 		v.currentElement = ""
-		return errors.New("<LocURI> can't be empty.")
+		return ctxerr.New(v.ctx, "<LocURI> can't be empty.")
 	}
 
 	v.currentElement = ""
@@ -240,18 +245,18 @@ func (v *windowsProfileValidator) handleCharData(el xml.CharData) error {
 
 	// Surface Fleet-reserved URI errors (BitLocker, Windows updates) before the generic format check so users get the more
 	// specific message.
-	if err := validateFleetProvidedLocURI(locURI); err != nil {
+	if err := validateFleetProvidedLocURI(v.ctx, locURI); err != nil {
 		return err
 	}
 
-	if err := validateLocURIFormat(locURI); err != nil {
+	if err := validateLocURIFormat(v.ctx, locURI); err != nil {
 		return err
 	}
 
 	if v.isInExec() {
-		return v.scepValidator.validateExecLocURI(locURI)
+		return v.scepValidator.validateExecLocURI(v.ctx, locURI)
 	}
-	return v.scepValidator.validateLocURI(locURI)
+	return v.scepValidator.validateLocURI(v.ctx, locURI)
 }
 
 // validateLocURIFormat rejects LocURI values that real Windows MDM devices reject with status 400 (empirically verified
@@ -264,16 +269,16 @@ func (v *windowsProfileValidator) handleCharData(el xml.CharData) error {
 //
 // All other forms are accepted, including device-permissive "Device/Vendor/MSFT/..." (no "./") and "./Vendor/MSFT/..."
 // (implicit device-targeted) variants.
-func validateLocURIFormat(locURI string) error {
+func validateLocURIFormat(ctx context.Context, locURI string) error {
 	trimmed := strings.TrimSpace(locURI)
 	if trimmed == "" {
-		return errors.New("<LocURI> can't be empty.")
+		return ctxerr.New(ctx, "<LocURI> can't be empty.")
 	}
 	if strings.HasPrefix(trimmed, "/") && !strings.HasPrefix(trimmed, "./") {
-		return errors.New("<LocURI> can't start with \"/\".")
+		return ctxerr.New(ctx, "<LocURI> can't start with \"/\".")
 	}
 	if slices.Contains(strings.Split(strings.TrimPrefix(trimmed, "./"), "/"), "..") {
-		return errors.New("<LocURI> can't contain \"..\" path traversal segments.")
+		return ctxerr.New(ctx, "<LocURI> can't contain \"..\" path traversal segments.")
 	}
 	return nil
 }
@@ -299,18 +304,18 @@ var fleetProvidedLocURIValidationMap = map[string][]string{
 	syncml.FleetBitLockerTargetLocURI: nil,
 }
 
-func validateFleetProvidedLocURI(locURI string) error {
+func validateFleetProvidedLocURI(ctx context.Context, locURI string) error {
 	sanitizedLocURI := strings.TrimSpace(locURI)
 	for fleetLocURI, errHints := range fleetProvidedLocURIValidationMap {
 		if strings.Contains(sanitizedLocURI, fleetLocURI) {
 			if fleetLocURI == syncml.FleetBitLockerTargetLocURI {
-				return errors.New(syncml.DiskEncryptionProfileRestrictionErrMsg)
+				return ctxerr.New(ctx, syncml.DiskEncryptionProfileRestrictionErrMsg)
 			}
 			if len(errHints) == 2 {
-				return fmt.Errorf("Custom configuration profiles can't include %s settings. To control these settings, use the %s option.",
+				return ctxerr.Errorf(ctx, "Custom configuration profiles can't include %s settings. To control these settings, use the %s option.",
 					errHints[0], errHints[1])
 			}
-			return fmt.Errorf("Custom configuration profiles can't include these settings. %q", errHints)
+			return ctxerr.Errorf(ctx, "Custom configuration profiles can't include these settings. %q", errHints)
 		}
 	}
 
@@ -408,16 +413,16 @@ func (v *windowsSCEPProfileValidator) isSCEPProfile() bool {
 	return len(v.foundLocURIs) > 0 || (v.totalExecLocURIs > 0 && len(v.foundExecLocURIs) > 0)
 }
 
-func (v *windowsSCEPProfileValidator) validateLocURI(locURI string) error {
+func (v *windowsSCEPProfileValidator) validateLocURI(ctx context.Context, locURI string) error {
 	normalizedLocURI := v.normalizeSCEPLocURI(locURI)
 
-	if err := v.setLocURIArrays(normalizedLocURI); err != nil {
+	if err := v.setLocURIArrays(ctx, normalizedLocURI); err != nil {
 		return err
 	}
 
 	// If we see a LocURI with SCEP prefix, but no Fleet Var we fail early.
 	if v.isSCEPLocURIWithoutFleetVar(normalizedLocURI) {
-		return fmt.Errorf("You must use %q after \"ClientCertificateInstall/SCEP/\".", FleetVarSCEPWindowsCertificateID.WithPrefix())
+		return ctxerr.Errorf(ctx, "You must use %q after \"ClientCertificateInstall/SCEP/\".", FleetVarSCEPWindowsCertificateID.WithPrefix())
 	}
 
 	if slices.Contains(*v.validSCEPProfileLocURIs, normalizedLocURI) {
@@ -428,16 +433,16 @@ func (v *windowsSCEPProfileValidator) validateLocURI(locURI string) error {
 	return nil
 }
 
-func (v *windowsSCEPProfileValidator) validateExecLocURI(locURI string) error {
+func (v *windowsSCEPProfileValidator) validateExecLocURI(ctx context.Context, locURI string) error {
 	normalizedLocURI := v.normalizeSCEPLocURI(locURI)
 
-	if err := v.setLocURIArrays(normalizedLocURI); err != nil {
+	if err := v.setLocURIArrays(ctx, normalizedLocURI); err != nil {
 		return err
 	}
 
 	// If we see a LocURI with SCEP prefix, but no Fleet Var we fail early.
 	if v.isSCEPLocURIWithoutFleetVar(normalizedLocURI) {
-		return fmt.Errorf("You must use %q after \"ClientCertificateInstall/SCEP/\".", FleetVarSCEPWindowsCertificateID.WithPrefix())
+		return ctxerr.Errorf(ctx, "You must use %q after \"ClientCertificateInstall/SCEP/\".", FleetVarSCEPWindowsCertificateID.WithPrefix())
 	}
 
 	if slices.Contains(*v.validExecSCEPProfileLocURIs, normalizedLocURI) {
@@ -448,7 +453,7 @@ func (v *windowsSCEPProfileValidator) validateExecLocURI(locURI string) error {
 	return nil
 }
 
-func (v *windowsSCEPProfileValidator) setLocURIArrays(locURI string) error {
+func (v *windowsSCEPProfileValidator) setLocURIArrays(ctx context.Context, locURI string) error {
 	switch {
 	case IsWindowsSCEPLocURI(locURI) && (v.validExecSCEPProfileLocURIs == nil || len(*v.validExecSCEPProfileLocURIs) == 0):
 		// First SCEP LocURI seen. Earlier non-SCEP LocURIs may have set the empty placeholder arrays; replace them
@@ -474,7 +479,7 @@ func (v *windowsSCEPProfileValidator) setLocURIArrays(locURI string) error {
 		firstValidLocURI := (*v.validSCEPProfileLocURIs)[0]
 		if strings.HasPrefix(firstValidLocURI, "./Device") && strings.HasPrefix(locURI, "./User") ||
 			strings.HasPrefix(firstValidLocURI, "./User") && strings.HasPrefix(locURI, "./Device") {
-			return errors.New("All <LocURI> elements in the SCEP profile must start either with \"./Device\" or \"./User\".")
+			return ctxerr.New(ctx, "All <LocURI> elements in the SCEP profile must start either with \"./Device\" or \"./User\".")
 		}
 	}
 
@@ -501,28 +506,28 @@ func IsWindowsSCEPLocURI(locURI string) bool {
 		strings.HasPrefix(locURI, "./User/Vendor/MSFT/ClientCertificateInstall/SCEP/")
 }
 
-func (v *windowsSCEPProfileValidator) finalizeValidation() error {
+func (v *windowsSCEPProfileValidator) finalizeValidation(ctx context.Context) error {
 	if !v.isSCEPProfile() {
 		// Cheeky validation here, to only allow Exec elements in SCEP profiles.
 		if v.totalExecLocURIs > 0 {
-			return errors.New("Only SCEP profiles can include <Exec> elements.")
+			return ctxerr.New(ctx, "Only SCEP profiles can include <Exec> elements.")
 		}
 		return nil // Not a SCEP profile, nothing to validate here.
 	}
 
 	// If we reach here with empty arrays something has gone wrong.
 	if len(*v.validExecSCEPProfileLocURIs) == 0 || len(*v.validSCEPProfileLocURIs) == 0 || len(*v.requiredSCEPProfileLocURIs) == 0 {
-		return errors.New("Internal error validating SCEP profile LocURIs.")
+		return ctxerr.New(ctx, "Internal error validating SCEP profile LocURIs.")
 	}
 
 	// Check that at least one Exec LocURI is present and it matches the only one we have in the array.
 	validExecLocURIs := *v.validExecSCEPProfileLocURIs
 	if len(v.foundExecLocURIs) != 1 && !v.foundExecLocURIs[validExecLocURIs[0]] {
-		return errors.New("\"ClientCertificateInstall/SCEP/$FLEET_VAR_SCEP_WINDOWS_CERTIFICATE_ID/Install/Enroll\" must be included within <Exec>. Please add and try again.")
+		return ctxerr.New(ctx, "\"ClientCertificateInstall/SCEP/$FLEET_VAR_SCEP_WINDOWS_CERTIFICATE_ID/Install/Enroll\" must be included within <Exec>. Please add and try again.")
 	}
 
 	if v.totalExecLocURIs != 1 {
-		return errors.New("SCEP profiles must include exactly one <Exec> element.")
+		return ctxerr.New(ctx, "SCEP profiles must include exactly one <Exec> element.")
 	}
 
 	// Verify that we do not have any non-SCEP LocURIs present. This
@@ -530,7 +535,7 @@ func (v *windowsSCEPProfileValidator) finalizeValidation() error {
 	// ESP (EnrollmentStatusTracking) relies on to track them under
 	// Certificates instead of Security policies.
 	if v.totalLocURIs != len(v.foundLocURIs) {
-		return errors.New("Only options that have <LocURI> starting with \"ClientCertificateInstall/SCEP/\" can be added to SCEP profile.")
+		return ctxerr.New(ctx, "Only options that have <LocURI> starting with \"ClientCertificateInstall/SCEP/\" can be added to SCEP profile.")
 	}
 
 	// Check that all required LocURIs are present
@@ -538,7 +543,7 @@ func (v *windowsSCEPProfileValidator) finalizeValidation() error {
 		if !v.foundLocURIs[requiredLocURI] {
 			trimmedPrefix := strings.TrimPrefix(requiredLocURI, "./Device/Vendor/MSFT/")
 			trimmedPrefix = strings.TrimPrefix(trimmedPrefix, "./User/Vendor/MSFT/")
-			return fmt.Errorf("%q is missing. Please add and try again.", trimmedPrefix)
+			return ctxerr.Errorf(ctx, "%q is missing. Please add and try again.", trimmedPrefix)
 		}
 	}
 
@@ -677,3 +682,4 @@ func (wt *MDMWindowsWipeType) UnmarshalJSON(b []byte) error {
 type MDMWindowsWipeMetadata struct {
 	WipeType MDMWindowsWipeType `json:"wipe_type"`
 }
+
