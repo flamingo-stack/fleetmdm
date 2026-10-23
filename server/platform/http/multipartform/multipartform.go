@@ -19,6 +19,7 @@ func Parse(ctx context.Context, r *http.Request, maxMemory int64) error {
 	if err := r.ParseMultipartForm(maxMemory); err != nil {
 		return err
 	}
+	// >>> OPENFRAME(team-id-to-fleet-id-shim): backward-compatibility rename of legacy "team_id" field to "fleet_id"; diverges from upstream fleetdm/fleet behavior — openframe/docs/team-id-to-fleet-id-shim.md
 	// Check if a "team_id" field is present and valid. If so, log a deprecation warning, add a "fleet_id" field with the same value, and remove the "team_id" field to prevent confusion in handlers.
 	teamIDs, teamIDPresent := r.Form["team_id"]
 	if teamIDPresent && len(teamIDs) > 0 {
@@ -35,5 +36,6 @@ func Parse(ctx context.Context, r *http.Request, maxMemory int64) error {
 		r.MultipartForm.Value["fleet_id"] = []string{teamID}
 		delete(r.MultipartForm.Value, "team_id")
 	}
+	// <<< OPENFRAME(team-id-to-fleet-id-shim)
 	return nil
 }

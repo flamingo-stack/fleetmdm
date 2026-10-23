@@ -73,6 +73,7 @@ func FmtErrorChain(chain []mdm.ErrorChain) string {
 	return sb.String()
 }
 
+// >>> OPENFRAME(mdm-error-helpers): fork-specific MDM error classification helpers — openframe/docs/mdm-error-helpers.md
 // IsRecoveryLockPasswordMismatchError checks if the error chain indicates that the
 // recovery lock password provided does not match the one on the device. This is a
 // terminal error that should not be retried automatically.
@@ -153,6 +154,8 @@ func IsAppAlreadyInstalledError(chain []mdm.ErrorChain) bool {
 	return false
 }
 
+// <<< OPENFRAME(mdm-error-helpers)
+
 // FmtDDMError formats a DDM error message
 func FmtDDMError(reasons []fleet.MDMAppleDDMStatusErrorReason) string {
 	var errMsg strings.Builder
@@ -189,6 +192,7 @@ func IsLessThanVersion(current string, target string) (bool, error) {
 	return cv.LessThan(tv), nil
 }
 
+// >>> OPENFRAME(managed-account-password): managed account password generation and hashing for Apple ADE account-driven setup — openframe/docs/managed-account-password.md
 const (
 	// ManagedAccountPasswordGroupCount is the number of character groups in a managed account password.
 	ManagedAccountPasswordGroupCount = 6
@@ -263,3 +267,5 @@ func GenerateSaltedSHA512PBKDF2Hash(password string) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// <<< OPENFRAME(managed-account-password)

@@ -1,4 +1,4 @@
-// OPENFRAME(redis-seed-nodes): unit test for comma-separated cluster seed-node
+// >>> OPENFRAME(redis-seed-nodes): unit test for comma-separated cluster seed-node
 // parsing — openframe/docs/redis-key-prefix.md
 //
 // This guards a regression that already bit once: the sync reset redis.go toward
@@ -34,3 +34,4 @@ func TestSplitSeedNodes(t *testing.T) {
 		})
 	}
 }
+// <<< OPENFRAME(redis-seed-nodes)

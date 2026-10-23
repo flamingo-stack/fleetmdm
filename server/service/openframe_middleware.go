@@ -76,6 +76,7 @@ func openframeTenantHandler(ds openframeTeamEnsurer, logger *slog.Logger, next h
 	})
 }
 
+// >>> OPENFRAME(mysql-multitenancy): MDM/agent path exemptions from tenant-header enforcement — openframe/docs/agent-ingestion-isolation.md
 // openframeTenantExemptPath matches the agent/device/MDM-enrollment planes, which derive their
 // tenant from the authenticated principal (host node key / enroll secret / device cert) rather
 // than the gateway X-Tenant-Id header.
@@ -101,7 +102,9 @@ func openframeTenantExemptPath(path string) bool {
 	}
 	return false
 }
+// <<< OPENFRAME(mysql-multitenancy)
 
+// >>> OPENFRAME(mysql-multitenancy): pin authenticated host requests to their team in shared mode — openframe/docs/agent-ingestion-isolation.md
 // openframePinHostTeam scopes ctx to the authenticated host's team in shared mode; a host with no
 // team fails auth (fail closed) rather than running unscoped. No-op outside shared mode.
 func openframePinHostTeam(ctx context.Context, host *fleet.Host) (context.Context, error) {
@@ -117,3 +120,4 @@ func openframePinHostTeamShared(ctx context.Context, host *fleet.Host) (context.
 	}
 	return fleet.NewOpenframeTeamContext(ctx, *host.TeamID), nil
 }
+// <<< OPENFRAME(mysql-multitenancy)
