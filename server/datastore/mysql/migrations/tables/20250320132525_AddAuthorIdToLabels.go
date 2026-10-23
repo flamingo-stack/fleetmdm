@@ -6,10 +6,10 @@ import (
 )
 
 func init() {
-	MigrationClient.AddMigration(Up_20250311132525, Down_20250311132525)
+	MigrationClient.AddMigration(Up_20250320132525, Down_20250320132525)
 }
 
-func Up_20250311132525(tx *sql.Tx) error {
+func Up_20250320132525(tx *sql.Tx) error {
 	// Idempotent migration.
 	if !columnExists(tx, "labels", "author_id") {
 		_, err := tx.Exec(
@@ -32,6 +32,7 @@ func Up_20250311132525(tx *sql.Tx) error {
 	return nil
 }
 
-func Down_20250311132525(tx *sql.Tx) error {
+func Down_20250320132525(tx *sql.Tx) error {
 	return nil
 }
+

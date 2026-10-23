@@ -299,11 +299,21 @@ func deleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sqlStmt := "DELETE FROM events WHERE id = ?"
-	_, err := db.Exec(sqlStmt, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	result, err := db.Exec(sqlStmt, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rowsAffected == 0 {
 		http.Error(w, "not found", http.StatusGone)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func initializeSchema() error {

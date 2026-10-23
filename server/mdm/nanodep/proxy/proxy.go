@@ -79,6 +79,7 @@ func newDirector(store client.ConfigRetriever, logger log.Logger) func(*http.Req
 			config, err := store.RetrieveConfig(req.Context(), name)
 			if err != nil {
 				logger.Info("msg", "retrieve config", "err", err)
+				return
 			}
 			url, err = url.Parse(config.BaseURL)
 			if err != nil {

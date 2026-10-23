@@ -41,6 +41,10 @@ func (es *OpenframeEncryptionService) Decrypt(data string) ([]byte, error) {
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
+		es.decryptErrCount++
+		if es.decryptErrCount % openframeTokenRefreshErrorLogInterval == 1 {
+			log.Error().Err(err).Msg("Error creating GCM")
+		}
 		return nil, err
 	}
 
@@ -63,3 +67,4 @@ func (es *OpenframeEncryptionService) Decrypt(data string) ([]byte, error) {
 
 	return plaintext, nil
 }
+

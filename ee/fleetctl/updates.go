@@ -448,7 +448,8 @@ func updatesRotateFunc(c *cli.Context) error {
 			// go-tuf keeps keys around even after they are revoked from the manifest. We can skip
 			// tuf.ErrKeyNotFound as these represent keys that are not present in the manifest and
 			// so do not need to be revoked.
-			if !errors.As(err, &tuf.ErrKeyNotFound{}) {
+			var errKeyNotFound tuf.ErrKeyNotFound
+			if !errors.As(err, &errKeyNotFound) {
 				return fmt.Errorf("revoke key: %w", err)
 			}
 		}

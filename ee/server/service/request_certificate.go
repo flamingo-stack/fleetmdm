@@ -93,9 +93,9 @@ func (svc *Service) RequestCertificate(ctx context.Context, p fleet.RequestCerti
 
 		idpUsername = *introspectionResponse.Username
 
-		// the email should either equal the username or include it as a prefix, i.e.
+		// the email should either equal the username or include it as a prefix followed by '@', i.e.
 		// email=username@example.com and username=username
-		if !strings.HasPrefix(csrEmail, csrUsername) {
+		if csrEmail != csrUsername && !strings.HasPrefix(csrEmail, csrUsername+"@") {
 			svc.logger.ErrorContext(ctx, "Failing Certificate Request due to mismatch between CSR email and UPN", "csr_email", csrEmail, "csr_upn", csrUsername)
 			return nil, InvalidCSRError{}
 		}

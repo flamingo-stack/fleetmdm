@@ -2,6 +2,7 @@ package fleetd_pacman_packages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -57,7 +58,7 @@ func Generate(ctx context.Context, queryContext table.QueryContext) ([]map[strin
 	args = append(args, softwareTitles...)
 
 	out, err := exec.Command("/usr/bin/pacman", args...).Output()
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, exec.ErrNotFound) {
 		// If no package manager, return nothing but don't fail
 		return nil, nil
 	} else if err != nil {

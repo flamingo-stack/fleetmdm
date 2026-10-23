@@ -1379,3 +1379,4 @@ func numSavedQueriesDB(ctx context.Context, db sqlx.QueryerContext) (int, error)
 
 	return count, nil
 }
+

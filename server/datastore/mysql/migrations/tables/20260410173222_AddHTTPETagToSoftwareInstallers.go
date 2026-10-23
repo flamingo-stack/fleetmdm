@@ -20,7 +20,7 @@ func Up_20260410173222(tx *sql.Tx) error {
 	// Index prefix url(255) is a MySQL limitation for InnoDB key length.
 	// URLs longer than 255 bytes are still matched correctly (full row comparison)
 	// but with reduced index selectivity.
-	if !indexExistsTx(tx, "software_installers", "idx_software_installers_team_url") {
+	if !indexExists(tx, "software_installers", "idx_software_installers_team_url") {
 		_, err := tx.Exec(`CREATE INDEX idx_software_installers_team_url ON software_installers (global_or_team_id, url(255))`)
 		if err != nil {
 			return fmt.Errorf("failed to add team+url index to software_installers: %w", err)
@@ -34,3 +34,4 @@ func Up_20260410173222(tx *sql.Tx) error {
 func Down_20260410173222(tx *sql.Tx) error {
 	return nil
 }
+

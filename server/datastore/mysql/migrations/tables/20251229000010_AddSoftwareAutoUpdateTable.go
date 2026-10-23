@@ -2,6 +2,7 @@ package tables
 
 import (
 	"database/sql"
+	"fmt"
 )
 
 func init() {
@@ -27,7 +28,11 @@ func Up_20251229000010(tx *sql.Tx) error {
 	if err != nil {
 		return err
 	}
-	if !columnExists(tx, "hosts", "timezone") {
+	exists, err := columnExists(tx, "hosts", "timezone")
+	if err != nil {
+		return fmt.Errorf("checking hosts.timezone column: %w", err)
+	}
+	if !exists {
 		_, err = tx.Exec(`
 					ALTER TABLE hosts ADD COLUMN timezone VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 		`)
