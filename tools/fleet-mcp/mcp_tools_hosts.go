@@ -132,6 +132,9 @@ func registerGetHost(s *server.MCPServer, fleetClient *FleetClient) {
 		// matcher is permissive so we need room for collisions to surface.
 		const maxCandidates = 50
 		candidates, qErr := fleetClient.GetEndpointsWithFilters(ctx, "", "", "", identifier, "", "", "", maxCandidates)
+		if qErr != nil {
+			logrus.WithError(qErr).WithField("identifier", identifier).Warn("get_host: candidate query failed, falling back to identifier lookup")
+		}
 
 		if qErr == nil && len(candidates) == 1 {
 			// Single unambiguous match — fetch by ID for guaranteed
@@ -154,6 +157,9 @@ func registerGetHost(s *server.MCPServer, fleetClient *FleetClient) {
 		// (catches UUIDs and other identifiers Fleet's substring index misses).
 		host, err := fleetClient.GetHostByIdentifier(ctx, identifier)
 		if err != nil {
+			if qErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Host not found by query or identifier: %s (candidate query failed: %v; identifier lookup failed: %v; substring search does NOT cover display_name — try host_id if you have it)", identifier, qErr, err)), nil
+			}
 			return mcp.NewToolResultError(fmt.Sprintf("Host not found by query or identifier: %s (substring search does NOT cover display_name — try host_id if you have it)", identifier)), nil
 		}
 		return jsonResult(host)
@@ -360,6 +366,9 @@ func resolveHostWithPolicies(ctx context.Context, fleetClient *FleetClient, host
 	// to surface. 50 keeps the disambiguation list bounded for the AI client.
 	const maxCandidates = 50
 	cands, qErr := fleetClient.GetEndpointsWithFilters(ctx, "", "", "", identifier, "", "", "", maxCandidates)
+	if qErr != nil {
+		logrus.WithError(qErr).WithField("identifier", identifier).Warn("get_host_policies: candidate query failed, falling back to identifier lookup")
+	}
 
 	if qErr == nil && len(cands) == 1 {
 		// One unambiguous match. Fetch by ID for guaranteed no-collision and
@@ -382,6 +391,9 @@ func resolveHostWithPolicies(ctx context.Context, fleetClient *FleetClient, host
 	// doesn't reach.
 	h, idErr := fleetClient.GetHostByIdentifierWithPolicies(ctx, identifier)
 	if idErr != nil {
+		if qErr != nil {
+			return nil, false, nil, fmt.Errorf("host not found by query or identifier: %s (candidate query failed: %v; identifier lookup failed: %v; substring search does NOT cover display_name — try host_id if you have it)", identifier, qErr, idErr)
+		}
 		return nil, false, nil, fmt.Errorf("host not found by query or identifier: %s (substring search does NOT cover display_name — try host_id if you have it)", identifier)
 	}
 	return h, false, nil, nil

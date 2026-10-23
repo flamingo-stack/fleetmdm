@@ -19,11 +19,11 @@ var vulnCSVs embed.FS
 // VulnsOptions configures the vuln seeder. Counts are per-platform; pass 0
 // to skip a platform. DSN is a MySQL connection string.
 type VulnsOptions struct {
-	DSN      string
-	MacOS    int
-	Ubuntu   int
-	Windows  int
-	BatchSiz int
+	DSN       string
+	MacOS     int
+	Ubuntu    int
+	Windows   int
+	BatchSize int
 }
 
 // Vulns writes plausible-looking software rows directly to MySQL so the
@@ -41,8 +41,8 @@ type VulnsOptions struct {
 // from these rows on their own.
 func Vulns(ctx context.Context, log Logger, opt VulnsOptions) Result {
 	res := Result{Entity: "vulns"}
-	if opt.BatchSiz <= 0 {
-		opt.BatchSiz = 500
+	if opt.BatchSize <= 0 {
+		opt.BatchSize = 500
 	}
 
 	dsn, err := mysqlDSN(opt.DSN, true)
@@ -80,7 +80,7 @@ func Vulns(ctx context.Context, log Logger, opt VulnsOptions) Result {
 			res.Errors = append(res.Errors, fmt.Errorf("read %s: %w", p.file, err))
 			continue
 		}
-		if err := insertSoftware(ctx, db, p.platform, rows, p.count, opt.BatchSiz); err != nil {
+		if err := insertSoftware(ctx, db, p.platform, rows, p.count, opt.BatchSize); err != nil {
 			res.Errors = append(res.Errors, fmt.Errorf("insert %s: %w", p.platform, err))
 			continue
 		}

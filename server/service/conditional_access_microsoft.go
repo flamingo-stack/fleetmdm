@@ -132,8 +132,7 @@ func (svc *Service) ConditionalAccessMicrosoftConfirm(ctx context.Context) (conf
 
 	getResponse, err := svc.conditionalAccessMicrosoftProxy.Get(ctx, integration.TenantID, integration.ProxyServerSecret)
 	if err != nil {
-		svc.logger.ErrorContext(ctx, "failed to get integration settings from proxy", "err", err)
-		return false, "", nil
+		return false, "", ctxerr.Wrap(ctx, err, "failed to get integration settings from proxy")
 	}
 
 	if !getResponse.SetupDone {
