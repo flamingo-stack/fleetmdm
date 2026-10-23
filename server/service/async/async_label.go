@@ -91,6 +91,7 @@ func (t *Task) RecordLabelQueryExecutions(ctx context.Context, host *fleet.Host,
 }
 
 func (t *Task) collectLabelQueryExecutions(ctx context.Context, ds fleet.Datastore, pool fleet.RedisPool, stats *collectorExecStats) error {
+	// >>> OPENFRAME(async-otel): add OTEL span for label collection task — openframe/docs/observability.md
 	// Create a root span for this async collection task if OTEL is enabled
 	if t.otelEnabled {
 		tracer := otel.Tracer("async")
@@ -102,6 +103,7 @@ func (t *Task) collectLabelQueryExecutions(ctx context.Context, ds fleet.Datasto
 		)
 		defer span.End()
 	}
+	// <<< OPENFRAME(async-otel)
 
 	cfg := t.taskConfigs[config.AsyncTaskLabelMembership]
 

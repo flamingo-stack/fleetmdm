@@ -35,6 +35,7 @@ func NewSecurityBulletin(pName string) *SecurityBulletin {
 	}
 }
 
+// >>> OPENFRAME(msrc-legacy-key-compat): support legacy misspelled cache key — openframe/docs/msrc-bulletin-cache.md
 // UnmarshalJSON implements custom JSON unmarshaling to support both the old
 // misspelled "Vulnerabities" key and the correct "Vulnerabilities" key for
 // backward compatibility with cached bulletin files.
@@ -54,6 +55,8 @@ func (b *SecurityBulletin) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// <<< OPENFRAME(msrc-legacy-key-compat)
 
 func UnmarshalBulletin(fPath string) (*SecurityBulletin, error) {
 	payload, err := os.ReadFile(fPath)

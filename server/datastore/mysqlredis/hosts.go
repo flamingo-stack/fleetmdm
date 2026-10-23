@@ -134,12 +134,14 @@ func (d *Datastore) NewHost(ctx context.Context, host *fleet.Host) (*fleet.Host,
 			logging.WithErr(ctx, err)
 		}
 	}
+	// >>> OPENFRAME(host-cache-invalidation): invalidate node_key cache on host creation — openframe/docs/host-cache.md
 	// A newly inserted host has no positive cache entry, but a stale negative
 	// cache entry for the new node_key could linger (up to hostCacheNegativeTTL)
 	// if the node_key had been probed moments before enrollment. Clearing it
 	// here ensures the next LoadHostByNodeKey populates the positive cache
 	// instead of returning a false NotFound.
 	d.invalidateAfterHostEnroll(ctx, h, "enroll")
+	// <<< OPENFRAME(host-cache-invalidation)
 	return h, nil
 }
 
@@ -153,9 +155,11 @@ func (d *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreEn
 			logging.WithErr(ctx, err)
 		}
 	}
+	// >>> OPENFRAME(host-cache-invalidation): invalidate stale cache on re-enrollment — openframe/docs/host-cache.md
 	// EnrollOsquery can update an existing row's node_key + team_id on
 	// re-enrollment, so the cached snapshot is stale after the call.
 	d.invalidateAfterHostEnroll(ctx, h, "enroll")
+	// <<< OPENFRAME(host-cache-invalidation)
 	return h, nil
 }
 
@@ -169,9 +173,11 @@ func (d *Datastore) DeleteHost(ctx context.Context, hid uint) error {
 			logging.WithErr(ctx, err)
 		}
 	}
+	// >>> OPENFRAME(host-cache-invalidation): purge cache entry on host deletion — openframe/docs/host-cache.md
 	// Deleted row must not serve from cache: a stale hit would let the host
 	// authenticate after its deletion.
 	d.hostCacheDeleteByID(ctx, hid, "delete")
+	// <<< OPENFRAME(host-cache-invalidation)
 	return nil
 }
 
@@ -185,8 +191,10 @@ func (d *Datastore) DeleteHosts(ctx context.Context, ids []uint) error {
 			logging.WithErr(ctx, err)
 		}
 	}
+	// >>> OPENFRAME(host-cache-invalidation): purge cache entries on batch host deletion — openframe/docs/host-cache.md
 	// Batched pipelined invalidation — see invalidateHostIDs for why.
 	d.invalidateHostIDs(ctx, ids, "delete")
+	// <<< OPENFRAME(host-cache-invalidation)
 	return nil
 }
 
@@ -204,7 +212,9 @@ func (d *Datastore) CleanupExpiredHosts(ctx context.Context) ([]fleet.DeletedHos
 			logging.WithErr(ctx, err)
 		}
 	}
+	// >>> OPENFRAME(host-cache-invalidation): purge cache entries for expired hosts — openframe/docs/host-cache.md
 	d.invalidateHostIDs(ctx, ids, "delete")
+	// <<< OPENFRAME(host-cache-invalidation)
 	return details, nil
 }
 
@@ -218,7 +228,9 @@ func (d *Datastore) CleanupIncomingHosts(ctx context.Context, now time.Time) ([]
 			logging.WithErr(ctx, err)
 		}
 	}
+	// >>> OPENFRAME(host-cache-invalidation): purge cache entries for cleaned up incoming hosts — openframe/docs/host-cache.md
 	d.invalidateHostIDs(ctx, ids, "delete")
+	// <<< OPENFRAME(host-cache-invalidation)
 	return ids, nil
 }
 

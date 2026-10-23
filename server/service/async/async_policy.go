@@ -124,7 +124,7 @@ func (t *Task) RecordPolicyQueryExecutions(ctx context.Context, host *fleet.Host
 }
 
 func (t *Task) collectPolicyQueryExecutions(ctx context.Context, ds fleet.Datastore, pool fleet.RedisPool, stats *collectorExecStats) error {
-	// Create a root span for this async collection task if OTEL is enabled
+	// >>> OPENFRAME(async-otel): add OTEL span for policy collection task — openframe/docs/observability.md
 	if t.otelEnabled {
 		tracer := otel.Tracer("async")
 		var span trace.Span
@@ -135,6 +135,7 @@ func (t *Task) collectPolicyQueryExecutions(ctx context.Context, ds fleet.Datast
 		)
 		defer span.End()
 	}
+	// <<< OPENFRAME(async-otel)
 
 	cfg := t.taskConfigs[config.AsyncTaskPolicyMembership]
 
@@ -275,3 +276,4 @@ func (t *Task) GetHostPolicyReportedAt(ctx context.Context, host *fleet.Host) ti
 	}
 	return host.PolicyUpdatedAt
 }
+
