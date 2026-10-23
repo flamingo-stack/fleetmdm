@@ -3,6 +3,7 @@ package microsoft_mdm
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"text/template"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -120,7 +121,7 @@ func SystemDriveRequiresStartupAuthCmd(spec SystemDriveRequiresStartupAuthSpec) 
 
 	var contents bytes.Buffer
 	if err := systemDriveRequiresStartupAuthTmpl.Execute(&contents, spec); err != nil {
-		return nil, errors.New("failed to execute SystemDrRequiresStartupAuthCmd template")
+		return nil, fmt.Errorf("execute SystemDriveRequiresStartupAuthCmd template: %w", err)
 	}
 
 	return &fleet.MDMWindowsCommand{

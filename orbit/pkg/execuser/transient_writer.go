@@ -17,9 +17,12 @@ func (w *TransientWriter) Write(p []byte) (n int, err error) {
 		w.len = bufSize
 	case bufSize-w.len < lenToWrite:
 		remainingLen := bufSize - lenToWrite
+		if remainingLen > w.len {
+			remainingLen = w.len
+		}
 		copy(w.buf[0:remainingLen], w.buf[w.len-remainingLen:w.len])
 		copy(w.buf[remainingLen:], p)
-		w.len = bufSize
+		w.len = remainingLen + lenToWrite
 	default:
 		n = copy(w.buf[w.len:], p)
 		w.len += n

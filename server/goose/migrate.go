@@ -214,8 +214,39 @@ func (c *Client) GetDBVersion(db *sql.DB) (int64, error) {
 	// empty (this also covers a version table whose rows were lost). Treat "no
 	// applied row" as version 0 (nothing applied) and let the idempotent
 	// migrations proceed/retry instead of panicking. — openframe/docs/migrations.md
+	//
+	// However, an empty version table is NOT always safe to treat as "fresh
+	// database": it can also mean the version table rows were lost on a DB
+	// that already has schema/data (accidental TRUNCATE, manual row deletion,
+	// backup/restore mishap). Running all migrations from scratch against such
+	// a database can fail or corrupt data. Before defaulting to version 0,
+	// check whether the schema already contains other tables; if so, this is
+	// very likely the corruption case rather than the narrow MySQL race, so we
+	// log loudly to make sure an operator notices instead of silently
+	// proceeding.
+	if hasOtherTables, tblErr := c.schemaHasOtherTables(db); tblErr != nil {
+		log.Printf("goose: WARNING: could not verify whether schema has existing tables while version table %q is empty: %v", c.TableName, tblErr)
+	} else if hasOtherTables {
+		log.Printf("goose: WARNING: version table %q is empty but the database schema already contains other tables; "+
+			"this looks like a corrupted or manually-modified version table rather than a fresh database. "+
+			"Proceeding with version 0, but ALL migrations will be re-run against this database — verify this is intended before continuing.", c.TableName)
+	}
 	return 0, nil
 	// <<< OPENFRAME(migration-race)
+}
+
+// schemaHasOtherTables reports whether the current database schema contains
+// any tables other than the goose version table itself. It is used to
+// distinguish a genuinely fresh database (safe to treat an empty version
+// table as version 0) from a database that already has schema/data but whose
+// version table rows were unexpectedly lost.
+func (c *Client) schemaHasOtherTables(db *sql.DB) (bool, error) {
+	row := db.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name != ?`, c.TableName)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // Create the goose_db_version table
@@ -242,3 +273,4 @@ func (c *Client) createVersionTable(db *sql.DB) error {
 
 	return txn.Commit()
 }
+
