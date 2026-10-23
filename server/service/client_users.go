@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -71,7 +70,7 @@ func (c *Client) userIdFromEmail(email string) (uint, error) {
 		return 0, err
 	}
 	if len(responseBody.List) != 1 {
-		return 0, errors.New("Expected 1 item translated, got none")
+		return 0, fmt.Errorf("expected 1 item translated for email %q, got %d", email, len(responseBody.List))
 	}
 	return responseBody.List[0].Payload.ID, nil
 }
@@ -92,6 +91,8 @@ func (c *Client) DeleteUser(email string) error {
 func (c *Client) Me() (*fleet.User, error) {
 	verb, path := "GET", "/api/latest/fleet/me"
 	var responseBody getUserResponse
-	err := c.authenticatedRequest(nil, verb, path, &responseBody)
-	return responseBody.User, err
+	if err := c.authenticatedRequest(nil, verb, path, &responseBody); err != nil {
+		return nil, err
+	}
+	return responseBody.User, nil
 }

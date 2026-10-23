@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	nanodep_client "github.com/fleetdm/fleet/v4/server/mdm/nanodep/client"
@@ -20,6 +21,7 @@ func CAKeyPair(ctx context.Context, ds fleet.MDMAssetRetriever) (*tls.Certificat
 	return KeyPair(ctx, ds, fleet.MDMAssetCACert, fleet.MDMAssetCAKey)
 }
 
+// >>> OPENFRAME(mdm-ca-decrypt-retriever): fork-specific historical CA cert support for CMS decryption
 // CADecryptRetriever is the subset of fleet.Datastore needed to load the Apple
 // MDM CA private key plus every historical CA certificate for CMS decryption.
 type CADecryptRetriever interface {
@@ -73,11 +75,14 @@ func CACertsAndKeyForDecryption(ctx context.Context, ds CADecryptRetriever) ([]*
 	// Fall back to the keypair leaf if the include-deleted lookup yielded
 	// nothing usable, so behaviour matches the previous single-cert path.
 	if len(certs) == 0 {
+		log.Printf("warn: CACertsAndKeyForDecryption: no historical CA certificates matched the current private key (found %d candidates); falling back to the current leaf certificate only, which may cause decrypt failures for payloads escrowed against a previously rolled-over CA cert", len(historical))
 		certs = append(certs, keyPair.Leaf)
 	}
 
 	return certs, keyPair.PrivateKey, nil
 }
+
+// <<< OPENFRAME(mdm-ca-decrypt-retriever)
 
 func APNSKeyPair(ctx context.Context, ds fleet.MDMAssetRetriever) (*tls.Certificate, string, error) {
 	return KeyPairWithMD5(ctx, ds, fleet.MDMAssetAPNSCert, fleet.MDMAssetAPNSKey)
@@ -136,7 +141,7 @@ func X509Cert(ctx context.Context, ds fleet.MDMAssetRetriever, certName fleet.MD
 
 	block, _ := pem.Decode(assets[certName].Value)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("decoding certificate PEM data: %w", err)
+		return nil, fmt.Errorf("decoding certificate %s PEM data: unexpected block type or missing PEM data", certName)
 	}
 
 	return x509.ParseCertificate(block.Bytes)

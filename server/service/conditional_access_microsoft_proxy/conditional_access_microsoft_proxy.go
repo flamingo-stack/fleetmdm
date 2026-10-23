@@ -75,7 +75,7 @@ func (p *Proxy) Get(ctx context.Context, tenantID string, secret string) (*GetRe
 	var getResponse GetResponse
 	if err := p.get(
 		"/api/v1/microsoft-compliance-partner/settings",
-		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s", tenantID, secret),
+		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s", url.QueryEscape(tenantID), url.QueryEscape(secret)),
 		&getResponse,
 	); err != nil {
 		return nil, fmt.Errorf("get integration settings failed: %w", err)
@@ -94,7 +94,7 @@ func (p *Proxy) Delete(ctx context.Context, tenantID string, secret string) (*De
 	var deleteResponse DeleteResponse
 	if err := p.delete(
 		"/api/v1/microsoft-compliance-partner",
-		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s", tenantID, secret),
+		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s", url.QueryEscape(tenantID), url.QueryEscape(secret)),
 		&deleteResponse,
 	); err != nil {
 		return nil, fmt.Errorf("delete integration failed: %w", err)
@@ -181,7 +181,7 @@ func (p *Proxy) GetMessageStatus(
 	var getMessageStatusResponse GetMessageStatusResponse
 	if err := p.get(
 		"/api/v1/microsoft-compliance-partner/device/message",
-		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s&messageId=%s", tenantID, secret, messageID),
+		fmt.Sprintf("entraTenantId=%s&fleetServerSecret=%s&messageId=%s", url.QueryEscape(tenantID), url.QueryEscape(secret), url.QueryEscape(messageID)),
 		&getMessageStatusResponse,
 	); err != nil {
 		return nil, fmt.Errorf("get message status response failed: %w", err)
@@ -194,7 +194,7 @@ func (p *Proxy) post(path string, request interface{}, response interface{}) err
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	postRequest, err := http.NewRequest("POST", p.uri+path, nil)
+	postRequest, err := http.NewRequest("POST", p.uri+path, bytes.NewBuffer(b))
 	if err != nil {
 		return fmt.Errorf("post create request: %w", err)
 	}
@@ -202,7 +202,6 @@ func (p *Proxy) post(path string, request interface{}, response interface{}) err
 		return fmt.Errorf("post set headers: %w", err)
 	}
 	postRequest.Header.Add("Content-Type", "application/json")
-	postRequest.Body = io.NopCloser(bytes.NewBuffer(b))
 	resp, err := p.c.Do(postRequest)
 	if err != nil {
 		return fmt.Errorf("post request: %w", err)
@@ -224,7 +223,7 @@ func (p *Proxy) post(path string, request interface{}, response interface{}) err
 func (p *Proxy) get(path string, query string, response interface{}) error {
 	getURL := p.uri + path
 	if query != "" {
-		getURL += "?" + url.PathEscape(query)
+		getURL += "?" + query
 	}
 	getRequest, err := http.NewRequest("GET", getURL, nil)
 	if err != nil {
@@ -254,7 +253,7 @@ func (p *Proxy) get(path string, query string, response interface{}) error {
 func (p *Proxy) delete(path string, query string, response interface{}) error {
 	deleteURL := p.uri + path
 	if query != "" {
-		deleteURL += "?" + url.PathEscape(query)
+		deleteURL += "?" + query
 	}
 	deleteRequest, err := http.NewRequest("DELETE", deleteURL, nil)
 	if err != nil {
@@ -306,7 +305,7 @@ func (p *Proxy) setHeaders(r *http.Request) error {
 		return fmt.Errorf("get origin: %w", err)
 	}
 	if origin == "" {
-		return fmt.Errorf("missing origin: %w", err)
+		return fmt.Errorf("missing origin: origin getter returned an empty value")
 	}
 	r.Header.Add("MS-API-Key", p.apiKey)
 	r.Header.Add("Origin", origin)

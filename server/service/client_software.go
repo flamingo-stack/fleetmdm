@@ -213,14 +213,14 @@ func (c *Client) UploadIcon(teamID uint, titleID uint, filename string, iconRead
 	writer := multipart.NewWriter(&buf)
 	fileWriter, err := writer.CreateFormFile("icon", filename)
 	if err != nil {
-		return err
+		return fmt.Errorf("create form file: %w", err)
 	}
 	if _, err = io.Copy(fileWriter, iconReader); err != nil {
-		return err
+		return fmt.Errorf("copy icon bytes: %w", err)
 	}
 	// Close the writer before using the buffer
 	if err := writer.Close(); err != nil {
-		return err
+		return fmt.Errorf("close multipart writer: %w", err)
 	}
 
 	return c.putIcon(teamID, titleID, writer, buf)

@@ -34,7 +34,7 @@ func main() {
 	}
 
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		body, err := io.ReadAll(request.Body)
+		body, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
 		if err != nil {
 			log.Printf("ERROR: reading request body: %s\n", err)
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -81,6 +81,9 @@ func main() {
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%s", *port),
 		ReadHeaderTimeout: 3 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err.Error())
@@ -96,7 +99,7 @@ func newJamfClient(username, password, url string) (*jamfClient, error) {
 	client := &jamfClient{url: url}
 	var err error
 	if client.token, err = client.getBearerToken(username, password); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting bearer token: %w", err)
 	}
 	return client, nil
 }
@@ -106,13 +109,13 @@ func (j *jamfClient) doWithRequest(req *http.Request) ([]byte, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("performing request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
 	if resp.StatusCode > 299 {
@@ -125,35 +128,42 @@ func (j *jamfClient) doWithRequest(req *http.Request) ([]byte, error) {
 func (j *jamfClient) do(method, path string) ([]byte, error) {
 	req, err := http.NewRequest(method, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Add("accept", "application/xml")
 	req.Header.Add("Authorization", "Bearer "+j.token)
-	return j.doWithRequest(req)
+	body, err := j.doWithRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	return body, nil
 }
 
 func (j *jamfClient) unmanageDevice(jamfID string) error {
 	_, err := j.do("POST", fmt.Sprintf("%s/JSSResource/computercommands/command/UnmanageDevice/id/%s", *url, jamfID))
-	return err
+	if err != nil {
+		return fmt.Errorf("unmanaging device %s: %w", jamfID, err)
+	}
+	return nil
 }
 
 func (j *jamfClient) getBearerToken(username, password string) (string, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/auth/token", *url), nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("creating auth token request: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 
 	body, err := j.doWithRequest(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("requesting bearer token: %w", err)
 	}
 
 	var tokenResponse struct {
 		Token string `json:"token"`
 	}
 	if err := json.Unmarshal(body, &tokenResponse); err != nil {
-		return "", err
+		return "", fmt.Errorf("unmarshalling token response: %w", err)
 	}
 
 	return tokenResponse.Token, nil
@@ -162,7 +172,7 @@ func (j *jamfClient) getBearerToken(username, password string) (string, error) {
 func (j *jamfClient) getJamfID(serial string) (string, error) {
 	body, err := j.do("GET", fmt.Sprintf("%s/JSSResource/computers/serialnumber/%s", *url, serial))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting computer by serial number %s: %w", serial, err)
 	}
 
 	var data struct {
@@ -171,7 +181,7 @@ func (j *jamfClient) getJamfID(serial string) (string, error) {
 	}
 
 	if err := xml.Unmarshal(body, &data); err != nil {
-		return "", err
+		return "", fmt.Errorf("unmarshalling computer XML response: %w", err)
 	}
 
 	return data.ID, nil

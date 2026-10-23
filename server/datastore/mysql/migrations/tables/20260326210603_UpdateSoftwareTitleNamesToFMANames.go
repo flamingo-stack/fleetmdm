@@ -1,6 +1,9 @@
 package tables
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+)
 
 func init() {
 	MigrationClient.AddMigration(Up_20260326210603, Down_20260326210603)
@@ -28,7 +31,7 @@ func Up_20260326210603(tx *sql.Tx) error {
 			AND st.name != fma.name
 	`)
 	if err != nil {
-		return err
+		return fmt.Errorf("updating software_titles names to FMA names: %w", err)
 	}
 
 	// Also update software entries to match their software_titles names.
@@ -43,7 +46,10 @@ func Up_20260326210603(tx *sql.Tx) error {
 			AND s.bundle_identifier != ''
 			AND s.name != fma.name
 	`)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating software names to FMA names: %w", err)
+	}
+	return nil
 }
 
 func Down_20260326210603(tx *sql.Tx) error {

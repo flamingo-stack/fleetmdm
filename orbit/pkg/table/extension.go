@@ -129,7 +129,7 @@ func (r *Runner) Execute() error {
 	r.srv.RegisterPlugin(plugins...)
 
 	if err := r.srv.Run(); err != nil {
-		return err
+		return fmt.Errorf("running extension manager server: %w", err)
 	}
 
 	return nil
