@@ -71,7 +71,8 @@ module.exports = {
       });
     }).exec((err)=>{// Use .exec() to run the salesforce helpers in the background.
       if(err) {
-        sails.log.warn(`Background task failed: When a user signed up for a newsletter, a lead/contact could not be updated in the CRM for this email address: ${emailAddress}.`, err);
+        let maskedEmailAddress = emailAddress.replace(/^(.).*(@.*)$/, '$1***$2');
+        sails.log.warn(`Background task failed: When a user signed up for a newsletter, a lead/contact could not be updated in the CRM for this email address: ${maskedEmailAddress}.`, err);
       }
       return;
     });//_∏_

@@ -465,6 +465,18 @@ func (ds *Datastore) DeleteUser(ctx context.Context, id uint) error {
 // requests from bypassing the check (TOCTOU race condition).
 func (ds *Datastore) DeleteUserIfNotLastAdmin(ctx context.Context, id uint) error {
 	return ds.withTx(ctx, func(tx sqlx.ExtContext) error {
+		// Lock the target user's row first so that any concurrent role-changing
+		// transaction (e.g. SaveUserIfNotLastAdmin demoting this same user) is
+		// blocked until this transaction commits or rolls back.
+		var targetGlobalRole sql.NullString
+		if err := sqlx.GetContext(ctx, tx, &targetGlobalRole,
+			`SELECT global_role FROM users WHERE id = ? FOR UPDATE`, id); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ctxerr.Wrap(ctx, notFound("User").WithID(id))
+			}
+			return ctxerr.Wrap(ctx, err, "lock target user for delete")
+		}
+
 		// Lock the admin rows to prevent concurrent modifications.
 		var count int
 		if err := sqlx.GetContext(ctx, tx, &count,
@@ -507,6 +519,18 @@ func (ds *Datastore) DeleteUserIfNotLastAdmin(ctx context.Context, id uint) erro
 // the check (TOCTOU race condition).
 func (ds *Datastore) SaveUserIfNotLastAdmin(ctx context.Context, user *fleet.User) error {
 	return ds.withTx(ctx, func(tx sqlx.ExtContext) error {
+		// Lock the target user's row first so that any concurrent transaction
+		// touching this same user (e.g. DeleteUserIfNotLastAdmin) is blocked
+		// until this transaction commits or rolls back.
+		var targetGlobalRole sql.NullString
+		if err := sqlx.GetContext(ctx, tx, &targetGlobalRole,
+			`SELECT global_role FROM users WHERE id = ? FOR UPDATE`, user.ID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ctxerr.Wrap(ctx, notFound("User").WithID(user.ID))
+			}
+			return ctxerr.Wrap(ctx, err, "lock target user for save")
+		}
+
 		// Lock the admin rows to prevent concurrent modifications.
 		var count int
 		if err := sqlx.GetContext(ctx, tx, &count,

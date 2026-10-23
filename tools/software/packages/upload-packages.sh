@@ -57,13 +57,6 @@ for file in "${files[@]}"; do
     -F "automatic_install=$AUTO_INSTALL"
   )
 
-  if [[ "$ext" == "exe" ]]; then
-    CURL_ARGS+=(
-      -F "install_script=exit 0"
-      -F "uninstall_script=exit 0"
-    )
-  fi
-
   http_status=$(curl "${CURL_ARGS[@]}" 2>"$tmp_err")
   curl_exit=$?
 

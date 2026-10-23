@@ -32,10 +32,12 @@ func FindProfilesWithSecrets(
 	profileContents map[string]mobileconfig.Mobileconfig,
 ) (map[string]struct{}, error) {
 	profilesWithSecrets := make(map[string]struct{})
+	var missingContentCount int
 	for profUUID := range installTargets {
 		p, ok := profileContents[profUUID]
 		if !ok { // Should never happen
 			logger.ErrorContext(ctx, "profile content not found in FindProfilesWithSecrets", "profile_uuid", profUUID)
+			missingContentCount++
 			continue
 		}
 		profileStr := string(p)
@@ -43,6 +45,9 @@ func FindProfilesWithSecrets(
 		if len(vars) > 0 {
 			profilesWithSecrets[profUUID] = struct{}{}
 		}
+	}
+	if len(installTargets) > 0 && missingContentCount == len(installTargets) {
+		return profilesWithSecrets, fmt.Errorf("profile content not found for any of the %d install targets", len(installTargets))
 	}
 	return profilesWithSecrets, nil
 }

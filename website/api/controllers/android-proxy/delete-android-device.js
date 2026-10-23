@@ -50,7 +50,14 @@ module.exports = {
       throw 'notFound';
     }
     // Return an unauthorized response if the provided secret does not match.
-    if (thisAndroidEnterprise.fleetServerSecret !== fleetServerSecret) {
+    // Note: We use a constant-time comparison here to avoid leaking information about the
+    // shared secret through timing side-channels.
+    let crypto = require('crypto');
+    let expectedSecretBuffer = Buffer.from(thisAndroidEnterprise.fleetServerSecret);
+    let providedSecretBuffer = Buffer.from(fleetServerSecret);
+    let secretsMatch = expectedSecretBuffer.length === providedSecretBuffer.length &&
+      crypto.timingSafeEqual(expectedSecretBuffer, providedSecretBuffer);
+    if (!secretsMatch) {
       throw 'unauthorized';
     }
 
@@ -100,3 +107,4 @@ module.exports = {
 
 
 };
+

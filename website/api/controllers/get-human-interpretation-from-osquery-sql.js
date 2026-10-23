@@ -96,8 +96,14 @@ Please do not add any text outside of the JSON report or wrap it in a code fence
       // Change `whatWillHappenDuringMaintenance` to `whatWillProbablyHappenDuringMaintenance` (the naming we want to use in our API response)
       report.whatWillProbablyHappenDuringMaintenance = report.whatWillHappenDuringMaintenance;
       delete report.whatWillHappenDuringMaintenance;
+      // If the LLM's JSON response was syntactically valid but missing one or both of the
+      // expected properties (e.g. it used a different key name, or omitted a field), then
+      // treat this the same as a parse failure so we don't silently return incomplete data.
+      if (!report.risks || !report.whatWillProbablyHappenDuringMaintenance) {
+        throw new Error('Parsed JSON report from Open AI API is missing required properties (`risks` and/or `whatWillProbablyHappenDuringMaintenance`).');
+      }
     } catch (err) {
-      sails.log.warn('When trying to parse a JSON report returned from the Open AI API, an error occurred. Error details from JSON.parse: '+err.stack+'\n Report returned from Open AI:'+openAiResponse.choices[0].message.content);
+      sails.log.warn('When trying to parse or validate a JSON report returned from the Open AI API, an error occurred. Error details: '+err.stack+'\n Report returned from Open AI:'+openAiResponse.choices[0].message.content);
       report = {
         risks: failureMessage,
         whatWillProbablyHappenDuringMaintenance: failureMessage
@@ -110,3 +116,4 @@ Please do not add any text outside of the JSON report or wrap it in a code fence
 
 
 };
+

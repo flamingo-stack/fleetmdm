@@ -25,8 +25,10 @@ import (
 // are small enough that the constant overhead doesn't matter.
 //
 // When fleet.Host gains a new `json:"-"` field that downstream auth code
-// reads, add a shadow here in lockstep. TestPBT_HostCacheEnvelopeRoundTrip
-// catches drift by asserting full-struct equivalence after marshal/unmarshal.
+// reads, add a shadow here in lockstep. If a test asserting full-struct
+// equivalence after marshal/unmarshal exists, confirm it is present and
+// wired into CI before relying on it as the safety net for this drift; as
+// of this writing that has not been verified.
 type hostCacheEnvelope struct {
 	fleet.Host
 
