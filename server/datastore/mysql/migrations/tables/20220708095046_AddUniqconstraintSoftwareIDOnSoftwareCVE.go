@@ -96,11 +96,12 @@ func Up_20220708095046(tx *sql.Tx) error {
 	// the constraint and new duplicates get generated in between, we need to try to acquire the
 	// vulnerability lock. In case the lock can't be acquired a warning is issued and the migration
 	// will proceed without it.
+	locked := false
 	identifier, err := server.GenerateRandomText(64)
 	if err != nil {
 		logger.Warn.Println("Could not generate identifier for lock, might not be able to remove duplicates in a reliable way...")
 	} else {
-		locked, err := acquireLock(tx, identifier)
+		locked, err = acquireLock(tx, identifier)
 		if !locked || err != nil {
 			logger.Warn.Println("Could not acquire lock, might not be able to remove duplicates in a reliable way...")
 		} else {
@@ -116,8 +117,10 @@ func Up_20220708095046(tx *sql.Tx) error {
 		return err
 	}
 
-	if err := releaseLock(tx, identifier); err != nil {
-		return err
+	if locked {
+		if err := releaseLock(tx, identifier); err != nil {
+			return err
+		}
 	}
 
 	return nil

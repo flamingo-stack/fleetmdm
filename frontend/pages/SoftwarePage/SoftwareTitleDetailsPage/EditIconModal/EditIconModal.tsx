@@ -14,7 +14,6 @@ import { ISelfServiceCategory } from "interfaces/self_service_category";
 import { NotificationContext } from "context/notification";
 import { AppContext } from "context/app";
 import { INotification } from "interfaces/notification";
-import { getErrorReason } from "interfaces/errors";
 import softwareAPI from "services/entities/software";
 import selfServiceCategoriesAPI, {
   ISelfServiceCategoriesResponse,
@@ -368,19 +367,13 @@ const EditIconModal = ({
     ) {
       const img = new Image();
       img.onload = () => {
-        fetch(customIconData.url)
-          .then((res) => {
-            const filename = customIconData.filename || "icon.png";
-            return res.blob().then((blob) => ({ blob, filename }));
-          })
-          .then(({ blob, filename }) => {
-            setCurrentApiCustomIcon(
-              new File([blob], filename, { type: "image/png" }),
-              img.width,
-              customIconData.url
-            );
-            setIsFirstLoadWithCustomIcon(false);
-          });
+        const filename = customIconData.filename || "icon.png";
+        setCurrentApiCustomIcon(
+          new File([customIconData.blob], filename, { type: "image/png" }),
+          img.width,
+          customIconData.url
+        );
+        setIsFirstLoadWithCustomIcon(false);
       };
       img.src = customIconData.url;
       return; // Don't run fallback block below on initial load
@@ -411,12 +404,7 @@ const EditIconModal = ({
 
   const fileDetails =
     iconState.formData && iconState.formData.icon
-      ? {
-          name: iconState.formData.icon.name,
-          description: `Software icon • ${iconState.dimensions || "?"}x${
-            iconState.dimensions || "?"
-          } px`,
-        }
+      ? makeFileDetails(iconState.formData.icon, iconState.dimensions)
       : undefined;
 
   const renderPreviewFleetCard = () => {
@@ -669,12 +657,11 @@ const EditIconModal = ({
           );
         }
       } catch (e) {
-        const errorMessage = getErrorReason(e) || DEFAULT_ERROR_MESSAGE;
         notifications.push({
           id: "icon-error",
           alertType: "error",
           isVisible: true,
-          message: errorMessage,
+          message: DEFAULT_ERROR_MESSAGE,
           persistOnPageChange: false,
         });
       }
@@ -704,12 +691,11 @@ const EditIconModal = ({
               </>
             );
         } catch (e) {
-          const errorMessage = getErrorReason(e) || DEFAULT_ERROR_MESSAGE;
           notifications.push({
             id: "name-error",
             alertType: "error",
             isVisible: true,
-            message: errorMessage,
+            message: DEFAULT_ERROR_MESSAGE,
             persistOnPageChange: false,
           });
         }
@@ -761,8 +747,7 @@ const EditIconModal = ({
         onExitEditIconModal();
       }
     } catch (e) {
-      const errorMessage = getErrorReason(e) || DEFAULT_ERROR_MESSAGE;
-      renderFlash("error", errorMessage);
+      renderFlash("error", DEFAULT_ERROR_MESSAGE);
     } finally {
       setIsUpdatingSoftwareInfo(false);
     }

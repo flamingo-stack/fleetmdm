@@ -5,7 +5,15 @@ set -euo pipefail
 STACK_NAME="${STACK_NAME:-fleet-mysql-iam-test}"
 KEY_NAME="${KEY_NAME:-fleet-mysql-test-key-$(date +%s)}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.micro}"
-DB_PASSWORD="${DB_PASSWORD:-hunter2pass}"
+if [ -z "${DB_PASSWORD:-}" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+        DB_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 32)"
+        echo "ℹ️  DB_PASSWORD not set; generated a random password for this deployment."
+    else
+        echo "❌ DB_PASSWORD environment variable must be set (openssl not available to generate one)." >&2
+        exit 1
+    fi
+fi
 
 echo "🚀 Deploying test environment for RDS MySQL/MariaDB IAM authentication"
 
@@ -90,6 +98,7 @@ DB_USERNAME=$DB_USERNAME
 DB_PASSWORD=$DB_PASSWORD
 SSH_KEY=${KEY_NAME}.pem
 EOF
+chmod 600 test-env-info.txt
 
 echo "✅ Test environment deployed successfully!"
 echo ""

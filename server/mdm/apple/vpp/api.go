@@ -52,9 +52,9 @@ func (e *ErrorResponse) Error() string {
 // that a Managed Apple ID has reached the per-user device cap (Apple allows
 // up to 5 devices per user license).
 //
-// Apple's numeric code for this case has not been stable across iOS releases,
-// so the helper matches by message substring as well. Confirm against Apple's
-// sandbox before locking in the canonical code.
+// Apple does not document a stable numeric code for this case, so the helper
+// matches solely on the error message substring until a canonical code is
+// confirmed against Apple's sandbox.
 func IsMaxDevicesPerUserError(err error) bool {
 	if err == nil {
 		return false
@@ -62,10 +62,6 @@ func IsMaxDevicesPerUserError(err error) bool {
 	var resp *ErrorResponse
 	if !errors.As(err, &resp) || resp == nil {
 		return false
-	}
-	// Known candidate code — refine against sandbox results.
-	if resp.ErrorNumber == 9622 {
-		return true
 	}
 	msg := strings.ToLower(resp.ErrorMessage)
 	if strings.Contains(msg, "maximum number of devices") ||
@@ -199,12 +195,12 @@ func AssociateAssets(ctx context.Context, token string, params *AssociateAssetsR
 
 	var reqBody bytes.Buffer
 	if err := json.NewEncoder(&reqBody).Encode(params); err != nil {
-		return "", fmt.Errorf("encoding params as JSON: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "encoding params as JSON")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getBaseURL()+"/assets/associate", &reqBody)
 	if err != nil {
-		return "", fmt.Errorf("creating request to Apple VPP endpoint: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "creating request to Apple VPP endpoint")
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -214,7 +210,7 @@ func AssociateAssets(ctx context.Context, token string, params *AssociateAssetsR
 	}
 
 	if err := do(req, token, &respBody); err != nil {
-		return "", fmt.Errorf("making request to Apple VPP endpoint: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "making request to Apple VPP endpoint")
 	}
 
 	return respBody.EventID, nil
@@ -317,18 +313,18 @@ func RegisterUser(ctx context.Context, token, clientUserID, managedAppleID strin
 
 	var reqBody bytes.Buffer
 	if err := json.NewEncoder(&reqBody).Encode(reqParams); err != nil {
-		return "", fmt.Errorf("encoding params as JSON: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "encoding params as JSON")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getV1BaseURL()+"/registerVPPUserSrv", &reqBody)
 	if err != nil {
-		return "", fmt.Errorf("creating request to Apple VPP endpoint: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "creating request to Apple VPP endpoint")
 	}
 	req.Header.Add("Content-Type", "application/json")
 
 	var resp RegisterUserResponse
 	if err := do(req, "", &resp); err != nil {
-		return "", fmt.Errorf("making request to Apple VPP endpoint: %w", err)
+		return "", ctxerr.Wrap(ctx, err, "making request to Apple VPP endpoint")
 	}
 
 	// v1 reports application-level failures via status == -1 with an
@@ -341,7 +337,7 @@ func RegisterUser(ctx context.Context, token, clientUserID, managedAppleID strin
 		}
 	}
 	if resp.User == nil || resp.User.UserID == "" {
-		return "", errors.New("Apple VPP register-user returned no user record on success")
+		return "", ctxerr.New(ctx, "Apple VPP register-user returned no user record on success")
 	}
 
 	return resp.User.UserID.String(), nil

@@ -7,10 +7,10 @@ import (
 )
 
 func init() {
-	MigrationClient.AddMigration(Up_20220510110838, Down_20220510110838)
+	MigrationClient.AddMigration(Up_20220526123328, Down_20220526123328)
 }
 
-func Up_20220510110838(tx *sql.Tx) error {
+func Up_20220526123328(tx *sql.Tx) error {
 	// Idempotent migration.
 	if !indexExistsTx(tx, "hosts", "hosts_platform_idx") {
 		stm := "CREATE INDEX hosts_platform_idx ON hosts (platform);"
@@ -23,6 +23,7 @@ func Up_20220510110838(tx *sql.Tx) error {
 	return nil
 }
 
-func Down_20220510110838(tx *sql.Tx) error {
+func Down_20220526123328(tx *sql.Tx) error {
 	return nil
 }
+
