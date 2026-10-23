@@ -189,6 +189,9 @@ const SoftwareVppForm = ({
     setFormValidation(generateFormValidation(newData));
   };
 
+  // TODO: extract this handler, shared (structurally) with PackageForm and
+  // SoftwareAndroidForm, into a common hook (e.g. useCategorySelection) to
+  // avoid drift between the three forms.
   const onSelectCategory = ({
     name,
     value,
@@ -226,6 +229,8 @@ const SoftwareVppForm = ({
     setFormValidation(generateFormValidation(newData));
   };
 
+  // TODO: extract this handler, shared (structurally) with PackageForm and
+  // SoftwareAndroidForm, into a common hook (e.g. useLabelTargetSelection).
   const onSelectTargetType = (value: string) => {
     const newData = { ...formData, targetType: value };
     setFormData(newData);
@@ -238,6 +243,8 @@ const SoftwareVppForm = ({
     setFormValidation(generateFormValidation(newData));
   };
 
+  // TODO: extract this handler, shared (structurally) with PackageForm and
+  // SoftwareAndroidForm, into a common hook (e.g. useLabelTargetSelection).
   const onSelectLabel = ({ name, value }: { name: string; value: boolean }) => {
     const newData = {
       ...formData,

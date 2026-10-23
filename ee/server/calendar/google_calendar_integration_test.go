@@ -24,6 +24,7 @@ type googleCalendarIntegrationTestSuite struct {
 func (s *googleCalendarIntegrationTestSuite) SetupSuite() {
 	dbFile, err := os.CreateTemp("", "calendar.db")
 	s.Require().NoError(err)
+	s.dbFile = dbFile
 	handler, err := calendartest.Configure(dbFile.Name())
 	s.Require().NoError(err)
 	server := httptest.NewUnstartedServer(handler)

@@ -44,8 +44,13 @@ func readCSVFile(filePath string) ([]fleet.Software, error) {
 		return nil, err
 	}
 
+	const expectedColumns = 8
+
 	var software []fleet.Software
-	for _, line := range lines[1:] { // Skip header
+	for i, line := range lines[1:] { // Skip header
+		if len(line) < expectedColumns {
+			return nil, fmt.Errorf("%s: row %d has %d columns, expected at least %d", filePath, i+2, len(line), expectedColumns)
+		}
 		software = append(software, fleet.Software{
 			Name:             line[0],
 			Version:          line[1],

@@ -79,11 +79,11 @@ const SelfServiceCard = ({
   // so the dropdown reflects this host's fleet, not the global fleet_id=0 set.
   // The queryKey's second element must match the queryFn arg to avoid
   // cross-device cache bleed.
-  const { data: categoriesData, isSuccess: isCategoriesSuccess } = useQuery<
-    ISelfServiceCategoriesResponse,
-    Error,
-    ISelfServiceCategory[]
-  >(
+  const {
+    data: categoriesData,
+    isSuccess: isCategoriesSuccess,
+    isLoading: isCategoriesLoading,
+  } = useQuery<ISelfServiceCategoriesResponse, Error, ISelfServiceCategory[]>(
     ["device_self_service_categories", deviceToken],
     () => selfServiceCategoriesAPI.getDeviceCategories(deviceToken),
     {
@@ -190,13 +190,21 @@ const SelfServiceCard = ({
   // trigger label would fall through to "All" while filterSoftwareByCustomCategory
   // returns [] — contradicting what the label promises. Drop the param so the
   // user lands back on a real "All" view.
+  // Guarded by isCategoriesLoading so this never evaluates against a
+  // still-loading (and possibly stale/empty) categories snapshot.
   useEffect(() => {
-    if (!isCategoriesSuccess || queryParams.category_id === undefined) return;
+    if (
+      isCategoriesLoading ||
+      !isCategoriesSuccess ||
+      queryParams.category_id === undefined
+    )
+      return;
     const idIsKnown = categories.some((c) => c.id === queryParams.category_id);
     if (!idIsKnown) {
       onCategoryChange(undefined);
     }
   }, [
+    isCategoriesLoading,
     isCategoriesSuccess,
     categories,
     queryParams.category_id,

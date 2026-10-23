@@ -218,6 +218,9 @@ func message(r *http.Request) ([]byte, error) {
 		if _, ok := q["message"]; ok {
 			msg = q.Get("message")
 		}
+		if len(msg) > maxPayloadSize {
+			return nil, &BadRequestError{Message: "message parameter too large"}
+		}
 		return []byte(msg), nil
 	case "POST":
 		return io.ReadAll(io.LimitReader(r.Body, maxPayloadSize))

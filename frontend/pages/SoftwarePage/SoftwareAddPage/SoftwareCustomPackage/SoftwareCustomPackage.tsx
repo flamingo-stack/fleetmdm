@@ -163,10 +163,10 @@ const SoftwareCustomPackage = ({
           newQueryParams
         )
       );
+      setUploadDetails(null);
     } catch (e) {
       renderFlash("error", getErrorMessage(e));
     }
-    setUploadDetails(null);
   };
 
   const renderContent = () => {

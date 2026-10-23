@@ -19,7 +19,20 @@ const isSecure = (): boolean => window.location.protocol === "https:";
 // must match the context it was stored in for get/remove to find it.
 const getTokenName = (): string => (isSecure() ? "__Host-token" : "token");
 
+const warnIfInsecure = (): void => {
+  if (!isSecure()) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "Fleet is being served over an insecure (non-HTTPS) connection. " +
+        "The auth token cookie will be stored without the Secure flag, " +
+        "which weakens its protection. This is expected for local/Docker " +
+        "deployments without TLS, but should never happen in production."
+    );
+  }
+};
+
 const save = (token: string, expiresAt?: Date): void => {
+  warnIfInsecure();
   Cookie.set(getTokenName(), token, {
     secure: isSecure(),
     sameSite: "lax",
