@@ -86,25 +86,25 @@ func unenroll(serialNumber string) error {
 	client := fleethttp.NewClient()
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s.api.kandji.io/api/v1/devices?serial_number=%s", *subdomainFlag, serialNumber), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating get device request: %w", err)
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiTokenFlag))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("performing get device request: %w", err)
 	}
 	defer resp.Body.Close()
 	bodyText, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading get device response body: %w", err)
 	}
 
 	var deviceInfo []struct {
 		DeviceID string `json:"device_id"`
 	}
 	if err = json.Unmarshal(bodyText, &deviceInfo); err != nil {
-		return err
+		return fmt.Errorf("unmarshalling get device response body: %w", err)
 	}
 	if len(deviceInfo) == 0 {
 		return fmt.Errorf("empty deviceInfo response, serial: %s", serialNumber)
@@ -114,12 +114,12 @@ func unenroll(serialNumber string) error {
 	// https://api-docs.kandji.io/#97deb582-d86c-444a-aa3b-3528b9a8478f
 	req, err = http.NewRequest("DELETE", fmt.Sprintf("https://%s.api.kandji.io/api/v1/devices/%s", *subdomainFlag, deviceInfo[0].DeviceID), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating delete device request: %w", err)
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiTokenFlag))
 	resp, err = client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("performing delete device request: %w", err)
 	}
 	fmt.Println("resp.StatusCode, serialNumber, device", resp.StatusCode, serialNumber, deviceInfo[0].DeviceID)
 
