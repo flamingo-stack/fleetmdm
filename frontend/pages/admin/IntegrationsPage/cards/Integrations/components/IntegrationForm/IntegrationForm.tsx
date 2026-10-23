@@ -107,12 +107,17 @@ const IntegrationForm = ({
         integrationEditing.username
       ) {
         // Edit existing jira integration using array replacement
-        jiraIntegrationSubmitData.splice(integrationEditing.originalIndex, 1, {
-          url,
-          username: username || "",
-          api_token: apiToken,
-          project_key: projectKey || "",
-        });
+        jiraIntegrationSubmitData = jiraIntegrationSubmitData.map(
+          (integration, index) =>
+            index === integrationEditing.originalIndex
+              ? {
+                  url,
+                  username: username || "",
+                  api_token: apiToken,
+                  project_key: projectKey || "",
+                }
+              : integration
+        );
       } else {
         // Create new jira integration at end of array
         jiraIntegrationSubmitData = [
@@ -134,12 +139,17 @@ const IntegrationForm = ({
       integrationEditing.email
     ) {
       // Edit existing zendesk integration using array replacement
-      zendeskIntegrationSubmitData.splice(integrationEditing.originalIndex, 1, {
-        url,
-        email: email || "",
-        api_token: apiToken,
-        group_id: Number(groupId) || 0,
-      });
+      zendeskIntegrationSubmitData = zendeskIntegrationSubmitData.map(
+        (integration, index) =>
+          index === integrationEditing.originalIndex
+            ? {
+                url,
+                email: email || "",
+                api_token: apiToken,
+                group_id: Number(groupId) || 0,
+              }
+            : integration
+      );
     } else {
       // Create new zendesk integration at end of array
       zendeskIntegrationSubmitData = [

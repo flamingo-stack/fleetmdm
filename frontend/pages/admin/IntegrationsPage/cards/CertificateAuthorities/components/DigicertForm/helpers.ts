@@ -4,7 +4,14 @@ import valid_url from "components/forms/validators/valid_url";
 
 import { IDigicertFormData } from "./DigicertForm";
 
-// TODO: create a validator abstraction for this and the other form validation files
+// NOTE: This module intentionally keeps its own generic validation scaffolding
+// (IValidation, IFormValidations, generateFormValidations, getErrorMessage,
+// validateFormData) inline rather than importing a shared abstraction, because
+// no such shared validator utility currently exists in this codebase. A follow-up
+// should extract this scaffolding (duplicated across CustomESTForm, DigicertForm,
+// and likely NDESForm/CustomSCEPForm/HydrantForm/SmallstepForm) into a single
+// generic, reusable form-validation utility to avoid divergent bug fixes across
+// CA form variants.
 
 export interface IDigicertFormValidation {
   isValid: boolean;
