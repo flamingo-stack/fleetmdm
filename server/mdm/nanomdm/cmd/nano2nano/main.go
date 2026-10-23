@@ -112,19 +112,19 @@ func httpPut(client *http.Client, url string, key string, sendBytes []byte) erro
 	}
 	req, err := http.NewRequest("PUT", url, bytes.NewReader(sendBytes))
 	if err != nil {
-		return err
+		return fmt.Errorf("creating PUT request: %w", err)
 	}
 	req.SetBasicAuth("nanomdm", key)
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("sending PUT request: %w", err)
 	}
 	defer res.Body.Close()
 	_, err = io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading response body: %w", err)
 	}
-	if res.StatusCode != 200 {
+	if res.StatusCode/100 != 2 {
 		return fmt.Errorf("Check-in Request failed with HTTP status: %d", res.StatusCode)
 	}
 	return nil

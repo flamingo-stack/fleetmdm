@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eo pipefail
 
 FLEETCTL_INSTALL_DIR="${HOME}/.fleetctl/"
 
@@ -59,3 +59,4 @@ if [[ ! -x "${FLEETCTL_INSTALL_DIR}/fleetctl" ]]; then
     echo "Failed to install or upgrade fleetctl. Please check your permissions and try running this script again."
     exit 1
 fi
+

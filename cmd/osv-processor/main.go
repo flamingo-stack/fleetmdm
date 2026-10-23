@@ -416,6 +416,7 @@ func buildVersionFilter(versions, excludeVersions string) (targetVersions, exclu
 func shouldIncludeInDelta(inputDir, filePath string, changedFiles map[string]struct{}) bool {
 	relPath, err := filepath.Rel(inputDir, filePath)
 	if err != nil {
+		log.Printf("failed to compute relative path for %s: %v", filePath, err)
 		return false
 	}
 

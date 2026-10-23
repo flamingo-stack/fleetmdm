@@ -333,7 +333,7 @@ func expandEnv(s string, secretMode secretHandling) (string, error) {
 		case documentIsXML:
 			var b strings.Builder
 			if xmlErr := xml.EscapeText(&b, []byte(value)); xmlErr != nil {
-				return "", fmt.Errorf("failed to XML escape fleet secret %s", env)
+				return "", fmt.Errorf("failed to XML escape fleet secret %s: %w", env, xmlErr)
 			}
 			return b.String(), nil
 		default:
