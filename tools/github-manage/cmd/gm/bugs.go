@@ -192,12 +192,12 @@ func fetchOpenBugs(limit int) ([]BugIssue, error) {
 
 	output, err := ghapi.RunCommandAndReturnOutput(command)
 	if err != nil {
-		return nil, fmt.Errorf("gh command failed: %v", err)
+		return nil, fmt.Errorf("gh command failed: %w", err)
 	}
 
 	var bugs []BugIssue
 	if err := json.Unmarshal(output, &bugs); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON response: %v", err)
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
 	if len(bugs) == limit {

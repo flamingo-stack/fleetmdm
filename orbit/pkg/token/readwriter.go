@@ -92,7 +92,7 @@ func (rw *ReadWriter) SetRemoteUpdateFunc(f remoteUpdaterFunc) {
 func (rw *ReadWriter) Write(id string) error {
 	if rw.remoteUpdate != nil {
 		if err := rw.remoteUpdate(id); err != nil {
-			return err
+			return fmt.Errorf("remote update of token: %w", err)
 		}
 	}
 

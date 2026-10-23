@@ -349,7 +349,7 @@ func (m *MacosSetupAssistant) getTeamNoTeam(ctx context.Context, tmID *uint) (*f
 	if tmID != nil {
 		tm, err := m.Datastore.TeamWithExtras(ctx, *tmID) // TODO see if we can convert this workflow to TeamLite
 		if err != nil {
-			return nil, err
+			return nil, ctxerr.Wrap(ctx, err, "get team with extras")
 		}
 		team = tm
 	}

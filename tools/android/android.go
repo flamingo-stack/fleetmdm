@@ -223,7 +223,7 @@ func devicesDelete(mgmt *androidmanagement.Service, enterpriseID string, deviceI
 	}
 	_, err := mgmt.Enterprises.Devices.Delete("enterprises/" + enterpriseID + "/devices/" + deviceID).Do()
 	if err != nil {
-		log.Fatalf("Error listing devices: %v", err)
+		log.Fatalf("Error deleting device: %v", err)
 	}
 	log.Printf("Device %s deleted", deviceID)
 }
