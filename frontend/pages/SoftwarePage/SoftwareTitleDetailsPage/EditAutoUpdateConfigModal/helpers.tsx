@@ -67,10 +67,12 @@ const validateWindowLength = (
     .map(Number);
   const startTotalMinutes = startHours * 60 + startMinutes;
   const endTotalMinutes = endHours * 60 + endMinutes;
-  return (
-    endTotalMinutes < startTotalMinutes ||
-    endTotalMinutes - startTotalMinutes >= 60
-  );
+  // If end is before start, treat the window as wrapping past midnight.
+  const windowMinutes =
+    endTotalMinutes < startTotalMinutes
+      ? endTotalMinutes + 24 * 60 - startTotalMinutes
+      : endTotalMinutes - startTotalMinutes;
+  return windowMinutes >= 60;
 };
 
 const FORM_VALIDATIONS: IFormValidations = {
