@@ -360,7 +360,7 @@ func (c *httpClient) Do(request *http.Request) (*http.Response, error) {
 
 	response, err := c.Client.Do(request.WithContext(c.ctx))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("nvd http request failed: %w", err)
 	}
 
 	if c.debug {

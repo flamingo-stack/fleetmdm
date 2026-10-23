@@ -5,13 +5,14 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 )
 
 type OpenframeEncryptionService struct {
 	encryptionKey   string
-	decryptErrCount int
+	decryptErrCount atomic.Int64
 }
 
 func NewOpenframeEncryptionService(encryptionKey string) *OpenframeEncryptionService {
@@ -23,25 +24,25 @@ func NewOpenframeEncryptionService(encryptionKey string) *OpenframeEncryptionSer
 func (es *OpenframeEncryptionService) Decrypt(data string) ([]byte, error) {
 	encryptedData, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
-		es.decryptErrCount++
-		if es.decryptErrCount % openframeTokenRefreshErrorLogInterval == 1 {
+		count := es.decryptErrCount.Add(1)
+		if count % openframeTokenRefreshErrorLogInterval == 1 {
 			log.Error().Err(err).Msg("Error decoding base64 data")
 		}
-		return nil, err
+		return nil, fmt.Errorf("decoding base64 data: %w", err)
 	}
 
 	block, err := aes.NewCipher([]byte(es.encryptionKey))
 	if err != nil {
-		es.decryptErrCount++
-		if es.decryptErrCount % openframeTokenRefreshErrorLogInterval == 1 {
+		count := es.decryptErrCount.Add(1)
+		if count % openframeTokenRefreshErrorLogInterval == 1 {
 			log.Error().Err(err).Msg("Error creating cipher")
 		}
-		return nil, err
+		return nil, fmt.Errorf("creating cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating GCM: %w", err)
 	}
 
 	if len(encryptedData) < gcm.NonceSize() {
@@ -53,13 +54,13 @@ func (es *OpenframeEncryptionService) Decrypt(data string) ([]byte, error) {
 
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		es.decryptErrCount++
-		if es.decryptErrCount % openframeTokenRefreshErrorLogInterval == 1 {
+		count := es.decryptErrCount.Add(1)
+		if count % openframeTokenRefreshErrorLogInterval == 1 {
 			log.Error().Err(err).Msg("Error decrypting data")
 		}
-		return nil, err
+		return nil, fmt.Errorf("decrypting data: %w", err)
 	}
-	es.decryptErrCount = 0
+	es.decryptErrCount.Store(0)
 
 	return plaintext, nil
 }

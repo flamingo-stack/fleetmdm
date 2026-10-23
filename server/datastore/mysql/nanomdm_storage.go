@@ -107,8 +107,9 @@ type pushCertStalenessCheck struct {
 
 // We store staleness check in-memory since it's a short-lived 5 minute time window.
 // And it also means some containers might rotate it faster than 5 minutes depending on the time.
+// The cache is keyed by topic so that multiple APNs topics don't clobber each other's state.
 var (
-	pushCertStaleness   *pushCertStalenessCheck
+	pushCertStaleness   map[string]*pushCertStalenessCheck = make(map[string]*pushCertStalenessCheck)
 	pushCertStalenessMu sync.RWMutex
 )
 
@@ -124,17 +125,18 @@ func (s *NanoMDMStorage) RetrievePushCert(
 	}
 	pushCertStalenessMu.Lock()
 	defer pushCertStalenessMu.Unlock()
-	checkInMemoryHash(checksum)
+	checkInMemoryHash(topic, checksum)
 	return cert, checksum, nil
 }
 
-// checkInMemoryHash checks the incoming hash agains the in-memory hash.
+// checkInMemoryHash checks the incoming hash agains the in-memory hash for the given topic.
 // if criteria is met, it updates the in-memory hash with the new hash and updatedAt = now.
-func checkInMemoryHash(hash string) {
-	if pushCertStaleness == nil || pushCertStaleness.hash != hash || time.Since(pushCertStaleness.updatedAt) > 5*time.Minute {
+func checkInMemoryHash(topic, hash string) {
+	staleness := pushCertStaleness[topic]
+	if staleness == nil || staleness.hash != hash || time.Since(staleness.updatedAt) > 5*time.Minute {
 		// We will not call this unless we are stale, OR on new topic getting a provider, which means we should be fine to update here.
 		// Update on new hash, or if it's been more than 5 minutes since last update, to avoid fetching the cert on each stale check.
-		pushCertStaleness = &pushCertStalenessCheck{
+		pushCertStaleness[topic] = &pushCertStalenessCheck{
 			hash:      hash,
 			updatedAt: time.Now(),
 		}
@@ -147,7 +149,7 @@ func checkInMemoryHash(hash string) {
 // If the token is the same, it checks if the certificate was last updated more than 5 minutes ago. If so, it re-fetches the certificate and updates the hash for future checks.
 func (s *NanoMDMStorage) IsPushCertStale(ctx context.Context, topic, staleToken string) (bool, error) {
 	pushCertStalenessMu.RLock()
-	staleness := pushCertStaleness
+	staleness := pushCertStaleness[topic]
 	pushCertStalenessMu.RUnlock()
 	if staleness == nil {
 		return true, nil
@@ -161,11 +163,11 @@ func (s *NanoMDMStorage) IsPushCertStale(ctx context.Context, topic, staleToken 
 	if time.Since(staleness.updatedAt) > 5*time.Minute {
 		_, checksum, err := assets.APNSKeyPair(ctx, s.ds)
 		if err != nil {
-			return false, fmt.Errorf("loading push certificate for staleness check: %w", err)
+			return false, ctxerr.Wrap(ctx, err, "loading push certificate for staleness check")
 		}
 		pushCertStalenessMu.Lock()
 		defer pushCertStalenessMu.Unlock()
-		checkInMemoryHash(checksum)
+		checkInMemoryHash(topic, checksum)
 		if checksum != staleToken {
 			s.logger.InfoContext(ctx, "push certificate is stale after re-checking", "topic", topic, "staleToken", staleToken, "newHash", checksum)
 			return true, nil

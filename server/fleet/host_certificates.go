@@ -211,7 +211,7 @@ type MDMAppleCertificateListItem struct {
 func (c *MDMAppleCertificateListItem) Parse(hostID uint) (*HostCertificateRecord, error) {
 	cert, err := x509.ParseCertificate(c.Data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse mdm apple certificate: %w", err)
 	}
 	return NewHostCertificateRecord(hostID, cert), nil
 }

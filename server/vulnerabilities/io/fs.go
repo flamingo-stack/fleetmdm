@@ -1,6 +1,7 @@
 package io
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,17 +52,20 @@ func (fs FSClient) list(
 	var result []MetadataFileName
 	err := filepath.WalkDir(fs.dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return fmt.Errorf("walking dir %q for prefix %q: %w", fs.dir, prefix, err)
 		}
 		filePath := filepath.Base(path)
 		if strings.HasPrefix(filePath, prefix) {
 			mfn, err := ctor(filePath)
 			if err != nil {
-				return err
+				return fmt.Errorf("parsing metadata file %q for prefix %q: %w", filePath, prefix, err)
 			}
 			result = append(result, mfn)
 		}
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return result, fmt.Errorf("listing files with prefix %q in dir %q: %w", prefix, fs.dir, err)
+	}
+	return result, nil
 }

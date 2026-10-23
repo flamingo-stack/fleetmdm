@@ -373,12 +373,14 @@ func (m *swiftDialogMDMMigrator) waitForUnenrollment(isADEMigration bool) error 
 	}
 	return retry.Do(func() error {
 		var unenrolled bool
+		var lastCheckErr error
 
 		if isADEMigration {
 			fileExists, fileErr := checkFileFn()
 			switch {
 			case fileErr != nil:
 				log.Error().Err(fileErr).Msg("checking for existence of cloudConfigProfileInstalled in migration modal")
+				lastCheckErr = fmt.Errorf("checking for existence of cloudConfigProfileInstalled: %w", fileErr)
 			case fileExists:
 				log.Info().Msg("checking for existence of cloudConfigProfileInstalled in migration modal: found")
 			default:
@@ -390,6 +392,7 @@ func (m *swiftDialogMDMMigrator) waitForUnenrollment(isADEMigration bool) error 
 		statusEnrolled, serverURL, statusErr := checkStatusFn()
 		if statusErr != nil { //nolint:gocritic // ignore ifElseChain
 			log.Error().Err(statusErr).Msgf("checking profiles status in migration modal")
+			lastCheckErr = fmt.Errorf("checking profiles status in migration modal: %w", statusErr)
 		} else if statusEnrolled {
 			log.Info().Msgf("checking profiles status in migration modal: enrolled to %s", serverURL)
 		} else {
@@ -399,6 +402,9 @@ func (m *swiftDialogMDMMigrator) waitForUnenrollment(isADEMigration bool) error 
 
 		if !unenrolled {
 			log.Info().Msgf("device is still enrolled, waiting %s", m.unenrollmentRetryInterval)
+			if lastCheckErr != nil {
+				return fmt.Errorf("host didn't unenroll from MDM: %w", lastCheckErr)
+			}
 			return errors.New("host didn't unenroll from MDM")
 		}
 
