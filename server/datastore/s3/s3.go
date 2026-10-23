@@ -29,6 +29,14 @@ const (
 	awsRegionHint       = "us-east-1"
 	gcsReadWriteScope   = "https://www.googleapis.com/auth/devstorage.read_write"
 	signingMiddlewareID = "Signing"
+
+	// checksumMiddlewareID and checksumTrailerMiddlewareID are the AWS SDK
+	// internal middleware identifiers that the GCS trailing-checksum
+	// workaround depends on. If the SDK is upgraded and these IDs or the
+	// EnableTrailingChecksum field no longer exist, disableTrailingChecksumForGCS
+	// will now fail loudly (returning an error) instead of silently no-oping.
+	checksumMiddlewareID        = "AWSChecksum:ComputeInputPayloadChecksum"
+	checksumTrailerMiddlewareID = "addInputChecksumTrailer"
 )
 
 var findDefaultGoogleCredentials = google.FindDefaultCredentials
@@ -330,7 +338,14 @@ func restoreIgnored() middleware.FinalizeMiddleware {
 }
 
 // disableTrailingChecksumForGCS disables trailing checksums for UploadPart and PutObject operations using reflection
-// This is part of the GCS compatibility workaround as GCS doesn't support trailing checksums
+// This is part of the GCS compatibility workaround as GCS doesn't support trailing checksums.
+//
+// NOTE: this relies on an unexported AWS SDK middleware field (EnableTrailingChecksum)
+// and an internal middleware ID (addInputChecksumTrailer). If a future AWS SDK
+// upgrade renames or removes either of these, the middleware below now returns
+// an error (failing loudly) instead of silently no-oping, so that an SDK upgrade
+// cannot silently restore trailing checksums or silently proceed without the
+// expected trailer removal.
 func disableTrailingChecksumForGCS(o *s3.Options) {
 	o.APIOptions = append(o.APIOptions, func(stack *middleware.Stack) error {
 		return stack.Initialize.Add(middleware.InitializeMiddlewareFunc(
@@ -340,15 +355,24 @@ func disableTrailingChecksumForGCS(o *s3.Options) {
 				if opName := middleware.GetOperationName(ctx); opName == "UploadPart" || opName == "PutObject" {
 					// Use reflection to disable trailing checksums in the checksum middleware
 					// This is a hack, but it's the only way to disable trailing checksums currently
-					if checksumMiddleware, ok := stack.Finalize.Get("AWSChecksum:ComputeInputPayloadChecksum"); ok {
-						if v := reflect.ValueOf(checksumMiddleware).Elem(); v.IsValid() {
-							if field := v.FieldByName("EnableTrailingChecksum"); field.IsValid() && field.CanSet() && field.Kind() == reflect.Bool {
-								field.SetBool(false)
-							}
-						}
+					checksumMiddleware, ok := stack.Finalize.Get(checksumMiddlewareID)
+					if !ok {
+						return out, metadata, fmt.Errorf("disableTrailingChecksumForGCS: middleware %q not found in finalize stack; AWS SDK may have changed", checksumMiddlewareID)
 					}
+					v := reflect.ValueOf(checksumMiddleware).Elem()
+					if !v.IsValid() {
+						return out, metadata, fmt.Errorf("disableTrailingChecksumForGCS: middleware %q has unexpected type %T", checksumMiddlewareID, checksumMiddleware)
+					}
+					field := v.FieldByName("EnableTrailingChecksum")
+					if !field.IsValid() || !field.CanSet() || field.Kind() != reflect.Bool {
+						return out, metadata, fmt.Errorf("disableTrailingChecksumForGCS: EnableTrailingChecksum field not found or not settable on %q; AWS SDK may have changed", checksumMiddlewareID)
+					}
+					field.SetBool(false)
+
 					// Remove the trailing checksum middleware entirely
-					_, _ = stack.Finalize.Remove("addInputChecksumTrailer")
+					if _, err := stack.Finalize.Remove(checksumTrailerMiddlewareID); err != nil {
+						return out, metadata, fmt.Errorf("disableTrailingChecksumForGCS: removing %q: %w", checksumTrailerMiddlewareID, err)
+					}
 				}
 				return next.HandleInitialize(ctx, in)
 			},

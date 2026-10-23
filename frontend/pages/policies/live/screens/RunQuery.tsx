@@ -120,7 +120,19 @@ const RunQuery = ({
       }
 
       previousSocketData.current = data;
-      const socketData = JSON.parse(data);
+
+      let socketData;
+      try {
+        socketData = JSON.parse(data);
+      } catch (parseError) {
+        renderFlash(
+          "error",
+          "Something went wrong running your report. Please try again."
+        );
+        teardownDistributedQuery();
+        return;
+      }
+
       setCampaignState((prevCampaignState) => {
         return {
           ...prevCampaignState,

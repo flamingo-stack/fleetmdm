@@ -85,7 +85,10 @@ const useUpdatePolicyAutomations = ({
   };
 
   return useMutation(
-    ({ policyUpdate, webhookOrTicketUpdate }: IUpdatePolicyAutomationsVars) => {
+    async ({
+      policyUpdate,
+      webhookOrTicketUpdate,
+    }: IUpdatePolicyAutomationsVars) => {
       if (!policy) {
         return Promise.reject(
           new Error("Cannot update automations without a policy.")
@@ -93,25 +96,33 @@ const useUpdatePolicyAutomations = ({
       }
       const { id: policyId } = policy;
 
-      const requests: Promise<unknown>[] = [];
+      // Run sequentially (rather than via Promise.all) so that a failure in
+      // the second request can't be conflated with a failure in the first:
+      // if the policy update succeeds but the webhook/ticket save fails (or
+      // vice versa), we know exactly which side needs its cache invalidated
+      // and which side already landed successfully.
       if (policyUpdate) {
-        requests.push(
-          teamPoliciesAPI.update(policyId, {
-            team_id: teamIdForApi,
-            ...policyUpdate,
-          })
-        );
+        await teamPoliciesAPI.update(policyId, {
+          team_id: teamIdForApi,
+          ...policyUpdate,
+        });
       }
       if (webhookOrTicketUpdate) {
-        requests.push(
-          saveWebhookOrTicketMembership(policyId, webhookOrTicketUpdate.enabled)
+        await saveWebhookOrTicketMembership(
+          policyId,
+          webhookOrTicketUpdate.enabled
         );
       }
-      return Promise.all(requests);
+      return undefined;
     },
     {
       onSuccess,
       onError: () => {
+        // Invalidate both the policy list/detail cache and the
+        // config/teams cache, since either request could have been the one
+        // that failed (or succeeded) and left stale cached data behind.
+        queryClient.invalidateQueries(["teamPolicies"]);
+        queryClient.invalidateQueries(["policies"]);
         if (isGlobalPolicy) {
           queryClient.invalidateQueries(["config"]);
         } else {
