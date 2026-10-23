@@ -15,9 +15,11 @@ import (
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	// >>> OPENFRAME(otel-tracing): add OpenTelemetry tracing to cron scheduler — openframe/docs/otel-tracing.md
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	// <<< OPENFRAME(otel-tracing)
 )
 
 // ReloadInterval reloads and returns a new interval.
@@ -240,7 +242,7 @@ func (s *Schedule) Start() {
 		}()
 
 		for {
-			s.logger.DebugContext(s.ctx, fmt.Sprintf("%v remaining until next tick", s.getRemainingInterval(s.intervalStartedAt)))
+			s.logger.DebugContext(s.ctx, "remaining until next tick", "remaining", s.getRemainingInterval(s.intervalStartedAt))
 
 			select {
 			case <-s.ctx.Done():
@@ -248,12 +250,14 @@ func (s *Schedule) Start() {
 				return
 
 			case claimedStatsID := <-s.trigger:
+				// >>> OPENFRAME(otel-tracing): create root span for triggered execution — openframe/docs/otel-tracing.md
 				// Create a root span for the entire triggered execution
 				ctx, span := startRootSpan(s.ctx, "cron.triggered."+s.name,
 					attribute.String("cron.name", s.name),
 					attribute.String("cron.instance", s.instanceID),
 					attribute.String("cron.type", "triggered"),
 				)
+				// <<< OPENFRAME(otel-tracing)
 
 				s.logger.DebugContext(ctx, "done, trigger received")
 
@@ -300,19 +304,21 @@ func (s *Schedule) Start() {
 					newStart := intervalStartedAt.Add(time.Since(intervalStartedAt).Truncate(schedInterval)) // advances start time by the number of full interval elasped
 					s.setIntervalStartedAt(newStart)
 					schedTicker.Reset(s.getRemainingInterval(newStart))
-					s.logger.DebugContext(ctx, fmt.Sprintf("triggered run spanned schedule interval, new wait %v", s.getRemainingInterval(newStart)))
+					s.logger.DebugContext(ctx, "triggered run spanned schedule interval", "new_wait", s.getRemainingInterval(newStart))
 				}
 
 				cancelHold()
 				span.End()
 
 			case <-schedTicker.C:
+				// >>> OPENFRAME(otel-tracing): create root span for scheduled tick processing — openframe/docs/otel-tracing.md
 				// Create a root span for the entire scheduled tick processing
 				ctx, span := startRootSpan(s.ctx, "cron.scheduled_tick."+s.name,
 					attribute.String("cron.name", s.name),
 					attribute.String("cron.instance", s.instanceID),
 					attribute.String("cron.type", "scheduled_tick"),
 				)
+				// <<< OPENFRAME(otel-tracing)
 
 				s.logger.DebugContext(ctx, "done, tick received")
 
@@ -330,7 +336,7 @@ func (s *Schedule) Start() {
 
 				if prevScheduledRun.Status == fleet.CronStatsStatusPending || prevTriggeredRun.Status == fleet.CronStatsStatusPending {
 					// skip ahead to the next interval
-					s.logger.InfoContext(ctx, fmt.Sprintf("pending job might still be running, wait %v", schedInterval))
+					s.logger.InfoContext(ctx, "pending job might still be running", "wait", schedInterval)
 					schedTicker.Reset(schedInterval)
 					span.End()
 					continue
@@ -347,7 +353,7 @@ func (s *Schedule) Start() {
 				if time.Since(intervalStartedAt) < schedInterval {
 					// wait for the remaining interval plus a small buffer
 					newWait := s.getRemainingInterval(intervalStartedAt) + 100*time.Millisecond
-					s.logger.InfoContext(ctx, fmt.Sprintf("wait remaining interval %v", newWait))
+					s.logger.InfoContext(ctx, "wait remaining interval", "wait", newWait)
 					schedTicker.Reset(newWait)
 					span.End()
 					continue
@@ -358,7 +364,7 @@ func (s *Schedule) Start() {
 					newStart := intervalStartedAt.Add(time.Since(intervalStartedAt).Truncate(schedInterval)) // advances start time by the number of full interval elasped
 					s.setIntervalStartedAt(newStart)
 					schedTicker.Reset(s.getRemainingInterval(newStart))
-					s.logger.DebugContext(ctx, fmt.Sprintf("prior run spanned schedule interval, new wait %v", s.getRemainingInterval(newStart)))
+					s.logger.DebugContext(ctx, "prior run spanned schedule interval", "new_wait", s.getRemainingInterval(newStart))
 					span.End()
 					continue
 				}
@@ -385,7 +391,7 @@ func (s *Schedule) Start() {
 				// tick that would have overlapped with the 1.5hrs running time)
 				schedInterval = s.getSchedInterval()
 				if time.Since(newStart) > schedInterval {
-					s.logger.InfoContext(ctx, fmt.Sprintf("total runtime (%v) exceeded schedule interval (%v)", time.Since(newStart), schedInterval))
+					s.logger.InfoContext(ctx, "total runtime exceeded schedule interval", "runtime", time.Since(newStart), "schedule_interval", schedInterval)
 					newStart = newStart.Add(time.Since(newStart).Truncate(schedInterval)) // advances start time by the number of full interval elasped
 					s.setIntervalStartedAt(newStart)
 				}
@@ -439,8 +445,8 @@ func (s *Schedule) Start() {
 					clearScheduleChannels(s.trigger, schedTicker.C)
 					schedTicker.Reset(newWait)
 
-					s.logger.DebugContext(s.ctx, fmt.Sprintf("new schedule interval %v", newInterval))
-					s.logger.DebugContext(s.ctx, fmt.Sprintf("time until next schedule tick %v", newWait))
+					s.logger.DebugContext(s.ctx, "new schedule interval", "interval", newInterval)
+					s.logger.DebugContext(s.ctx, "time until next schedule tick", "wait", newWait)
 				}
 			}
 		}()
@@ -764,6 +770,7 @@ func truncateSecondsWithFloor(d time.Duration) time.Duration {
 	return d.Truncate(time.Second)
 }
 
+// >>> OPENFRAME(otel-tracing): helper functions for creating root and child OTEL spans in cron scheduler — openframe/docs/otel-tracing.md
 // startRootSpan creates a new root span for async operations
 // This is necessary because cron jobs run in background goroutines without parent HTTP contexts
 // If OpenTelemetry is not configured at the application level, this will be a no-op
@@ -791,6 +798,8 @@ func startSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (c
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(attrs...))
 }
+
+// <<< OPENFRAME(otel-tracing)
 
 // RemoteTriggerSchedule implements fleet.CronSchedule for schedules that run on
 // a remote server. Instead of running jobs locally, Trigger() inserts a "queued"
