@@ -83,7 +83,7 @@ type listTeamsResp struct {
 func findTeamByName(c Client, name string) (Team, error) {
 	var resp listTeamsResp
 	if err := c.Get("/api/latest/fleet/fleets?per_page=500", &resp); err != nil {
-		return Team{}, err
+		return Team{}, fmt.Errorf("list teams: %w", err)
 	}
 	list := resp.Teams
 	if len(list) == 0 {
@@ -99,9 +99,10 @@ func findTeamByName(c Client, name string) (Team, error) {
 			return Team{ID: t.ID, Name: t.Name}, nil
 		}
 	}
-	return Team{}, errTeamNotFound{name: name}
+	return Team{}, fmt.Errorf("find team by name %q: %w", name, errTeamNotFound{name: name})
 }
 
 type errTeamNotFound struct{ name string }
 
 func (e errTeamNotFound) Error() string { return "team not found: " + e.name }
+
