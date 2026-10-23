@@ -27,7 +27,7 @@ func main() {
 		osquerydCommand(),
 	}
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stdout, "Error: %+v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %+v\n", err)
 		os.Exit(1)
 	}
 }

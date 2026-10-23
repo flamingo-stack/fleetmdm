@@ -58,6 +58,13 @@ func main() {
 		stmt := stmtPrefix + strings.Join(valueStrings, ",") + stmtSuffix
 		_, err := db.Exec(stmt, valueArgs...)
 		if err != nil {
+			// Attempt to re-enable foreign key checks before aborting so we
+			// don't leave the database with referential integrity checks off.
+			if _, fkErr := db.Exec("SET FOREIGN_KEY_CHECKS=1"); fkErr != nil {
+				log.Printf("failed to re-enable FOREIGN_KEY_CHECKS after error: %v", fkErr)
+			} else {
+				log.Println("re-enabled FOREIGN_KEY_CHECKS after error")
+			}
 			log.Fatal(err)
 		}
 

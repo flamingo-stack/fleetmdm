@@ -25,7 +25,8 @@ module.exports = {
     unauthorized: { description: 'Invalid authentication token.', responseType: 'unauthorized'},
     notFound: { description: 'No Android enterprise found for this Fleet server.', responseType: 'notFound' },
     deviceNoLongerManaged: { description: 'The device is no longer managed by the Android enterprise.', responseType: 'notFound' },
-    invalidPolicyName: {description: 'The specified policy_name is invalid', responseType: 'badRequest' }
+    invalidPolicyName: {description: 'The specified policy_name is invalid', responseType: 'badRequest' },
+    invalidRequestBody: {description: 'The request body contains one or more fields that are not allowed to be patched.', responseType: 'badRequest' }
   },
 
 
@@ -62,6 +63,18 @@ module.exports = {
       throw 'notFound';
     }
 
+    // Note: We forward the request body to Google's API instead of using defined inputs, to prevent previously set values from being overwritten by undefined values.
+    // To avoid forwarding an arbitrary payload, we only allow a known allow-list of top level fields that are safe to patch on a device.
+    // This behavior should not be repeated in future Android proxy endpoints.
+    let ALLOWED_PATCH_FIELDS = ['policyName', 'state'];
+    let requestBodyFields = _.keys(this.req.body);
+    let hasDisallowedField = _.some(requestBodyFields, (field) => {
+      return !_.contains(ALLOWED_PATCH_FIELDS, field);
+    });
+    if (hasDisallowedField) {
+      throw 'invalidRequestBody';
+    }
+
     // Update the device for this Android enterprise.
     // Note: We're using sails.helpers.flow.build here to handle any errors that occur using google's node library.
     let modifyDeviceResponse = await sails.helpers.flow.build(async () => {
@@ -81,7 +94,7 @@ module.exports = {
       let patchDeviceResponse = await androidmanagement.enterprises.devices.patch({
         name: `enterprises/${androidEnterpriseId}/devices/${deviceId}`,
         // Note: Typically, we use defined inputs instead of accessing req.body directly. We forward req.body here to prevent previously set values from being overwritten by undefined values.
-        // This behavior should not be repeated in future Android proxy endpoints.
+        // This behavior should not be repeated in future Android proxy endpoints. The request body's fields are validated against an allow-list above.
         requestBody: this.req.body,
       });
       return patchDeviceResponse.data;

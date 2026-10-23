@@ -4,6 +4,8 @@ import mdmAppleApi from "services/entities/mdm_apple";
 
 import Icon from "components/Icon";
 import Button from "components/buttons/Button";
+import { NotificationContext } from "context/notification";
+import { getErrorReason } from "interfaces/errors";
 import { RequestState, downloadBase64ToFile } from "./helpers";
 
 interface IDownloadCSRProps {
@@ -22,6 +24,7 @@ const useDownloadCSR = ({
   onSuccess,
   onError,
 }: Omit<IDownloadCSRProps, "baseClass">) => {
+  const { renderFlash } = React.useContext(NotificationContext);
   const [downloadState, setDownloadState] = useState<RequestState>(undefined);
 
   const handleDownload = useCallback(
@@ -35,10 +38,11 @@ const useDownloadCSR = ({
         onSuccess && onSuccess();
       } catch (e) {
         setDownloadState("error");
+        renderFlash("error", getErrorReason(e));
         onError && onError(e);
       }
     },
-    [onError, onSuccess]
+    [onError, onSuccess, renderFlash]
   );
 
   const memoized = useMemo(

@@ -8,16 +8,26 @@ package appicons
 #cgo darwin CFLAGS: -DDARWIN -x objective-c
 #cgo darwin LDFLAGS: -framework Cocoa
 #import <Appkit/AppKit.h>
-void Icon(CFDataRef *iconDataRef, char* path) {
+int Icon(CFDataRef *iconDataRef, char* path) {
 	NSString *appPath = [[NSString stringWithUTF8String:path] stringByStandardizingPath];
 	NSImage *img = [[NSWorkspace sharedWorkspace] iconForFile:appPath];
+	if (img == nil) {
+		return 0;
+	}
 
 	//request 128x128 since we are going to resize the icon
 	NSRect targetFrame = NSMakeRect(0, 0, 128, 128);
 	CGImageRef cgref = [img CGImageForProposedRect:&targetFrame context:nil hints:nil];
+	if (cgref == NULL) {
+		return 0;
+	}
 	NSBitmapImageRep *brep = [[NSBitmapImageRep alloc] initWithCGImage:cgref];
 	NSData *imageData = [brep TIFFRepresentation];
+	if (imageData == nil) {
+		return 0;
+	}
 	*iconDataRef = (CFDataRef)imageData;
+	return 1;
 }
 */
 import (
@@ -80,7 +90,10 @@ func generateAppIcons(ctx context.Context, queryContext table.QueryContext) ([]m
 
 func getAppIcon(appPath string, queryContext table.QueryContext) (image.Image, uint64, error) {
 	var data C.CFDataRef
-	C.Icon(&data, C.CString(appPath)) //nolint:gocritic // ignore dubSubExpr
+	ok := C.Icon(&data, C.CString(appPath)) //nolint:gocritic // ignore dubSubExpr
+	if ok == 0 || data == nil {
+		return nil, 0, fmt.Errorf("getting icon for %q: no icon data returned", appPath)
+	}
 	defer C.CFRelease(C.CFTypeRef(data))
 
 	tiffBytes := C.GoBytes(unsafe.Pointer(C.CFDataGetBytePtr(data)), C.int(C.CFDataGetLength(data)))
