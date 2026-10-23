@@ -201,19 +201,20 @@ func main() {
 				cert, err := x509.ParseCertificate(certDer)
 				if err != nil {
 					log.Printf("WARN: unable to parse SCEP identity certificate for %s: %s\n", device.UDID, err)
-				}
-				certExpiration = cert.NotAfter.Format("2006-01-02 15:04:05")
+				} else {
+					certExpiration = cert.NotAfter.Format("2006-01-02 15:04:05")
 
-				// encode it to PEM to store it in the DB in
-				// the format that nano expects. At the moment
-				// we don't really need this value as we can
-				// make do with the hash and the expiration,
-				// but I figured it would be good to have it.
-				pemBlock := &pem.Block{
-					Type:  "CERTIFICATE",
-					Bytes: cert.Raw,
+					// encode it to PEM to store it in the DB in
+					// the format that nano expects. At the moment
+					// we don't really need this value as we can
+					// make do with the hash and the expiration,
+					// but I figured it would be good to have it.
+					pemBlock := &pem.Block{
+						Type:  "CERTIFICATE",
+						Bytes: cert.Raw,
+					}
+					certPEM = pem.EncodeToMemory(pemBlock)
 				}
-				certPEM = pem.EncodeToMemory(pemBlock)
 			}
 
 			if len(device.BootstrapToken) == 0 {
