@@ -190,7 +190,9 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      # Disabled: covered by "Flamingo Code Review / tests and checks" (helm lint . on a changed chart). Kept here, not deleted. CU-17tkuw60a9u
       - name: Helm Lint
+        if: false
         run: helm lint charts/fleet
 
       - name: Helm Template
