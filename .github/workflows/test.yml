@@ -170,7 +170,9 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      # Disabled: covered by "Flamingo Code Review / tests and checks" (helm lint . on a changed chart). Kept here, not deleted: the repository variable FLAMINGO_LEGACY_CHECKS=on runs it again. CU-17tkuw60a9u
       - name: Helm Lint
+        if: vars.FLAMINGO_LEGACY_CHECKS == 'on'
         run: helm lint charts/fleet
 
       - name: Helm Template
