@@ -12,11 +12,12 @@ These workflows are **net-new** (added by the fork, not present upstream):
 | File | Role |
 |------|------|
 | [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | Main release pipeline |
-| [`.github/workflows/test.yml`](../../.github/workflows/test.yml) | PR validation (build + sign, no publish) |
-| [`.github/workflows/changes.yaml`](../../.github/workflows/changes.yaml) | Reusable path-filter (server / client / helm) |
+| [`.github/workflows/test.yml`](../../.github/workflows/test.yml) | PR validation (build + sign + server image scan, no publish) |
+| [`.github/workflows/changes.yaml`](../../.github/workflows/changes.yaml) | Reusable path-filter (server / client / helm / trivy) |
 | [`.github/workflows/sync-upstream.yml`](../../.github/workflows/sync-upstream.yml) | Scheduled merge from `fleetdm/fleet` |
 | [`.github/steps/sign-macos-package/action.yml`](../../.github/steps/sign-macos-package/action.yml) | macOS sign + notarize |
 | [`.github/steps/sign-windows-package/action.yml`](../../.github/steps/sign-windows-package/action.yml) | Windows sign (Azure Trusted Signing) |
+| [`.github/steps/trivy/action.yml`](../../.github/steps/trivy/action.yml) | Trivy scan of the server image a PR builds |
 
 `.goreleaser.yml` / `.goreleaser-snapshot.yml` are **modified** to template the
 image destination from environment variables. `Dockerfile` and `Makefile` are
@@ -157,4 +158,5 @@ re-apply.
 | `.github/workflows/sync-upstream.yml` | new | Scheduled upstream merge |
 | `.github/steps/sign-macos-package/action.yml` | new | macOS sign + notarize |
 | `.github/steps/sign-windows-package/action.yml` | new | Windows Azure Trusted Signing |
+| `.github/steps/trivy/action.yml` | new | Trivy scan of the PR server image |
 | `.goreleaser.yml`, `.goreleaser-snapshot.yml` | modified | Env-templated image destinations |
