@@ -62,8 +62,10 @@ jobs:
             }
           ]'
 
+          # trivy runs only the PR server job, which scans the image it builds; release.yml does not read it
           ADDONS='{
-            "helm": ["./charts/**"]
+            "helm": ["./charts/**"],
+            "trivy": ["./.trivyignore", "./.github/steps/trivy/**"]
           }'
 
           # the go module files rebuild both the server and the client

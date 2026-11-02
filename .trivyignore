@@ -1,3 +1,50 @@
-# Vulnerabilities to skip in the Trivy scan: one CVE/GHSA id per line, e.g.:
+# Findings to skip in the Trivy scans: a CVE, GHSA or check ID (e.g. DS-0002), one per line.
+# Reason and owner go on a comment line above it, an expiry on the ID line, e.g.:
 #
-# CVE-2026-12345
+# CVE-2026-12345 exp:2026-12-31
+
+# HIGH findings in the fleet binary: its Go modules and the stdlib of the Go version, all fixed in
+# upstream fleetdm/fleet. Fix: bump go.mod to the versions below, plus two code changes upstream made
+# with them: orbit/pkg/packaging/linux_shared.go for the nfpm 2.29 API, and semconv v1.41.0 for the
+# otel 1.44 that go mod tidy pulls in. Owner: @flamingo-stack/devops-engineers
+
+# stdlib 1.26.6, fixed in Go 1.26.10 (CVE-2026-78669 is in golang.org/x/net too)
+CVE-2026-78667 exp:2027-01-02
+CVE-2026-78669 exp:2027-01-02
+CVE-2026-97031 exp:2027-01-02
+CVE-2026-111943 exp:2027-01-02
+
+# google.golang.org/grpc 1.79.3, fixed in 1.83.2
+GHSA-hrxh-6v49-42gf exp:2027-01-02
+CVE-2026-84304 exp:2027-01-02
+CVE-2026-84445 exp:2027-01-02
+
+# golang.org/x/net 0.55.0, fixed in 0.60.0 (with CVE-2026-78669 above)
+CVE-2026-46600 exp:2027-01-02
+
+# golang.org/x/crypto 0.52.0, fixed in 0.55.0
+CVE-2026-56854 exp:2027-01-02
+
+# golang.org/x/text 0.37.0, fixed in 0.41.0
+CVE-2026-56851 exp:2027-01-02
+CVE-2026-56852 exp:2027-01-02
+
+# golang.org/x/mod 0.35.0, fixed in 0.40.0
+CVE-2026-56864 exp:2027-01-02
+CVE-2026-56865 exp:2027-01-02
+
+# golang.org/x/image 0.38.0, fixed in 0.45.0
+CVE-2026-46602 exp:2027-01-02
+CVE-2026-46603 exp:2027-01-02
+
+# github.com/apache/thrift 0.23.0, fixed in 0.24.0
+CVE-2026-43871 exp:2027-01-02
+
+# github.com/go-git/go-git/v5 5.19.1, fixed in 5.19.2
+CVE-2026-71556 exp:2027-01-02
+
+# github.com/goreleaser/nfpm/v2 2.20.0, fixed in 2.29.0
+CVE-2023-32698 exp:2027-01-02
+
+# github.com/klauspost/compress 1.18.4, fixed in 1.18.7
+CVE-2026-63209 exp:2027-01-02

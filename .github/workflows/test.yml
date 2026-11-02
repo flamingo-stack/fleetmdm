@@ -109,7 +109,7 @@ jobs:
     name: "Test Server"
     needs: [changes]
     runs-on: ubuntu-latest
-    if: fromJSON(needs.changes.outputs.changes || '{}').server == 'true'  # draft gate inherited from changes
+    if: fromJSON(needs.changes.outputs.changes || '{}').server == 'true' || fromJSON(needs.changes.outputs.changes || '{}').trivy == 'true'  # draft gate inherited from changes
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
@@ -149,6 +149,11 @@ jobs:
       - name: Test OpenFrame configuration and schema endpoint retirement
         run: go test -race ./server/config ./server/service ./cmd/fleet -run 'Test(OpenframeConfig|OpenframeOsquerySchemaRoute)' -count=1
 
+      # The tag release.yml builds from. Without it the snapshot stamps fleet v0.0.0-untagged and
+      # Trivy matches every upstream fleet advisory against it.
+      - name: Create local tag
+        run: git tag -f v9.9.9
+
       - name: Build with GoReleaser
         env:
           REGISTRY: ${{ env.REGISTRY }}
@@ -156,6 +161,14 @@ jobs:
           DOCKER_PUSH: "false"
           DOCKER_TAG: test
         run: goreleaser release --snapshot --clean --skip=publish
+
+      # The amd64 image GoReleaser just built and loaded (fleet-amd64 in .goreleaser.yml), so no
+      # second build. A fixable HIGH/CRITICAL finding fails the job and All Checks goes red.
+      - name: Scan image
+        uses: ./.github/steps/trivy
+        with:
+          name: fleet
+          image: ${{ env.REGISTRY }}/${{ github.repository }}/fleet:test-amd64
 
 
   test_helm:
