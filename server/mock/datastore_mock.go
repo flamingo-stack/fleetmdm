@@ -850,6 +850,8 @@ type UpdateHostSoftwareFunc func(ctx context.Context, hostID uint, software []fl
 
 type UpdateHostSoftwareInstalledPathsFunc func(ctx context.Context, hostID uint, reported map[string]struct{}, mutationResults *fleet.UpdateHostSoftwareDBResult) error
 
+type OpenframeUpsertSoftwareArpKeysFunc func(ctx context.Context, arpKeysByChecksum map[string]string) error
+
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
 
 type ListScheduledQueriesInPackFunc func(ctx context.Context, packID uint) (fleet.ScheduledQueryList, error)
@@ -3369,6 +3371,9 @@ type DataStore struct {
 
 	UpdateHostSoftwareInstalledPathsFunc        UpdateHostSoftwareInstalledPathsFunc
 	UpdateHostSoftwareInstalledPathsFuncInvoked bool
+
+	OpenframeUpsertSoftwareArpKeysFunc        OpenframeUpsertSoftwareArpKeysFunc
+	OpenframeUpsertSoftwareArpKeysFuncInvoked bool
 
 	UpdateHostFunc        UpdateHostFunc
 	UpdateHostFuncInvoked bool
@@ -8182,6 +8187,13 @@ func (s *DataStore) UpdateHostSoftwareInstalledPaths(ctx context.Context, hostID
 	s.UpdateHostSoftwareInstalledPathsFuncInvoked = true
 	s.mu.Unlock()
 	return s.UpdateHostSoftwareInstalledPathsFunc(ctx, hostID, reported, mutationResults)
+}
+
+func (s *DataStore) OpenframeUpsertSoftwareArpKeys(ctx context.Context, arpKeysByChecksum map[string]string) error {
+	s.mu.Lock()
+	s.OpenframeUpsertSoftwareArpKeysFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeUpsertSoftwareArpKeysFunc(ctx, arpKeysByChecksum)
 }
 
 func (s *DataStore) UpdateHost(ctx context.Context, host *fleet.Host) error {

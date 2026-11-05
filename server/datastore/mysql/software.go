@@ -3506,6 +3506,8 @@ type hostSoftware struct {
 	Version               *string    `db:"version"`
 	SoftwareID            *uint      `db:"software_id"`
 	SoftwareSource        *string    `db:"software_source"`
+	SoftwareVendor        *string    `db:"software_vendor"`  // OPENFRAME(software-arp-keys)
+	SoftwareArpKey        *string    `db:"software_arp_key"` // OPENFRAME(software-arp-keys)
 	SoftwareExtensionFor  *string    `db:"software_extension_for"`
 	InstallerID           *uint      `db:"installer_id"`
 	PackageSelfService    *bool      `db:"package_self_service"`
@@ -3552,13 +3554,17 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 			software.extension_for AS software_extension_for,
 			software.version AS version,
 			software.bundle_identifier AS bundle_identifier,
-			software_titles.upgrade_code AS upgrade_code
+			software_titles.upgrade_code AS upgrade_code,
+			software.vendor AS software_vendor, -- OPENFRAME(software-arp-keys)
+			software_arp_keys.arp_key AS software_arp_key -- OPENFRAME(software-arp-keys)
 		FROM
 			host_software
 		INNER JOIN
 			software ON host_software.software_id = software.id
 		INNER JOIN
 			software_titles ON software.title_id = software_titles.id
+		LEFT JOIN
+			software_arp_keys ON software_arp_keys.software_id = software.id -- OPENFRAME(software-arp-keys)
 		WHERE
 			host_software.host_id = ?
 	`
@@ -4770,6 +4776,12 @@ func (a *hostSoftwareTitleAssembler) addRecord(
 					version.BundleIdentifier = softwareBundleIdentifierList[index]
 					version.Source = softwareSourceList[index]
 					version.LastOpenedAt = software.LastOpenedAt
+					// >>> OPENFRAME(software-arp-keys)
+					if software.SoftwareVendor != nil {
+						version.Vendor = *software.SoftwareVendor
+					}
+					version.ArpKey = software.SoftwareArpKey
+					// <<< OPENFRAME(software-arp-keys)
 					version.SoftwareID = softwareId
 					version.SoftwareTitleID = softwareTitleRecord.ID
 

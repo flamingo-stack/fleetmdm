@@ -295,6 +295,11 @@ type SoftwareVersion struct {
 	// HostsCount is the number of hosts that use this software version.
 	HostsCount *uint `db:"hosts_count" json:"hosts_count,omitempty"`
 
+	// >>> OPENFRAME(software-arp-keys): what a winget-style matcher needs to tell this version's package apart
+	Vendor string  `db:"vendor" json:"vendor,omitempty"`
+	ArpKey *string `db:"arp_key" json:"arp_key,omitempty"`
+	// <<< OPENFRAME(software-arp-keys)
+
 	// TitleID is used only as an auxiliary field and it's not part of the
 	// JSON response.
 	TitleID uint `db:"title_id" json:"-"`

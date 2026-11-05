@@ -3419,6 +3419,7 @@ func GetDetailQueries(
 		generatedMap["software_linux_fleetd_pacman"] = softwareLinuxPacman
 		generatedMap["software_jetbrains_plugins"] = softwareJetbrainsPlugins
 		generatedMap["software_go_binaries"] = softwareGoBinaries
+		generatedMap["software_windows_arp_keys"] = softwareWindowsArpKeys // OPENFRAME(software-arp-keys)
 
 		for key, query := range SoftwareOverrideQueries {
 			generatedMap["software_"+key] = query
