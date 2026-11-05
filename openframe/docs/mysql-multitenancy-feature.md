@@ -113,7 +113,14 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   wired in `serve.go` after `apiendpoints.Validate`. Shared mode only (returns `next` unchanged
   otherwise). Pins each `/api/**` request from the gateway-injected trusted `X-Tenant-Id`; a
   non-exempt request without it is **401 (fail closed)**. Exempt (tenant comes from host/secret):
-  paths containing `/osquery/`, `/fleet/orbit/`, `/fleet/device/`, `/mdm/`, `/fleet/ota_enrollment`.
+  paths containing `/osquery/`, `/fleet/orbit/`, `/fleet/device/`, `/api/mdm/`, `/fleet/ota_enrollment`,
+  plus four enrollment routes matched by method and exact path (`openframeTenantExemptRoute`):
+  `GET /api/{v}/fleet/enrollment_profiles/ota` (enroll secret),
+  `GET /api/{v}/fleet/android_enterprise/connect/{token}` (signup token),
+  `GET /api/{v}/fleet/android_enterprise/enrollment_token` (enroll secret) and
+  `POST /api/{v}/fleet/android_enterprise/pubsub` (Pub/Sub token). They run unpinned, read the
+  instance config row (org name, MDM URL, the Android enabled flag) and put the device into the
+  team of the enroll secret it enrolled with.
 - **Agent plane** — `openframePinHostTeam` pins from the authenticated `host.team_id` in
   `authenticatedHost`/`authenticatedOrbitHost`/`authenticatedDevice` (`endpoint_middleware.go`) and
   the osquery header pre-auth paths (`osquery_header_auth.go`); fail-closed on a team-less host.
@@ -199,6 +206,11 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are
   unused. New-format stats are team-scoped.
 - **`IsEnrollSecretAvailable`** — intentionally unfenced (cross-team uniqueness check).
+- **MDM enabled flags across config rows** — the APNs upload sets the Apple flag on the calling
+  tenant's row, while the unpinned enrollment routes read the instance row, which `fleet serve`
+  recomputes from the stored assets only at start. Restart Fleet after the first APNs upload.
+  The Android enterprise and its flag are per instance (`android_enterprises` has no `team_id`):
+  a second signup replaces the first tenant's enterprise.
 
 ## Deployment / cutover
 
