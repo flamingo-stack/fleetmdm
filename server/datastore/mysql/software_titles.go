@@ -1135,11 +1135,14 @@ func (ds *Datastore) selectSoftwareVersionsSQL(titleIDs []uint, teamID *uint, tm
 SELECT
 	s.title_id,
 	s.id, s.version,
-	s.vendor, MAX(sak.arp_key) AS arp_key, -- OPENFRAME(software-arp-keys)
+	s.vendor, -- OPENFRAME(software-windows-details)
+	MAX(swd.arp_key) AS arp_key, MAX(swd.package_family_name) AS package_family_name, -- OPENFRAME(software-windows-details)
+	MAX(swd.system_component) AS system_component, MAX(swd.installer_type) AS installer_type, -- OPENFRAME(software-windows-details)
+	MAX(swd.install_scope) AS install_scope, MAX(swd.install_arch) AS install_arch, -- OPENFRAME(software-windows-details)
 	%s -- placeholder for optional host_counts
 	CONCAT('[', GROUP_CONCAT(JSON_QUOTE(scve.cve) SEPARATOR ','), ']') as vulnerabilities
 FROM software s
-LEFT JOIN software_arp_keys sak ON sak.software_id = s.id -- OPENFRAME(software-arp-keys)
+LEFT JOIN software_windows_details swd ON swd.software_id = s.id -- OPENFRAME(software-windows-details)
 LEFT JOIN software_host_counts shc ON shc.software_id = s.id AND %s
 LEFT JOIN software_cve scve ON shc.software_id = scve.software_id
 WHERE s.title_id IN (?)

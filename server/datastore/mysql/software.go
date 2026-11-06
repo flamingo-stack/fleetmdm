@@ -3506,8 +3506,6 @@ type hostSoftware struct {
 	Version               *string    `db:"version"`
 	SoftwareID            *uint      `db:"software_id"`
 	SoftwareSource        *string    `db:"software_source"`
-	SoftwareVendor        *string    `db:"software_vendor"`  // OPENFRAME(software-arp-keys)
-	SoftwareArpKey        *string    `db:"software_arp_key"` // OPENFRAME(software-arp-keys)
 	SoftwareExtensionFor  *string    `db:"software_extension_for"`
 	InstallerID           *uint      `db:"installer_id"`
 	PackageSelfService    *bool      `db:"package_self_service"`
@@ -3542,6 +3540,11 @@ type hostSoftware struct {
 	InHouseAppVersionList     *string `db:"in_house_app_version_list"`
 	InHouseAppSelfServiceList *string `db:"in_house_app_self_service_list"`
 	SoftwareUpgradeCodeList   *string `db:"software_upgrade_code_list"`
+
+	// >>> OPENFRAME(software-windows-details)
+	SoftwareVendor *string `db:"software_vendor"`
+	fleet.SoftwareWindowsDetails
+	// <<< OPENFRAME(software-windows-details)
 }
 
 func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*hostSoftware, error) {
@@ -3555,8 +3558,9 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 			software.version AS version,
 			software.bundle_identifier AS bundle_identifier,
 			software_titles.upgrade_code AS upgrade_code,
-			software.vendor AS software_vendor, -- OPENFRAME(software-arp-keys)
-			software_arp_keys.arp_key AS software_arp_key -- OPENFRAME(software-arp-keys)
+			software.vendor AS software_vendor, -- OPENFRAME(software-windows-details)
+			swd.arp_key, swd.package_family_name, swd.system_component, -- OPENFRAME(software-windows-details)
+			swd.installer_type, swd.install_scope, swd.install_arch -- OPENFRAME(software-windows-details)
 		FROM
 			host_software
 		INNER JOIN
@@ -3564,7 +3568,7 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 		INNER JOIN
 			software_titles ON software.title_id = software_titles.id
 		LEFT JOIN
-			software_arp_keys ON software_arp_keys.software_id = software.id -- OPENFRAME(software-arp-keys)
+			software_windows_details swd ON swd.software_id = software.id -- OPENFRAME(software-windows-details)
 		WHERE
 			host_software.host_id = ?
 	`
@@ -4776,12 +4780,12 @@ func (a *hostSoftwareTitleAssembler) addRecord(
 					version.BundleIdentifier = softwareBundleIdentifierList[index]
 					version.Source = softwareSourceList[index]
 					version.LastOpenedAt = software.LastOpenedAt
-					// >>> OPENFRAME(software-arp-keys)
+					// >>> OPENFRAME(software-windows-details)
 					if software.SoftwareVendor != nil {
 						version.Vendor = *software.SoftwareVendor
 					}
-					version.ArpKey = software.SoftwareArpKey
-					// <<< OPENFRAME(software-arp-keys)
+					version.SoftwareWindowsDetails = software.SoftwareWindowsDetails
+					// <<< OPENFRAME(software-windows-details)
 					version.SoftwareID = softwareId
 					version.SoftwareTitleID = softwareTitleRecord.ID
 

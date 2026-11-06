@@ -1004,10 +1004,10 @@ type HostSoftwareInstalledVersion struct {
 	Version          string     `json:"version" db:"version"`
 	BundleIdentifier string     `json:"bundle_identifier,omitempty" db:"bundle_identifier"`
 	LastOpenedAt     *time.Time `json:"last_opened_at,omitempty" db:"last_opened_at"`
-	// >>> OPENFRAME(software-arp-keys): what a winget-style matcher needs to tell this version's package apart
-	Vendor string  `json:"vendor,omitempty" db:"-"`
-	ArpKey *string `json:"arp_key,omitempty" db:"-"`
-	// <<< OPENFRAME(software-arp-keys)
+	// >>> OPENFRAME(software-windows-details): what a winget-style matcher needs to tell this version's package apart
+	Vendor                 string `json:"vendor,omitempty" db:"-"`
+	SoftwareWindowsDetails `db:"-"`
+	// <<< OPENFRAME(software-windows-details)
 
 	Vulnerabilities      []string                   `json:"vulnerabilities" db:"vulnerabilities"`
 	InstalledPaths       []string                   `json:"installed_paths"`

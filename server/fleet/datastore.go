@@ -1214,10 +1214,10 @@ type Datastore interface {
 	// otherwise the caller has to assemble the reported set the same way in all places where it's used.
 	UpdateHostSoftwareInstalledPaths(ctx context.Context, hostID uint, reported map[string]struct{}, mutationResults *UpdateHostSoftwareDBResult) error
 
-	// >>> OPENFRAME(software-arp-keys)
-	// OpenframeUpsertSoftwareArpKeys stores the ARP key of software rows, keyed by their raw checksum.
-	OpenframeUpsertSoftwareArpKeys(ctx context.Context, arpKeysByChecksum map[string]string) error
-	// <<< OPENFRAME(software-arp-keys)
+	// >>> OPENFRAME(software-windows-details)
+	// OpenframeUpsertSoftwareWindowsDetails stores the Windows details of software rows, keyed by their raw checksum.
+	OpenframeUpsertSoftwareWindowsDetails(ctx context.Context, detailsByChecksum map[string]SoftwareWindowsDetails) error
+	// <<< OPENFRAME(software-windows-details)
 
 	// UpdateHost updates a host.
 	UpdateHost(ctx context.Context, host *Host) error

@@ -850,7 +850,7 @@ type UpdateHostSoftwareFunc func(ctx context.Context, hostID uint, software []fl
 
 type UpdateHostSoftwareInstalledPathsFunc func(ctx context.Context, hostID uint, reported map[string]struct{}, mutationResults *fleet.UpdateHostSoftwareDBResult) error
 
-type OpenframeUpsertSoftwareArpKeysFunc func(ctx context.Context, arpKeysByChecksum map[string]string) error
+type OpenframeUpsertSoftwareWindowsDetailsFunc func(ctx context.Context, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error
 
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
 
@@ -3372,8 +3372,8 @@ type DataStore struct {
 	UpdateHostSoftwareInstalledPathsFunc        UpdateHostSoftwareInstalledPathsFunc
 	UpdateHostSoftwareInstalledPathsFuncInvoked bool
 
-	OpenframeUpsertSoftwareArpKeysFunc        OpenframeUpsertSoftwareArpKeysFunc
-	OpenframeUpsertSoftwareArpKeysFuncInvoked bool
+	OpenframeUpsertSoftwareWindowsDetailsFunc        OpenframeUpsertSoftwareWindowsDetailsFunc
+	OpenframeUpsertSoftwareWindowsDetailsFuncInvoked bool
 
 	UpdateHostFunc        UpdateHostFunc
 	UpdateHostFuncInvoked bool
@@ -8189,11 +8189,11 @@ func (s *DataStore) UpdateHostSoftwareInstalledPaths(ctx context.Context, hostID
 	return s.UpdateHostSoftwareInstalledPathsFunc(ctx, hostID, reported, mutationResults)
 }
 
-func (s *DataStore) OpenframeUpsertSoftwareArpKeys(ctx context.Context, arpKeysByChecksum map[string]string) error {
+func (s *DataStore) OpenframeUpsertSoftwareWindowsDetails(ctx context.Context, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error {
 	s.mu.Lock()
-	s.OpenframeUpsertSoftwareArpKeysFuncInvoked = true
+	s.OpenframeUpsertSoftwareWindowsDetailsFuncInvoked = true
 	s.mu.Unlock()
-	return s.OpenframeUpsertSoftwareArpKeysFunc(ctx, arpKeysByChecksum)
+	return s.OpenframeUpsertSoftwareWindowsDetailsFunc(ctx, detailsByChecksum)
 }
 
 func (s *DataStore) UpdateHost(ctx context.Context, host *fleet.Host) error {
