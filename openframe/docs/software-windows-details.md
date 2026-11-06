@@ -33,6 +33,9 @@ Every field is omitted when it is empty.
   runs on Windows with software inventory on, for rows with an ARP key or a package family name. It is a separate
   query, so an osquery without the columns fails only this query and the regular `software_windows` ingestion is
   untouched.
+- The software override queries that rewrite `software_windows` rows (`windows_acrobat_dc` adds " DC" to the name)
+  rewrite the details rows the same way (`applyOverrideToWindowsDetails` in `server/service/osquery.go`); rows an
+  override appends carry no key and are dropped.
 - Its ingest rebuilds each row the way `software_windows` builds it (`SoftwareFromOsqueryRow` with source
   `programs`, `MutateSoftwareOnIngestion`, `shouldRemoveSoftware`) and finds the software row by its raw checksum.
   `Datastore.OpenframeReplaceHostSoftwareWindowsDetails` replaces the host's rows as a whole in one transaction:
@@ -42,9 +45,9 @@ Every field is omitted when it is empty.
 
 ## Traps
 
-- Any change to how `directIngestSoftware` builds a `programs` row (new field in the checksum, a new mutation) must
-  be mirrored in `directIngestSoftwareWindowsDetails`, or the details stop finding their rows. The ingest test
-  compares the two checksums.
+- Any change to how a `programs` row reaches `directIngestSoftware` (a new override query, a new field in the
+  checksum, a new mutation) must be mirrored for the details rows, or they stop finding their software rows. The
+  ingest test compares the two checksums; the service test checks the Acrobat rename reaches both.
 - The rows are per host on purpose. Do not move them onto `software`: that row is shared by every host and tenant,
   and the details would flip between hosts whose installs differ.
 - Writing details does not touch `host_software`, so a CDC consumer of `host_software` sees them only with the host's
