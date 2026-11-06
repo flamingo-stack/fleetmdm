@@ -295,9 +295,8 @@ type SoftwareVersion struct {
 	// HostsCount is the number of hosts that use this software version.
 	HostsCount *uint `db:"hosts_count" json:"hosts_count,omitempty"`
 
-	// >>> OPENFRAME(software-windows-details): what a winget-style matcher needs to tell this version's package apart
+	// >>> OPENFRAME(software-windows-details): the publisher, for a winget-style matcher
 	Vendor string `db:"vendor" json:"vendor,omitempty"`
-	SoftwareWindowsDetails
 	// <<< OPENFRAME(software-windows-details)
 
 	// TitleID is used only as an auxiliary field and it's not part of the

@@ -15,7 +15,9 @@ import (
 func TestDirectIngestSoftwareWindowsDetails_keyedByTheSoftwareWindowsChecksum(t *testing.T) {
 	ds := new(mock.Store)
 	var stored map[string]fleet.SoftwareWindowsDetails
-	ds.OpenframeUpsertSoftwareWindowsDetailsFunc = func(ctx context.Context, details map[string]fleet.SoftwareWindowsDetails) error {
+	var storedFor uint
+	ds.OpenframeReplaceHostSoftwareWindowsDetailsFunc = func(ctx context.Context, hostID uint, details map[string]fleet.SoftwareWindowsDetails) error {
+		storedFor = hostID
 		stored = details
 		return nil
 	}
@@ -38,6 +40,7 @@ func TestDirectIngestSoftwareWindowsDetails_keyedByTheSoftwareWindowsChecksum(t 
 		require.NoError(t, err)
 		return string(raw)
 	}
+	require.Equal(t, uint(1), storedFor)
 	require.Equal(t, map[string]fleet.SoftwareWindowsDetails{
 		checksumOf("Google Chrome", "130.0", "Google LLC"): {ArpKey: ptr.String("Google Chrome"), SystemComponent: ptr.Bool(false),
 			InstallerType: ptr.String("exe"), InstallScope: ptr.String("machine"), InstallArch: ptr.String("64")},
@@ -46,8 +49,15 @@ func TestDirectIngestSoftwareWindowsDetails_keyedByTheSoftwareWindowsChecksum(t 
 	}, stored)
 }
 
-func TestDirectIngestSoftwareWindowsDetails_noRows_noWrite(t *testing.T) {
+// an empty report still runs: it clears what the host stored before
+func TestDirectIngestSoftwareWindowsDetails_noRows_clearsTheHost(t *testing.T) {
 	ds := new(mock.Store)
+	var stored map[string]fleet.SoftwareWindowsDetails
+	ds.OpenframeReplaceHostSoftwareWindowsDetailsFunc = func(ctx context.Context, hostID uint, details map[string]fleet.SoftwareWindowsDetails) error {
+		stored = details
+		return nil
+	}
 	require.NoError(t, directIngestSoftwareWindowsDetails(context.Background(), slog.Default(), &fleet.Host{ID: 1}, ds, nil))
-	require.False(t, ds.OpenframeUpsertSoftwareWindowsDetailsFuncInvoked)
+	require.True(t, ds.OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked)
+	require.Empty(t, stored)
 }

@@ -850,7 +850,7 @@ type UpdateHostSoftwareFunc func(ctx context.Context, hostID uint, software []fl
 
 type UpdateHostSoftwareInstalledPathsFunc func(ctx context.Context, hostID uint, reported map[string]struct{}, mutationResults *fleet.UpdateHostSoftwareDBResult) error
 
-type OpenframeUpsertSoftwareWindowsDetailsFunc func(ctx context.Context, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error
+type OpenframeReplaceHostSoftwareWindowsDetailsFunc func(ctx context.Context, hostID uint, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error
 
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
 
@@ -3372,8 +3372,8 @@ type DataStore struct {
 	UpdateHostSoftwareInstalledPathsFunc        UpdateHostSoftwareInstalledPathsFunc
 	UpdateHostSoftwareInstalledPathsFuncInvoked bool
 
-	OpenframeUpsertSoftwareWindowsDetailsFunc        OpenframeUpsertSoftwareWindowsDetailsFunc
-	OpenframeUpsertSoftwareWindowsDetailsFuncInvoked bool
+	OpenframeReplaceHostSoftwareWindowsDetailsFunc        OpenframeReplaceHostSoftwareWindowsDetailsFunc
+	OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked bool
 
 	UpdateHostFunc        UpdateHostFunc
 	UpdateHostFuncInvoked bool
@@ -8189,11 +8189,11 @@ func (s *DataStore) UpdateHostSoftwareInstalledPaths(ctx context.Context, hostID
 	return s.UpdateHostSoftwareInstalledPathsFunc(ctx, hostID, reported, mutationResults)
 }
 
-func (s *DataStore) OpenframeUpsertSoftwareWindowsDetails(ctx context.Context, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error {
+func (s *DataStore) OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Context, hostID uint, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error {
 	s.mu.Lock()
-	s.OpenframeUpsertSoftwareWindowsDetailsFuncInvoked = true
+	s.OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked = true
 	s.mu.Unlock()
-	return s.OpenframeUpsertSoftwareWindowsDetailsFunc(ctx, detailsByChecksum)
+	return s.OpenframeReplaceHostSoftwareWindowsDetailsFunc(ctx, hostID, detailsByChecksum)
 }
 
 func (s *DataStore) UpdateHost(ctx context.Context, host *fleet.Host) error {

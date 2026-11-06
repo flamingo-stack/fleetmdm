@@ -1215,8 +1215,9 @@ type Datastore interface {
 	UpdateHostSoftwareInstalledPaths(ctx context.Context, hostID uint, reported map[string]struct{}, mutationResults *UpdateHostSoftwareDBResult) error
 
 	// >>> OPENFRAME(software-windows-details)
-	// OpenframeUpsertSoftwareWindowsDetails stores the Windows details of software rows, keyed by their raw checksum.
-	OpenframeUpsertSoftwareWindowsDetails(ctx context.Context, detailsByChecksum map[string]SoftwareWindowsDetails) error
+	// OpenframeReplaceHostSoftwareWindowsDetails makes the host's stored Windows details equal to its report, keyed by
+	// the raw checksum of each software row.
+	OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Context, hostID uint, detailsByChecksum map[string]SoftwareWindowsDetails) error
 	// <<< OPENFRAME(software-windows-details)
 
 	// UpdateHost updates a host.

@@ -11,7 +11,8 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
-// Kept apart from software_windows: an osquery without these programs columns fails only this query.
+// Kept apart from software_windows: an osquery without these programs columns fails only this query. Every program
+// with a key is reported, so the host's stored rows are replaced as a whole and a removed program drops out.
 var softwareWindowsDetails = DetailQuery{
 	Query: `SELECT name, version, publisher AS vendor, upgrade_code, arp_key, package_family_name, system_component,
   installer_type, install_scope, install_arch
@@ -41,10 +42,7 @@ func directIngestSoftwareWindowsDetails(ctx context.Context, logger *slog.Logger
 		}
 		details[string(checksum)] = windowsDetailsOf(row)
 	}
-	if len(details) == 0 {
-		return nil
-	}
-	return ds.OpenframeUpsertSoftwareWindowsDetails(ctx, details)
+	return ds.OpenframeReplaceHostSoftwareWindowsDetails(ctx, host.ID, details)
 }
 
 func windowsDetailsOf(row map[string]string) fleet.SoftwareWindowsDetails {

@@ -3559,8 +3559,8 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 			software.bundle_identifier AS bundle_identifier,
 			software_titles.upgrade_code AS upgrade_code,
 			software.vendor AS software_vendor, -- OPENFRAME(software-windows-details)
-			swd.arp_key, swd.package_family_name, swd.system_component, -- OPENFRAME(software-windows-details)
-			swd.installer_type, swd.install_scope, swd.install_arch -- OPENFRAME(software-windows-details)
+			hswd.arp_key, hswd.package_family_name, hswd.system_component, -- OPENFRAME(software-windows-details)
+			hswd.installer_type, hswd.install_scope, hswd.install_arch -- OPENFRAME(software-windows-details)
 		FROM
 			host_software
 		INNER JOIN
@@ -3568,7 +3568,8 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 		INNER JOIN
 			software_titles ON software.title_id = software_titles.id
 		LEFT JOIN
-			software_windows_details swd ON swd.software_id = software.id -- OPENFRAME(software-windows-details)
+			host_software_windows_details hswd -- OPENFRAME(software-windows-details)
+				ON hswd.host_id = host_software.host_id AND hswd.software_id = software.id
 		WHERE
 			host_software.host_id = ?
 	`
