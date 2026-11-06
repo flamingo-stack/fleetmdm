@@ -1135,6 +1135,7 @@ func (ds *Datastore) selectSoftwareVersionsSQL(titleIDs []uint, teamID *uint, tm
 SELECT
 	s.title_id,
 	s.id, s.version,
+	s.vendor, -- OPENFRAME(software-windows-details)
 	%s -- placeholder for optional host_counts
 	CONCAT('[', GROUP_CONCAT(JSON_QUOTE(scve.cve) SEPARATOR ','), ']') as vulnerabilities
 FROM software s

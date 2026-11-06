@@ -1692,6 +1692,11 @@ func preProcessSoftwareExtraResults(
 		return
 	}
 
+	// >>> OPENFRAME(software-windows-details): the details rows are matched to software rows by checksum, so a
+	// rename an override makes to software_windows (Acrobat DC) must reach them too
+	applyOverrideToWindowsDetails(results, statuses, override, softwareExtraRows)
+	// <<< OPENFRAME(software-windows-details)
+
 	// Append the results of the extra query to the main query.
 	for _, query := range []string{
 		// Only one of these execute in each host.
@@ -1714,6 +1719,29 @@ func preProcessSoftwareExtraResults(
 		}
 		return
 	}
+}
+
+// OPENFRAME(software-windows-details): an override that rewrites rows rewrites the details rows the same way; rows it
+// appends carry no ARP key or package family name and are dropped, the details query only reports rows with one
+func applyOverrideToWindowsDetails(results fleet.OsqueryDistributedQueryResults, statuses map[string]fleet.OsqueryStatus,
+	override osquery_utils.DetailQuery, softwareExtraRows []map[string]string,
+) {
+	if override.SoftwareProcessResults == nil {
+		return
+	}
+	details := hostDetailQueryPrefix + "software_windows_details"
+	rows, ok := results[details]
+	if !ok || statuses[details] != fleet.StatusOK {
+		return
+	}
+	processed := override.SoftwareProcessResults(rows, softwareExtraRows)
+	kept := make([]map[string]string, 0, len(processed))
+	for _, row := range processed {
+		if row["arp_key"] != "" || row["package_family_name"] != "" {
+			kept = append(kept, row)
+		}
+	}
+	results[details] = kept
 }
 
 func removeOverrides(rows []map[string]string, override osquery_utils.DetailQuery) []map[string]string {

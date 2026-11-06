@@ -1214,6 +1214,12 @@ type Datastore interface {
 	// otherwise the caller has to assemble the reported set the same way in all places where it's used.
 	UpdateHostSoftwareInstalledPaths(ctx context.Context, hostID uint, reported map[string]struct{}, mutationResults *UpdateHostSoftwareDBResult) error
 
+	// >>> OPENFRAME(software-windows-details)
+	// OpenframeReplaceHostSoftwareWindowsDetails makes the host's stored Windows details equal to its report, keyed by
+	// the raw checksum of each software row.
+	OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Context, hostID uint, detailsByChecksum map[string]SoftwareWindowsDetails) error
+	// <<< OPENFRAME(software-windows-details)
+
 	// UpdateHost updates a host.
 	UpdateHost(ctx context.Context, host *Host) error
 
