@@ -49,7 +49,6 @@ Applied by `fleet prepare db`. Idempotent (`columnExists`/`indexExists` guards).
 | `20260626000001_ScopeHostIdentityUniqueToTeam` | `hosts` virtual col `openframe_team_key = IFNULL(team_id,0)` + `UNIQUE(osquery_host_id, openframe_team_key)`, drop global `UNIQUE(osquery_host_id)` | host identity unique **per team** — the same device can exist in two tenants |
 | `20260620000001_ScopeLabelUniqueNameToTeam` | same generated-column pattern for `labels.name` | label names unique per team; built-ins stay global |
 | `20260722000001_AddTeamIdToCdcTables` | nullable `team_id` on `activity_past`, `activity_host_past`, `query_results`, `policy_membership` (no index, no FK) | the Debezium CDC tables must be self-describing on a shared DB — see "CDC team stamping" below |
-| `20261111000002_AddAppleEnrollmentIntentsTable` | `openframe_apple_enrollment_intents` (serial, UDID, team, IdP account, created_at) | the team an Apple device asked for through another tenant's OTA link, applied at the Authenticate check-in — see "Enrollment" below |
 
 The `IFNULL(team_id,0)` sentinel collapses all NULL-team rows onto key `0` (team ids start at 1), so
 **flag-off / pre-backfill the uniqueness is bit-for-bit the old global uniqueness**, and the
@@ -146,19 +145,19 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   a new host (`openframeAndroidReenrollAsNewHost`), so the previous tenant's host history does not
   move with it; the `android_devices` row is kept and reused, as upstream does after a host
   deletion. The previous tenant loses the host as soon as the device enrolls elsewhere.
+  The deletion is logged with the host id and both team ids, and it uses
+  `fleet.NewOpenframeHostTenantChangeContext`, so `deleteHosts` also drops the host's
+  `host_mdm_idp_accounts` row, which is keyed by the device UUID and would otherwise show the
+  previous tenant's end user on the new host. A deletion without that marker keeps the upstream
+  behaviour.
   Apple OTA enrollment (`IngestMDMAppleDeviceFromOTAEnrollment`) skips the insert when any host
   already has the device's serial, and the Authenticate check-in then matches that host, so an
-  iPhone re-enrolled through another tenant's link would stay in the first tenant. In shared mode,
-  when the device's host belongs to another team, the OTA request only records the secret's team
-  and IdP account in `openframe_apple_enrollment_intents` and changes nothing else (upstream would
-  rewrite that host's UDID and IdP link); an OTA through the host's own tenant clears the record.
-  The Authenticate check-in for the same serial and UDID within 24 hours consumes it, deletes the
-  old host, inserts a new one in that team and links the recorded IdP account. The previous
-  tenant's host is untouched until the device actually enrolls.
-  Both re-enrollment paths delete the old host with `fleet.NewOpenframeHostTenantChangeContext`, so
-  `deleteHosts` also drops its `host_mdm_idp_accounts` row, which is keyed by the device UUID and
-  would otherwise show the previous tenant's end user on the new host. A deletion without that
-  marker keeps the upstream behaviour.
+  iPhone enrolled through another tenant's link would stay in the first tenant, and upstream would
+  also rewrite that host's UDID and IdP link. Neither OTA nor the check-in proves possession of the
+  device (see "Any tenant can obtain a device identity" below), so the fork does not move Apple
+  hosts between tenants: in shared mode an OTA request is refused with 409 and logged while any
+  Apple host with that serial belongs to another team, and nothing is written. Once the previous
+  tenant deletes the host, the upstream path enrolls the device into the new tenant.
 - **Live-query results websocket** (`endpoint_campaigns.go`) — the sockjs handler rebuilds its
   context from `context.Background()`, discarding the middleware-pinned upgrade-request context,
   so it **re-pins from `session.Request().Context()`** (read once — polling transports mutate the
@@ -225,8 +224,8 @@ per-team, host by-id/list/identifier fences, policy/query CRUD + by-id + GitOps,
 fence, host-assignment fence, live-query target fence, teams read fence, app-config isolation,
 `EnsureOpenframeTeamID` (incl. secret seeding), delete-global-policies pin, migration pipeline,
 software-title / vulnerability / CVE-detail fences, instance-wide MDM flags through `AppConfig` and
-`SaveAppConfig` in shared mode, Android re-enrollment after a host deletion, Apple OTA plus
-Authenticate re-enrollment into another tenant. Shared mode is switched
+`SaveAppConfig` in shared mode, Android re-enrollment after a host deletion and the IdP link on a
+tenant change, Apple OTA refused while another tenant holds the device. Shared mode is switched
 on per test through an unexported context key (`openframeSharedModeCtxKey`, in the datastore and the
 Android service packages), because `fleet.IsOpenframeSharedMode` is read once per process and the
 MySQL tests run in parallel. Android service tests with the mock datastore cover the cross-tenant
@@ -258,16 +257,18 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **One APNs certificate and SCEP CA per instance** — `mdm_config_assets` has no `team_id`; a
   later APNs upload or delete changes it for every tenant. Treat APNs, ABM and the Android
   enterprise as operator actions, not tenant settings. ABM tokens are instance-wide too, but
-  `apple_bm_enabled_and_configured` is still the tenant row's: only the tenant that added the token
-  sees it until a Fleet restart recomputes the instance row. The OTA enrollment profile takes the server
+  `apple_bm_enabled_and_configured` stays on each tenant row: only the tenant that added the token
+  ever sees it, and the instance row (read by unpinned work such as the DEP sync) gets it only when
+  a Fleet restart recomputes it. The OTA enrollment profile takes the server
   URL and org name from the instance row, so `server_settings.server_url` there must be the
   instance's public MDM address.
 - **Any tenant can obtain a device identity for the shared SCEP CA** — the SCEP challenge is
   instance-wide and is embedded in every tenant's OTA profile, and nanomdm accepts an Authenticate
-  with any new certificate. Whoever holds one tenant's enrollment link can present another tenant's
-  device serial and UDID at OTA and check-in. The enrollment intent does not widen this (it needs
-  both steps, and the same forged check-in already resets the device's MDM enrollment upstream),
-  but per-tenant SCEP challenges or CAs would be needed to close it.
+  with any new certificate (`nano_cert_auth_associations` keeps the real device's certificate as
+  well). Whoever holds one tenant's enrollment link can present another tenant's device serial and
+  UDID at OTA and check-in, and a forged check-in resets that device's MDM enrollment. This is why
+  an Apple device is never moved between tenants by enrollment (see "Enrollment"); per-tenant SCEP
+  challenges or CAs would be needed to close the gap itself.
 
 ## Deployment / cutover
 
