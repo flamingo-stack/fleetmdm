@@ -3540,6 +3540,11 @@ type hostSoftware struct {
 	InHouseAppVersionList     *string `db:"in_house_app_version_list"`
 	InHouseAppSelfServiceList *string `db:"in_house_app_self_service_list"`
 	SoftwareUpgradeCodeList   *string `db:"software_upgrade_code_list"`
+
+	// >>> OPENFRAME(software-windows-details)
+	SoftwareVendor *string `db:"software_vendor"`
+	fleet.SoftwareWindowsDetails
+	// <<< OPENFRAME(software-windows-details)
 }
 
 func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*hostSoftware, error) {
@@ -3552,13 +3557,19 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 			software.extension_for AS software_extension_for,
 			software.version AS version,
 			software.bundle_identifier AS bundle_identifier,
-			software_titles.upgrade_code AS upgrade_code
+			software_titles.upgrade_code AS upgrade_code,
+			software.vendor AS software_vendor, -- OPENFRAME(software-windows-details)
+			hswd.arp_key, hswd.package_family_name, hswd.system_component, -- OPENFRAME(software-windows-details)
+			hswd.installer_type, hswd.install_scope, hswd.install_arch -- OPENFRAME(software-windows-details)
 		FROM
 			host_software
 		INNER JOIN
 			software ON host_software.software_id = software.id
 		INNER JOIN
 			software_titles ON software.title_id = software_titles.id
+		LEFT JOIN
+			host_software_windows_details hswd -- OPENFRAME(software-windows-details)
+				ON hswd.host_id = host_software.host_id AND hswd.software_id = software.id
 		WHERE
 			host_software.host_id = ?
 	`
@@ -4770,6 +4781,12 @@ func (a *hostSoftwareTitleAssembler) addRecord(
 					version.BundleIdentifier = softwareBundleIdentifierList[index]
 					version.Source = softwareSourceList[index]
 					version.LastOpenedAt = software.LastOpenedAt
+					// >>> OPENFRAME(software-windows-details)
+					if software.SoftwareVendor != nil {
+						version.Vendor = *software.SoftwareVendor
+					}
+					version.SoftwareWindowsDetails = software.SoftwareWindowsDetails
+					// <<< OPENFRAME(software-windows-details)
 					version.SoftwareID = softwareId
 					version.SoftwareTitleID = softwareTitleRecord.ID
 

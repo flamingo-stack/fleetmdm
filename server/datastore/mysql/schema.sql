@@ -1398,6 +1398,23 @@ CREATE TABLE `identity_certificates` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `host_software_windows_details` (
+  `host_id` int unsigned NOT NULL,
+  `software_id` bigint unsigned NOT NULL,
+  `arp_key` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `package_family_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `system_component` tinyint(1) DEFAULT NULL,
+  `installer_type` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `install_scope` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `install_arch` varchar(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_at` timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`host_id`,`software_id`),
+  KEY `idx_host_software_windows_details_software_id` (`software_id`),
+  CONSTRAINT `fk_host_software_windows_details_software_id` FOREIGN KEY (`software_id`) REFERENCES `software` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `identity_serials` (
   `serial` bigint NOT NULL AUTO_INCREMENT,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
