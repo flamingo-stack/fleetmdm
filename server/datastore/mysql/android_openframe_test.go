@@ -50,3 +50,32 @@ func TestOpenframeAndroidReenrollAfterHostDeleted(t *testing.T) {
 	_, err = ds.Host(ctx, enrolledA.Host.ID)
 	require.True(t, fleet.IsNotFound(err), "the previous tenant's host row is gone")
 }
+
+func TestOpenframeDeleteHostDropsIdPLinkOnTenantChange(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	require.NoError(t, ds.InsertMDMIdPAccount(ctx, &fleet.MDMIdPAccount{Username: "u", Fullname: "U", Email: "u@tenant-a.example"}))
+	acct, err := ds.GetMDMIdPAccountByEmail(ctx, "u@tenant-a.example")
+	require.NoError(t, err)
+
+	enroll := func(esID string) *fleet.AndroidHost {
+		h, err := ds.NewAndroidHost(ctx, createAndroidHost(esID), false)
+		require.NoError(t, err)
+		require.NoError(t, ds.AssociateHostMDMIdPAccount(ctx, esID, acct.UUID))
+		return h
+	}
+	linked := func(esID string) bool {
+		got, err := ds.GetMDMIdPAccountByHostUUID(ctx, esID)
+		require.NoError(t, err)
+		return got != nil
+	}
+
+	kept := enroll("es_id_idp_kept")
+	require.NoError(t, ds.DeleteHost(ctx, kept.Host.ID))
+	require.True(t, linked("es_id_idp_kept"), "upstream keeps the IdP link across a host deletion")
+
+	moved := enroll("es_id_idp_moved")
+	require.NoError(t, ds.DeleteHost(fleet.NewOpenframeHostTenantChangeContext(ctx), moved.Host.ID))
+	require.False(t, linked("es_id_idp_moved"), "a tenant change drops the previous tenant's IdP link")
+}

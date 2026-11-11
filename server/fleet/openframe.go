@@ -99,6 +99,17 @@ func OpenframeInstanceMDMFlagFromContext(ctx context.Context) (OpenframeInstance
 	return flag, ok
 }
 
+type openframeHostTenantChangeCtxKey struct{}
+
+func NewOpenframeHostTenantChangeContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, openframeHostTenantChangeCtxKey{}, true)
+}
+
+func OpenframeHostTenantChangeFromContext(ctx context.Context) bool {
+	change, _ := ctx.Value(openframeHostTenantChangeCtxKey{}).(bool)
+	return change
+}
+
 // openframeTeamIDFromEnv parses FLEET_OPENFRAME_TEAM_ID exactly once. The team pin is a
 // process-level constant, so the read+parse is cached rather than repeated on every datastore
 // call (OpenframeTeamID is on hot enrollment/query paths). The master multitenancy flag is part

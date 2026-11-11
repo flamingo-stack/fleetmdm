@@ -256,3 +256,26 @@ func (ds *Datastore) AcquireOpenframeMigrationLock(ctx context.Context, timeout 
 		_ = conn.Close()
 	}, nil
 }
+
+func openframeDeleteTenantChangeIdPLinks(ctx context.Context, tx sqlx.ExtContext, hostUUIDs []string) error {
+	if !fleet.OpenframeHostTenantChangeFromContext(ctx) {
+		return nil
+	}
+	uuids := make([]string, 0, len(hostUUIDs))
+	for _, uuid := range hostUUIDs {
+		if uuid != "" {
+			uuids = append(uuids, uuid)
+		}
+	}
+	if len(uuids) == 0 {
+		return nil
+	}
+	stmt, args, err := sqlx.In(`DELETE FROM host_mdm_idp_accounts WHERE host_uuid IN (?)`, uuids)
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "building delete statement for previous tenant idp links")
+	}
+	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
+		return ctxerr.Wrap(ctx, err, "deleting previous tenant idp links")
+	}
+	return nil
+}

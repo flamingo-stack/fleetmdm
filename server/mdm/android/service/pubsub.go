@@ -632,7 +632,7 @@ func (svc *Service) enrollHost(ctx context.Context, device *androidmanagement.De
 		if err == nil {
 			// >>> OPENFRAME(mysql-multitenancy): in shared mode a device enrolling into another tenant starts as a new host — openframe/docs/mysql-multitenancy-feature.md
 			if openframeAndroidReenrollAsNewHost(host.TeamID, enrollSecret.GetTeamID(), openframeSharedMode(ctx)) {
-				if err := svc.fleetDS.DeleteHost(ctx, host.Host.ID); err != nil {
+				if err := svc.fleetDS.DeleteHost(fleet.NewOpenframeHostTenantChangeContext(ctx), host.Host.ID); err != nil {
 					return ctxerr.Wrap(ctx, err, "deleting the previous tenant's Android host")
 				}
 				return svc.addNewHost(ctx, device)

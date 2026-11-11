@@ -74,6 +74,7 @@ func TestOpenframeAndroidReenrollIntoAnotherTenant(t *testing.T) {
 		newHostInvoked   bool
 		updateInvoked    bool
 		addToTeamInvoked bool
+		tenantChange     bool
 	}
 
 	run := func(t *testing.T, shared bool, hostTeam, secretTeam uint) outcome {
@@ -101,6 +102,7 @@ func TestOpenframeAndroidReenrollIntoAnotherTenant(t *testing.T) {
 		}
 		mockDS.DeleteHostFunc = func(ctx context.Context, hid uint) error {
 			got.deletedHostID = new(hid)
+			got.tenantChange = fleet.OpenframeHostTenantChangeFromContext(ctx)
 			return nil
 		}
 		mockDS.NewAndroidHostFunc = func(ctx context.Context, host *fleet.AndroidHost, companyOwned bool) (*fleet.AndroidHost, error) {
@@ -149,6 +151,7 @@ func TestOpenframeAndroidReenrollIntoAnotherTenant(t *testing.T) {
 		got := run(t, true, tenantA, tenantB)
 		require.NotNil(t, got.deletedHostID)
 		require.Equal(t, existingHostID, *got.deletedHostID)
+		require.True(t, got.tenantChange, "the deletion drops the previous tenant's IdP link")
 		require.True(t, got.newHostInvoked)
 		require.Equal(t, new(tenantB), got.newHostTeamID)
 		require.False(t, got.updateInvoked, "the previous tenant's host row is not reused")

@@ -707,6 +707,12 @@ func deleteHosts(ctx context.Context, tx sqlx.ExtContext, hostIDs []uint) error 
 		hostUUIDs = append(hostUUIDs, info.UUID)
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): a host deleted because its device enrolls into another tenant drops its IdP account link too — openframe/docs/mysql-multitenancy-feature.md
+	if err := openframeDeleteTenantChangeIdPLinks(ctx, tx, hostUUIDs); err != nil {
+		return err
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	stmt, args, err = sqlx.In(`DELETE FROM hosts WHERE id IN (?)`, hostIDs)
 	if err != nil {
 		return ctxerr.Wrapf(ctx, err, "building delete statement for hosts %v", hostIDs)
