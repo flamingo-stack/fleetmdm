@@ -880,7 +880,7 @@ func TranslateSoftwareToCPE(
 		ctx,
 		fleet.SoftwareIterQueryOptions{
 			// Also exclude iOS and iPadOS apps until we enable vulnerabilities support for them.
-			ExcludedSources: append(oval.SupportedSoftwareSources, "ios_apps", "ipados_apps"),
+			ExcludedSources: append(append(oval.SupportedSoftwareSources, "ios_apps", "ipados_apps"), openframeNoCPESources...),
 		},
 	)
 	if err != nil {
