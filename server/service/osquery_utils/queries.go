@@ -3420,7 +3420,9 @@ func GetDetailQueries(
 		generatedMap["software_jetbrains_plugins"] = softwareJetbrainsPlugins
 		generatedMap["software_go_binaries"] = softwareGoBinaries
 		generatedMap["software_windows_details"] = softwareWindowsDetails // OPENFRAME(software-windows-details)
-		generatedMap["software_winget_packages"] = softwareWingetPackages // OPENFRAME(winget-packages)
+		// >>> OPENFRAME(winget-packages): the winget_packages software query — openframe/docs/winget-packages.md
+		generatedMap["software_winget_packages"] = softwareWingetPackages
+		// <<< OPENFRAME(winget-packages)
 
 		for key, query := range SoftwareOverrideQueries {
 			generatedMap["software_"+key] = query
