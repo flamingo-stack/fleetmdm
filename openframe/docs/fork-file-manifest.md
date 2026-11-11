@@ -78,13 +78,16 @@ server/datastore/mysql/migrations/openframe/        # separate goose client
 ├── 20260301000002_AddQueryHostsJoinTable.go
 ├── 20260818000001_AddPoliciesOpenframeManagedColumn.go   # policies.openframe_managed
 ├── 20260818000002_AddQueriesOpenframeManagedColumn.go    # queries.openframe_managed
-└── 20260831000001_SeedGlobalAppConfigRow.go              # instance app_config row (id=1)
+├── 20260831000001_SeedGlobalAppConfigRow.go              # instance app_config row (id=1)
+└── 20261111000001_AddAppleEnrollmentIntentsTable.go      # openframe_apple_enrollment_intents
 
 server/datastore/redis/keyprefix.go                 # per-tenant Redis prefix
 server/fleet/openframe.go                           # IsOpenframeMode() gate
 server/mdm/android/service/pubsub_openframe.go      # shared mode: Android enrollment keeps the enroll secret's team, re-creates another tenant's host
 server/mdm/android/service/pubsub_openframe_test.go
 server/datastore/mysql/android_openframe_test.go
+server/datastore/mysql/apple_enrollment_intents_openframe.go   # shared mode: Apple re-enrollment into another tenant
+server/datastore/mysql/apple_enrollment_intents_openframe_test.go
 orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-file tests
 orbit/pkg/osquery/openframe_command.go              # osqueryd command without --openframe-secret, for logging
 orbit/pkg/osquery/openframe_command_test.go
@@ -142,7 +145,7 @@ and the heaviest standing rebase cost.
 | Query-results TTL cleanup | `server/config/config.go`, `server/fleet/{cron_schedules,datastore}.go`, `server/datastore/mysql/query_results.go`, `cmd/fleet/{cron,serve}.go` |
 | Redis key prefix | `server/datastore/redis/redis.go`, `server/config/config.go`, `cmd/fleet/serve.go` |
 | Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/openframe_identifier_test.go`, `orbit/pkg/constant/constant.go`, `orbit/pkg/osquery/osquery.go`, `orbit/pkg/osquery/openframe_command.go`, `orbit/pkg/osquery/openframe_command_test.go`, `client/orbit_client.go`, `server/fleet/api_orbit.go`, `server/fleet/orbit.go`, `server/service/orbit.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
-| Shared-mode MDM | instance-wide MDM flags: `server/fleet/openframe.go`, `server/datastore/mysql/app_configs.go`, `server/service/mdm.go`; enrollment routes: `server/service/openframe_middleware.go`; Android enrollment: `server/mdm/android/service/pubsub.go`; tests: `server/datastore/mysql/{app_configs,android}_openframe_test.go`, `server/service/openframe_middleware_test.go`, `server/mdm/android/service/pubsub_openframe_test.go` — see [mysql-multitenancy-feature.md](mysql-multitenancy-feature.md) |
+| Shared-mode MDM | instance-wide MDM flags: `server/fleet/openframe.go`, `server/datastore/mysql/app_configs.go`, `server/service/mdm.go`; enrollment routes: `server/service/openframe_middleware.go`; Android enrollment: `server/mdm/android/service/pubsub.go`; Apple OTA re-enrollment: `server/datastore/mysql/{apple_mdm,hosts}.go`, `migrations/openframe/20261111000001_AddAppleEnrollmentIntentsTable.go`, `schema.sql`; tests: `server/datastore/mysql/{app_configs,android,apple_enrollment_intents}_openframe_test.go`, `server/service/openframe_middleware_test.go`, `server/mdm/android/service/pubsub_openframe_test.go` — see [mysql-multitenancy-feature.md](mysql-multitenancy-feature.md) |
 | Agent options kept | `cmd/fleet/serve.go` (starter-library skip under multitenancy), `server/fleet/openframe.go` (trimmed seed/fallback defaults), `server/datastore/mysql/teams_openframe_test.go`, `server/fleet/openframe_test.go` |
 | Agent JSON content-type | `client/orbit_client.go`, `client/device_client.go`, `orbit/cmd/fetch_cert/main.go`, `client/orbit_client_content_type_test.go` |
 | Agent skip setup experience | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/setup_experience/setup_experience.go`, `orbit/cmd/orbit/setup_experience_openframe_test.go`, `orbit/pkg/setup_experience/setup_experience_openframe_test.go` |

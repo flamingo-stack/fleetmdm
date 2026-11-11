@@ -1310,6 +1310,21 @@ func ingestMDMAppleDeviceFromCheckinDB(
 	// MDM is necessarily enabled if this gets called, always pass true for that
 	// parameter.
 	enrolledHostInfo, err := matchHostDuringEnrollment(ctx, tx, mdmEnroll, true, "", mdmHost.UUID, mdmHost.HardwareSerial, "")
+	// >>> OPENFRAME(mysql-multitenancy): in shared mode a device that enrolled through another tenant's OTA link starts as a new host of that tenant — openframe/docs/mysql-multitenancy-feature.md
+	if err == nil && openframeSharedMode(ctx) {
+		intent, recreate, intentErr := openframeApplyAppleEnrollmentIntent(ctx, tx, enrolledHostInfo.ID, mdmHost.HardwareSerial, mdmHost.UUID)
+		if intentErr != nil {
+			return intentErr
+		}
+		if recreate {
+			mdmHost.TeamID = intent.TeamID
+			if err := insertMDMAppleHostDB(ctx, tx, mdmHost, logger, appCfg, fromPersonalEnrollment); err != nil {
+				return err
+			}
+			return openframeAssociateAppleEnrollmentIdP(ctx, tx, logger, mdmHost, intent.IdPUUID)
+		}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return insertMDMAppleHostDB(ctx, tx, mdmHost, logger, appCfg, fromPersonalEnrollment)
@@ -1666,6 +1681,14 @@ func (ds *Datastore) IngestMDMAppleDeviceFromOTAEnrollment(
 	deviceInfo fleet.MDMAppleMachineInfo,
 ) error {
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
+		// >>> OPENFRAME(mysql-multitenancy): in shared mode, when the device's host is another team's, only remember the secret's team and IdP account; the Authenticate check-in applies them — openframe/docs/mysql-multitenancy-feature.md
+		if openframeSharedMode(ctx) {
+			recorded, err := openframeRecordAppleEnrollmentIntent(ctx, tx, deviceInfo.Serial, deviceInfo.UDID, teamID, idpUUID)
+			if err != nil || recorded {
+				return err
+			}
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		toInsert := []hostToCreateFromMDM{
 			{
 				HardwareSerial: deviceInfo.Serial,
