@@ -155,8 +155,10 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   iPhone enrolled through another tenant's link would stay in the first tenant, and upstream would
   also rewrite that host's UDID and IdP link. Neither OTA nor the check-in proves possession of the
   device (see "Any tenant can obtain a device identity" below), so the fork does not move Apple
-  hosts between tenants: in shared mode an OTA request is refused with 409 and logged while any
-  Apple host with that serial belongs to another team, and nothing is written. Once the previous
+  hosts between tenants: in shared mode an OTA request is refused with 409 and logged while a host
+  of another team, on any platform, has the request's serial or its UDID as `uuid` (the upstream
+  ingest matches on the serial alone and would otherwise rewrite that host's `uuid`), and nothing
+  is written. Once the previous
   tenant deletes the host, the upstream path enrolls the device into the new tenant.
 - **Live-query results websocket** (`endpoint_campaigns.go`) — the sockjs handler rebuilds its
   context from `context.Background()`, discarding the middleware-pinned upgrade-request context,
@@ -269,6 +271,12 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
   UDID at OTA and check-in, and a forged check-in resets that device's MDM enrollment. This is why
   an Apple device is never moved between tenants by enrollment (see "Enrollment"); per-tenant SCEP
   challenges or CAs would be needed to close the gap itself.
+- **The OTA 409 reveals that a device is enrolled elsewhere** — whoever holds a tenant's
+  enrollment link learns that a serial or UDID belongs to some other tenant (not which one).
+- **Leftover table from an earlier revision** — an earlier revision of this change added
+  `openframe_apple_enrollment_intents` (fork migration `20261111000002`). It was never merged; a
+  database that ran that branch keeps the empty table and its migration record, which nothing reads.
+  Do not reuse version `20261111000002` for another fork migration: such a database would skip it.
 
 ## Deployment / cutover
 

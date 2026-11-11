@@ -83,6 +83,30 @@ func TestOpenframeAppleOTAIntoAnotherTenant(t *testing.T) {
 		require.Equal(t, userA, idpOf(info.UDID), "the host keeps its IdP link")
 	})
 
+	t.Run("a host of another tenant on any platform with the same serial is protected", func(t *testing.T) {
+		const serial = "SERIAL-WINDOWS"
+		windowsHost, err := ds.NewHost(base, &fleet.Host{
+			Hostname: "windows-a", Platform: "windows", HardwareSerial: serial, UUID: "WINDOWS-UUID-A",
+			OsqueryHostID: new("windows-a"), NodeKey: new("windows-a"), TeamID: &teamA.ID,
+		})
+		require.NoError(t, err)
+
+		requireConflict(ota(shared, &teamB.ID, "", newDevice(serial)))
+		rows := hosts(serial)
+		require.Equal(t, []hostRow{{ID: windowsHost.ID, UUID: "WINDOWS-UUID-A", TeamID: &teamA.ID}}, rows)
+	})
+
+	t.Run("another tenant's request with the device's UDID and another serial is refused", func(t *testing.T) {
+		info := newDevice("SERIAL-UDID-OWNER")
+		hostA := enrollInA(shared, info, "")
+
+		other := info
+		other.Serial = "SERIAL-UDID-OTHER"
+		requireConflict(ota(shared, &teamB.ID, "", other))
+		require.Empty(t, hosts(other.Serial))
+		require.Equal(t, []hostRow{hostA}, hosts(info.Serial))
+	})
+
 	t.Run("the host's own tenant can enroll the device again", func(t *testing.T) {
 		info := newDevice("SERIAL-SAME")
 		hostA := enrollInA(shared, info, "")

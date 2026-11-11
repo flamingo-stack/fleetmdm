@@ -16,17 +16,20 @@ func openframeTeamsDiffer(a, b *uint) bool {
 	return *a != *b
 }
 
-func openframeRefuseAppleOTAForOtherTeam(ctx context.Context, tx sqlx.QueryerContext, logger *slog.Logger, serial string, teamID *uint) error {
-	if serial == "" {
+func openframeRefuseAppleOTAForOtherTeam(ctx context.Context, tx sqlx.QueryerContext, logger *slog.Logger, serial, udid string, teamID *uint) error {
+	if serial == "" && udid == "" {
 		return nil
 	}
 	var hosts []struct {
 		ID     uint  `db:"id"`
 		TeamID *uint `db:"team_id"`
 	}
-	if err := sqlx.SelectContext(ctx, tx, &hosts,
-		`SELECT id, team_id FROM hosts WHERE hardware_serial = ? AND platform IN ('darwin', 'ios', 'ipados')`, serial); err != nil {
-		return ctxerr.Wrap(ctx, err, "select apple hosts for ota enrollment")
+	if err := sqlx.SelectContext(ctx, tx, &hosts, `
+		SELECT id, team_id FROM hosts WHERE ? <> '' AND hardware_serial = ?
+		UNION
+		SELECT id, team_id FROM hosts WHERE ? <> '' AND uuid = ?`,
+		serial, serial, udid, udid); err != nil {
+		return ctxerr.Wrap(ctx, err, "select hosts for ota enrollment")
 	}
 	for _, h := range hosts {
 		if openframeTeamsDiffer(h.TeamID, teamID) {
