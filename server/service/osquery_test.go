@@ -1205,6 +1205,9 @@ func verifyDiscovery(t *testing.T, queries, discovery map[string]string) {
 		hostDetailQueryPrefix + "software_deb_last_opened_at":             {},
 		hostDetailQueryPrefix + "disk_space_darwin":                       {},
 		hostDetailQueryPrefix + "disk_space_darwin_legacy":                {},
+		// >>> OPENFRAME(winget-packages): the winget_packages software query is discovery-gated — openframe/docs/winget-packages.md
+		hostDetailQueryPrefix + "software_winget_packages": {},
+		// <<< OPENFRAME(winget-packages)
 	}
 	for name := range queries {
 		require.NotEmpty(t, discovery[name])

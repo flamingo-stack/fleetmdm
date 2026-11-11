@@ -1532,6 +1532,11 @@ func preProcessSoftwareResults(
 	goBinariesExtraQuery := hostDetailQueryPrefix + "software_go_binaries"
 	preProcessSoftwareExtraResults(ctx, goBinariesExtraQuery, host.ID, results, statuses, messages, osquery_utils.DetailQuery{}, logger)
 
+	// >>> OPENFRAME(winget-packages): rows of the winget_packages table join the Windows software rows — openframe/docs/winget-packages.md
+	wingetPackagesExtraQuery := hostDetailQueryPrefix + "software_winget_packages"
+	preProcessSoftwareExtraResults(ctx, wingetPackagesExtraQuery, host.ID, results, statuses, messages, osquery_utils.DetailQuery{}, logger)
+	// <<< OPENFRAME(winget-packages)
+
 	for name, query := range overrides {
 		fullQueryName := hostDetailQueryPrefix + "software_" + name
 		preProcessSoftwareExtraResults(ctx, fullQueryName, host.ID, results, statuses, messages, query, logger)
