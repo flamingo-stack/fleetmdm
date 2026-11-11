@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/pkg/optjson"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
@@ -141,4 +142,124 @@ func TestOpenframeAppConfigDefaultsOnMissing(t *testing.T) {
 		require.Equal(t, fleet.IsOpenframeMultitenancy(), got,
 			"unpinned falls back to defaults exactly when multitenancy is on")
 	})
+}
+
+func TestOpenframeInstanceMDMFlagsDecision(t *testing.T) {
+	cases := []struct {
+		name           string
+		pinned, shared bool
+		want           bool
+	}{
+		{"pinned request in shared mode uses the instance row", true, true, true},
+		{"unpinned reader already reads the instance row", false, true, false},
+		{"process-pinned mode keeps the tenant row", true, false, false},
+		{"multitenancy off keeps upstream", false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, openframeInstanceMDMFlagsDecision(c.pinned, c.shared))
+		})
+	}
+}
+
+func openframeSharedTestContext(ctx context.Context, teamID uint) context.Context {
+	return context.WithValue(fleet.NewOpenframeTeamContext(ctx, teamID), openframeSharedModeCtxKey{}, true)
+}
+
+func TestOpenframeInstanceMDMFlagsSharedAcrossTenants(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	instance := &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "instance-org"}}
+	instance.MDM.EnableDiskEncryption = optjson.SetBool(true)
+	require.NoError(t, ds.SaveAppConfig(ctx, instance))
+
+	ctxA := openframeSharedTestContext(ctx, 5)
+	ctxB := openframeSharedTestContext(ctx, 6)
+	require.NoError(t, ds.SaveAppConfig(ctxA, &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "tenant-a"}}))
+	require.NoError(t, ds.SaveAppConfig(ctxB, &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "tenant-b"}}))
+
+	read := func(c context.Context) *fleet.AppConfig {
+		ac, err := ds.AppConfig(c)
+		require.NoError(t, err)
+		return ac
+	}
+
+	staleB := read(ctxB)
+	require.False(t, staleB.MDM.EnabledAndConfigured)
+
+	uploadA := read(ctxA)
+	uploadA.MDM.EnabledAndConfigured = true
+	require.NoError(t, ds.SaveAppConfig(fleet.NewOpenframeInstanceMDMFlagContext(ctxA, fleet.OpenframeInstanceMDMFlagApple), uploadA))
+
+	tenantB := read(ctxB)
+	require.True(t, tenantB.MDM.EnabledAndConfigured, "an APNs upload in one tenant enables Apple MDM for every tenant")
+	require.Equal(t, "tenant-b", tenantB.OrgInfo.OrgName)
+
+	unpinned := read(ctx)
+	require.True(t, unpinned.MDM.EnabledAndConfigured, "the unpinned enrollment routes read the instance row")
+	require.Equal(t, "instance-org", unpinned.OrgInfo.OrgName, "only the MDM flag changes on the instance row")
+	require.True(t, unpinned.MDM.EnableDiskEncryption.Value, "only the MDM flag changes on the instance row")
+
+	staleB.OrgInfo.OrgName = "tenant-b-renamed"
+	require.NoError(t, ds.SaveAppConfig(ctxB, staleB))
+	require.Equal(t, "tenant-b-renamed", read(ctxB).OrgInfo.OrgName)
+	require.True(t, read(ctxA).MDM.EnabledAndConfigured, "a generic save with a stale copy does not write the instance flags")
+	require.True(t, read(ctx).MDM.EnabledAndConfigured, "a generic save with a stale copy does not write the instance flags")
+
+	require.NoError(t, ds.SetAndroidEnabledAndConfigured(ctxB, true))
+	require.True(t, read(ctxA).MDM.AndroidEnabledAndConfigured, "the Android signup enables Android MDM for every tenant")
+	require.True(t, read(ctx).MDM.AndroidEnabledAndConfigured)
+	require.True(t, read(ctxA).MDM.EnabledAndConfigured, "the Android write leaves the Apple flag alone")
+
+	staleB.MDM.EnabledAndConfigured = false
+	require.NoError(t, ds.SaveAppConfig(fleet.NewOpenframeInstanceMDMFlagContext(ctxB, fleet.OpenframeInstanceMDMFlagApple), staleB))
+	require.False(t, read(ctxA).MDM.EnabledAndConfigured, "removing the APNs cert clears the flag for every tenant")
+	require.True(t, read(ctxA).MDM.AndroidEnabledAndConfigured, "the Apple write leaves the Android flag alone")
+
+	ctxProcessPinned := fleet.NewOpenframeTeamContext(ctx, 7)
+	pinnedOnly := read(ctxProcessPinned)
+	pinnedOnly.MDM.EnabledAndConfigured = true
+	require.NoError(t, ds.SaveAppConfig(fleet.NewOpenframeInstanceMDMFlagContext(ctxProcessPinned, fleet.OpenframeInstanceMDMFlagApple), pinnedOnly))
+	require.True(t, read(ctxProcessPinned).MDM.EnabledAndConfigured, "outside shared mode the tenant row keeps its own flag")
+	require.False(t, read(ctx).MDM.EnabledAndConfigured, "outside shared mode the instance row is untouched")
+}
+
+func TestOpenframeInstanceMDMFlagsAppleBMStaysOnTenantRow(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	ctxA := openframeSharedTestContext(ctx, 5)
+	ctxB := openframeSharedTestContext(ctx, 6)
+	tenantA := &fleet.AppConfig{}
+	tenantA.MDM.AppleBMEnabledAndConfigured = true
+	require.NoError(t, ds.SaveAppConfig(ctxA, tenantA))
+	require.NoError(t, ds.SaveAppConfig(ctxB, &fleet.AppConfig{}))
+
+	a, err := ds.AppConfig(ctxA)
+	require.NoError(t, err)
+	require.True(t, a.MDM.AppleBMEnabledAndConfigured)
+	b, err := ds.AppConfig(ctxB)
+	require.NoError(t, err)
+	require.False(t, b.MDM.AppleBMEnabledAndConfigured)
+}
+
+func TestOpenframeInstanceMDMFlagUnknown(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := openframeSharedTestContext(context.Background(), 5)
+
+	err := ds.SaveAppConfig(fleet.NewOpenframeInstanceMDMFlagContext(ctx, "windows_enabled_and_configured"), &fleet.AppConfig{})
+	require.ErrorContains(t, err, "unknown instance mdm flag")
+}
+
+func TestOpenframeInstanceMDMFlagsMissingInstanceRow(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	_, err := ds.writer(ctx).ExecContext(ctx, `DELETE FROM app_config_json WHERE id = ?`, openframeGlobalAppConfigID)
+	require.NoError(t, err)
+
+	flags, err := openframeReadInstanceMDMFlags(ctx, ds.reader(ctx))
+	require.NoError(t, err)
+	require.Equal(t, openframeInstanceMDMFlags{}, flags)
 }

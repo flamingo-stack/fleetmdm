@@ -151,13 +151,74 @@ func TestOpenframeTenantExemptPath(t *testing.T) {
 		"/api/latest/fleet/mdm/apple/enrollment_profile",
 		"/api/v1/fleet/mdm/commands",
 		// Device-facing DEP paths that share their path with admin variants (method-only difference);
-		// not exempt by path alone. Acceptable — OpenFrame does not use Apple/Windows MDM.
+		// not exempt by path alone, and not until DEP enrollment is wired for shared mode.
 		"/api/latest/fleet/mdm/bootstrap",
 		"/api/latest/fleet/mdm/setup/eula/token123",
 	}
 	for _, p := range notExempt {
 		assert.False(t, openframeTenantExemptPath(p), "expected NOT exempt: %s", p)
 	}
+}
+
+func TestOpenframeTenantExemptRoute(t *testing.T) {
+	exempt := []struct{ method, path string }{
+		{"GET", "/api/v1/fleet/enrollment_profiles/ota"},
+		{"GET", "/api/latest/fleet/enrollment_profiles/ota"},
+		{"GET", "/api/v1/fleet/android_enterprise/connect/signup-token-123"},
+		{"GET", "/api/latest/fleet/android_enterprise/enrollment_token"},
+		{"POST", "/api/v1/fleet/android_enterprise/pubsub"},
+	}
+	for _, r := range exempt {
+		assert.True(t, openframeTenantExemptRoute(r.method, r.path), "expected exempt: %s %s", r.method, r.path)
+	}
+
+	notExempt := []struct{ method, path string }{
+		// Wrong method on an exempt path.
+		{"POST", "/api/v1/fleet/enrollment_profiles/ota"},
+		{"GET", "/api/v1/fleet/android_enterprise/pubsub"},
+		{"DELETE", "/api/v1/fleet/android_enterprise/connect/signup-token-123"},
+		// User-authenticated Android admin routes beside the exempt ones.
+		{"GET", "/api/v1/fleet/android_enterprise"},
+		{"DELETE", "/api/v1/fleet/android_enterprise"},
+		{"GET", "/api/v1/fleet/android_enterprise/signup_url"},
+		{"GET", "/api/v1/fleet/android_enterprise/signup_sse"},
+		// Other enrollment profile routes are admin routes.
+		{"GET", "/api/latest/fleet/enrollment_profiles/manual"},
+		{"GET", "/api/latest/fleet/enrollment_profiles/automatic"},
+		// No extra segments, and no suffix match behind a prefix route.
+		{"GET", "/api/v1/fleet/android_enterprise/connect/token/extra"},
+		{"GET", "/api/v1/fleet/android_enterprise/connect/"},
+		{"GET", "/api/v1/fleet/results/x/api/v1/fleet/enrollment_profiles/ota"},
+		{"GET", "/api/v1/fleet/enrollment_profiles/ota/x"},
+	}
+	for _, r := range notExempt {
+		assert.False(t, openframeTenantExemptRoute(r.method, r.path), "expected NOT exempt: %s %s", r.method, r.path)
+	}
+}
+
+func TestOpenframeTenantHandlerEnrollmentRoutesExempt(t *testing.T) {
+	ensurer := &fakeTeamEnsurer{teamID: 42}
+	var pinnedOK bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, pinnedOK = fleet.OpenframeTeamID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	h := openframeTenantHandler(ensurer, slog.New(slog.DiscardHandler), next)
+
+	// No header on an enrollment route → passes through unpinned; the tenant comes from the
+	// enroll secret or token the route verifies itself.
+	req := httptest.NewRequest("GET", "/api/v1/fleet/enrollment_profiles/ota?enroll_secret=s", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.False(t, pinnedOK)
+	assert.Zero(t, ensurer.calls)
+
+	// The same path with another method still needs the header.
+	req = httptest.NewRequest("POST", "/api/v1/fleet/enrollment_profiles/ota", nil)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
 func TestOpenframePinHostTeamShared(t *testing.T) {

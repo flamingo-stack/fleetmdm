@@ -3393,7 +3393,7 @@ func (svc *Service) UploadMDMAppleAPNSCert(ctx context.Context, cert io.ReadSeek
 
 	wasEnabledAndConfigured := appCfg.MDM.EnabledAndConfigured
 	appCfg.MDM.EnabledAndConfigured = true
-	err = svc.ds.SaveAppConfig(ctx, appCfg)
+	err = svc.ds.SaveAppConfig(fleet.NewOpenframeInstanceMDMFlagContext(ctx, fleet.OpenframeInstanceMDMFlagApple), appCfg) // OPENFRAME(mysql-multitenancy): instance-wide MDM flags
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "saving app config")
 	}
@@ -3492,7 +3492,7 @@ func (svc *Service) DeleteMDMAppleAPNSCert(ctx context.Context) error {
 
 	appCfg.MDM.EnabledAndConfigured = false
 
-	if err := svc.ds.SaveAppConfig(ctx, appCfg); err != nil {
+	if err := svc.ds.SaveAppConfig(fleet.NewOpenframeInstanceMDMFlagContext(ctx, fleet.OpenframeInstanceMDMFlagApple), appCfg); err != nil { // OPENFRAME(mysql-multitenancy): instance-wide MDM flags
 		return ctxerr.Wrap(ctx, err, "saving app config")
 	}
 

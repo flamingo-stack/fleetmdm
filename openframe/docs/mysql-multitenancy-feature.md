@@ -91,6 +91,16 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   seeds `id = 1`; a zero-value config would disable software inventory and historical data instance-wide).
   Non-multitenant keeps the upstream statement and fallback byte-identical. Migration
   `20260831000001` seeds/repairs the row and reserves team id 1.
+- **MDM enabled flags** (`app_configs.go`) — `mdm.enabled_and_configured` and
+  `mdm.android_enabled_and_configured` describe the instance (one APNs certificate, one Android
+  enterprise), so in shared mode they live on the instance row: a pinned read takes them from
+  `id = 1`. Only the flows that change a flag write it there, one flag per save, with `JSON_SET`:
+  the APNs upload and delete (`server/service/mdm.go`) and `SetAndroidEnabledAndConfigured` mark
+  their save with `fleet.NewOpenframeInstanceMDMFlagContext`. Any other pinned save leaves the
+  instance row alone, so a stale copy of the config cannot turn a flag back. An APNs upload by one
+  tenant turns MDM on for every tenant and for the unpinned enrollment routes, with no restart.
+  The tenant row keeps its own stale copy, which is never read. `mdm.apple_bm_enabled_and_configured`
+  stays on the tenant row. A process-pinned Fleet keeps all flags on its tenant row.
 - **software titles + vulnerabilities** (`software_titles.go`, `vulnerabilities.go`) —
   `ListSoftwareTitles`, `SoftwareTitleByID`, `ListVulnerabilities`, `CountVulnerabilities`,
   `Vulnerability`, `SoftwareByCVE`, `OSVersionsByCVE` replace the caller's team scope with the
@@ -113,12 +123,43 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   wired in `serve.go` after `apiendpoints.Validate`. Shared mode only (returns `next` unchanged
   otherwise). Pins each `/api/**` request from the gateway-injected trusted `X-Tenant-Id`; a
   non-exempt request without it is **401 (fail closed)**. Exempt (tenant comes from host/secret):
-  paths containing `/osquery/`, `/fleet/orbit/`, `/fleet/device/`, `/mdm/`, `/fleet/ota_enrollment`.
+  paths containing `/osquery/`, `/fleet/orbit/`, `/fleet/device/`, `/api/mdm/`, `/fleet/ota_enrollment`,
+  plus four enrollment routes matched by method and exact path (`openframeTenantExemptRoute`):
+  `GET /api/{v}/fleet/enrollment_profiles/ota` (enroll secret),
+  `GET /api/{v}/fleet/android_enterprise/connect/{token}` (signup token),
+  `GET /api/{v}/fleet/android_enterprise/enrollment_token` (enroll secret) and
+  `POST /api/{v}/fleet/android_enterprise/pubsub` (Pub/Sub token). They run unpinned, read the
+  instance config row (org name, MDM URL, the Android enabled flag) and put the device into the
+  team of the enroll secret it enrolled with.
 - **Agent plane** — `openframePinHostTeam` pins from the authenticated `host.team_id` in
   `authenticatedHost`/`authenticatedOrbitHost`/`authenticatedDevice` (`endpoint_middleware.go`) and
   the osquery header pre-auth paths (`osquery_header_auth.go`); fail-closed on a team-less host.
 - **Enrollment** — after `VerifyEnrollSecret`, `osquery.go`/`orbit.go` pin from `secret.TeamID`
   (reject if the secret has no team). The host row is then created carrying that `team_id`.
+  Android enrollment (`server/mdm/android/service/pubsub.go`) takes the team from the secret
+  embedded in the Google enrollment token. Upstream then restores the device's last team, found by
+  its `enterprise_specific_id`; with one Android enterprise per instance that id is the same in
+  every tenant, so a wiped device re-enrolled by another tenant would land in the first tenant's
+  team. In shared mode the secret's team wins (`openframeAndroidEnrollTeam`). When the device's
+  host row still exists in another tenant, shared mode deletes that host and enrolls the device as
+  a new host (`openframeAndroidReenrollAsNewHost`), so the previous tenant's host history does not
+  move with it; the `android_devices` row is kept and reused, as upstream does after a host
+  deletion. The previous tenant loses the host as soon as the device enrolls elsewhere.
+  The deletion is logged with the host id and both team ids, and it uses
+  `fleet.NewOpenframeHostTenantChangeContext`, so `deleteHosts` also drops the host's
+  `host_mdm_idp_accounts` row, which is keyed by the device UUID and would otherwise show the
+  previous tenant's end user on the new host. A deletion without that marker keeps the upstream
+  behaviour.
+  Apple OTA enrollment (`IngestMDMAppleDeviceFromOTAEnrollment`) skips the insert when any host
+  already has the device's serial, and the Authenticate check-in then matches that host, so an
+  iPhone enrolled through another tenant's link would stay in the first tenant, and upstream would
+  also rewrite that host's UDID and IdP link. Neither OTA nor the check-in proves possession of the
+  device (see "Any tenant can obtain a device identity" below), so the fork does not move Apple
+  hosts between tenants: in shared mode an OTA request is refused with 409 and logged while a host
+  of another team, on any platform, has the request's serial or its UDID as `uuid` (the upstream
+  ingest matches on the serial alone and would otherwise rewrite that host's `uuid`), and nothing
+  is written. Once the previous
+  tenant deletes the host, the upstream path enrolls the device into the new tenant.
 - **Live-query results websocket** (`endpoint_campaigns.go`) — the sockjs handler rebuilds its
   context from `context.Background()`, discarding the middleware-pinned upgrade-request context,
   so it **re-pins from `session.Request().Context()`** (read once — polling transports mutate the
@@ -184,7 +225,13 @@ MySQL-backed (`MYSQL_TEST=1`), all in `*_openframe_test.go`: enrollment isolatio
 per-team, host by-id/list/identifier fences, policy/query CRUD + by-id + GitOps, enroll-secret
 fence, host-assignment fence, live-query target fence, teams read fence, app-config isolation,
 `EnsureOpenframeTeamID` (incl. secret seeding), delete-global-policies pin, migration pipeline,
-software-title / vulnerability / CVE-detail fences.
+software-title / vulnerability / CVE-detail fences, instance-wide MDM flags through `AppConfig` and
+`SaveAppConfig` in shared mode, Android re-enrollment after a host deletion and the IdP link on a
+tenant change, Apple OTA refused while another tenant holds the device. Shared mode is switched
+on per test through an unexported context key (`openframeSharedModeCtxKey`, in the datastore and the
+Android service packages), because `fleet.IsOpenframeSharedMode` is read once per process and the
+MySQL tests run in parallel. Android service tests with the mock datastore cover the cross-tenant
+re-enrollment.
 Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. Middleware tests in
 `server/service/openframe_middleware_test.go`. Harness: `make openframe-verify` (add `MYSQL_TEST=1`
 + Docker for the deep tier).
@@ -199,6 +246,37 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are
   unused. New-format stats are team-scoped.
 - **`IsEnrollSecretAvailable`** — intentionally unfenced (cross-team uniqueness check).
+- **"Instance" means every Fleet on the shared database** — one instance row, one APNs
+  certificate, one Android enterprise and one MDM URL for every cluster on that MySQL (seven on
+  prod). The MDM URL on the instance row must be an address that serves all of them, not one
+  cluster's domain.
+- **One Android enterprise per instance** — `android_enterprises` has no `team_id`. A second
+  tenant's signup is refused (409) because the instance flag is already set, but
+  `DELETE /android_enterprise` from any tenant removes the instance's enterprise. The signup is
+  pinned, so `EnterpriseSignup` builds Google's callback URL from the tenant row's
+  `server_settings.server_url`, while the unpinned callback builds the Pub/Sub push URL from the
+  instance row's. Both rows need the public address until the signup reads the instance row.
+- **One APNs certificate and SCEP CA per instance** — `mdm_config_assets` has no `team_id`; a
+  later APNs upload or delete changes it for every tenant. Treat APNs, ABM and the Android
+  enterprise as operator actions, not tenant settings. ABM tokens are instance-wide too, but
+  `apple_bm_enabled_and_configured` stays on each tenant row: only the tenant that added the token
+  ever sees it, and the instance row (read by unpinned work such as the DEP sync) gets it only when
+  a Fleet restart recomputes it. The OTA enrollment profile takes the server
+  URL and org name from the instance row, so `server_settings.server_url` there must be the
+  instance's public MDM address.
+- **Any tenant can obtain a device identity for the shared SCEP CA** — the SCEP challenge is
+  instance-wide and is embedded in every tenant's OTA profile, and nanomdm accepts an Authenticate
+  with any new certificate (`nano_cert_auth_associations` keeps the real device's certificate as
+  well). Whoever holds one tenant's enrollment link can present another tenant's device serial and
+  UDID at OTA and check-in, and a forged check-in resets that device's MDM enrollment. This is why
+  an Apple device is never moved between tenants by enrollment (see "Enrollment"); per-tenant SCEP
+  challenges or CAs would be needed to close the gap itself.
+- **The OTA 409 reveals that a device is enrolled elsewhere** — whoever holds a tenant's
+  enrollment link learns that a serial or UDID belongs to some other tenant (not which one).
+- **Leftover table from an earlier revision** — an earlier revision of this change added
+  `openframe_apple_enrollment_intents` (fork migration `20261111000002`). It was never merged; a
+  database that ran that branch keeps the empty table and its migration record, which nothing reads.
+  Do not reuse version `20261111000002` for another fork migration: such a database would skip it.
 
 ## Deployment / cutover
 

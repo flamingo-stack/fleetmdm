@@ -630,17 +630,30 @@ func (svc *Service) enrollHost(ctx context.Context, device *androidmanagement.De
 			return ctxerr.Wrap(ctx, err, "verifying enroll secret")
 		}
 		if err == nil {
+			// >>> OPENFRAME(mysql-multitenancy): in shared mode a device enrolling into another tenant starts as a new host — openframe/docs/mysql-multitenancy-feature.md
+			if openframeAndroidReenrollAsNewHost(host.TeamID, enrollSecret.GetTeamID(), openframeSharedMode(ctx)) {
+				svc.logger.InfoContext(ctx, "android device enrolls into another team: deleting its previous host",
+					"host_id", host.Host.ID, "host_team_id", fleet.OpenframeTeamLogValue(host.TeamID),
+					"enroll_team_id", fleet.OpenframeTeamLogValue(enrollSecret.GetTeamID()))
+				if err := svc.fleetDS.DeleteHost(fleet.NewOpenframeHostTenantChangeContext(ctx), host.Host.ID); err != nil {
+					return ctxerr.Wrap(ctx, err, "deleting the previous tenant's Android host")
+				}
+				return svc.addNewHost(ctx, device)
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 			host.TeamID = enrollSecret.GetTeamID()
 		}
 
 		// If the device was previously known restore the last-known team instead of the enrollment secret's default.
 		hostKey := getAndroidHostKey(device)
+		// >>> OPENFRAME(mysql-multitenancy): in shared mode the enroll secret's team wins over the device's last team — openframe/docs/mysql-multitenancy-feature.md
 		if priorTeamID, found, err := svc.ds.GetAndroidDeviceLastTeamID(ctx, hostKey); err != nil {
 			svc.logger.ErrorContext(ctx, "failed to look up prior android team, using enroll secret", "err", err)
 			ctxerr.Handle(ctx, err)
-		} else if found {
-			host.TeamID = priorTeamID
+		} else {
+			host.TeamID = openframeAndroidEnrollTeam(host.TeamID, priorTeamID, found, openframeSharedMode(ctx))
 		}
+		// <<< OPENFRAME(mysql-multitenancy)
 
 		if enrollmentTokenRequest.IdpUUID != "" {
 			if err := svc.ds.AssociateHostMDMIdPAccount(ctx, host.Host.UUID, enrollmentTokenRequest.IdpUUID); err != nil {
@@ -878,12 +891,14 @@ func (svc *Service) addNewHost(ctx context.Context, device *androidmanagement.De
 	// If the device was previously known restore the last-known team instead of the enrollment secret's default.
 	teamID := enrollSecret.GetTeamID()
 	hostKey := getAndroidHostKey(device)
+	// >>> OPENFRAME(mysql-multitenancy): in shared mode the enroll secret's team wins over the device's last team — openframe/docs/mysql-multitenancy-feature.md
 	if priorTeamID, found, tlErr := svc.ds.GetAndroidDeviceLastTeamID(ctx, hostKey); tlErr != nil {
 		svc.logger.ErrorContext(ctx, "failed to look up prior android team, using enroll secret", "err", tlErr)
 		ctxerr.Handle(ctx, tlErr)
-	} else if found {
-		teamID = priorTeamID
+	} else {
+		teamID = openframeAndroidEnrollTeam(teamID, priorTeamID, found, openframeSharedMode(ctx))
 	}
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	deviceID, err := svc.getDeviceID(ctx, device)
 	if err != nil {

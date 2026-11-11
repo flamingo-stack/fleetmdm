@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -39,7 +40,7 @@ func openframeTenantHandler(ds openframeTeamEnsurer, logger *slog.Logger, next h
 
 		// Agent/device/MDM planes carry no gateway header — their tenant comes from the
 		// authenticated host / enroll secret (openframePinHostTeam, the enrollment pins).
-		if openframeTenantExemptPath(r.URL.Path) {
+		if openframeTenantExemptPath(r.URL.Path) || openframeTenantExemptRoute(r.Method, r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -90,12 +91,46 @@ func openframeTenantHandler(ds openframeTeamEnsurer, logger *slog.Logger, next h
 // Residual: a few device-facing DEP endpoints live under /api/{v}/fleet/mdm/ too (GET
 // .../mdm/bootstrap download, GET .../mdm/setup/eula/{token}) and share their path with admin
 // variants that differ only by HTTP method — so path-only matching cannot exempt them without also
-// exempting the admin route. They are NOT exempted here (they'd need X-Tenant-Id). This is
-// acceptable because OpenFrame does not use Apple/Windows MDM; if it ever does, make this exemption
-// method-aware. See openframe/docs/agent-ingestion-isolation.md.
+// exempting the admin route. They are NOT exempted here (they'd need X-Tenant-Id) and stay so until
+// DEP enrollment is wired for shared mode. The enrollment routes that link-based enrollment needs
+// are matched by method and exact path in openframeTenantExemptRoute.
 func openframeTenantExemptPath(path string) bool {
 	for _, marker := range []string{"/osquery/", "/fleet/orbit/", "/fleet/device/", "/api/mdm/", "/fleet/ota_enrollment"} {
 		if strings.Contains(path, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// openframeTenantExemptRoutes are the device-, browser-redirect- and Google-facing MDM enrollment
+// routes that live under /api/{v}/fleet/ beside user-authenticated admin routes, so they are matched
+// by method and exact path rather than by a marker. None of them carries X-Tenant-Id; each one
+// authenticates with its own secret and runs unpinned:
+//   - GET enrollment_profiles/ota: the enroll secret; the profile embeds it and ota_enrollment puts
+//     the host into that secret's team. The profile's org name and MDM URL come from the instance
+//     config row, which is why the request is not pinned to the secret's team.
+//   - GET android_enterprise/connect/{token}: the one-time signup token Google redirects back with.
+//   - GET android_enterprise/enrollment_token: the enroll secret; the token carries it, and the
+//     enrollment Pub/Sub event puts the device into that secret's team.
+//   - POST android_enterprise/pubsub: the Pub/Sub push token.
+//
+// The Android enterprise and its enabled flag are per instance, so the unpinned callback and token
+// routes read and write the instance config row. Paths are anchored at both ends: a prefix route
+// such as GET /api/{v}/fleet/results/ must not reach its handler unpinned through a crafted suffix.
+var openframeTenantExemptRoutes = []struct {
+	method string
+	path   *regexp.Regexp
+}{
+	{http.MethodGet, regexp.MustCompile(`^/api/[^/]+/fleet/enrollment_profiles/ota$`)},
+	{http.MethodGet, regexp.MustCompile(`^/api/[^/]+/fleet/android_enterprise/connect/[^/]+$`)},
+	{http.MethodGet, regexp.MustCompile(`^/api/[^/]+/fleet/android_enterprise/enrollment_token$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/android_enterprise/pubsub$`)},
+}
+
+func openframeTenantExemptRoute(method, path string) bool {
+	for _, route := range openframeTenantExemptRoutes {
+		if method == route.method && route.path.MatchString(path) {
 			return true
 		}
 	}

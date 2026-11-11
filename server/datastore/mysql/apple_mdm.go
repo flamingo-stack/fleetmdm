@@ -1666,6 +1666,13 @@ func (ds *Datastore) IngestMDMAppleDeviceFromOTAEnrollment(
 	deviceInfo fleet.MDMAppleMachineInfo,
 ) error {
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
+		// >>> OPENFRAME(mysql-multitenancy): in shared mode refuse an OTA enrollment while another team holds the device's host — openframe/docs/mysql-multitenancy-feature.md
+		if openframeSharedMode(ctx) {
+			if err := openframeRefuseAppleOTAForOtherTeam(ctx, tx, ds.logger, deviceInfo.Serial, deviceInfo.UDID, teamID); err != nil {
+				return err
+			}
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		toInsert := []hostToCreateFromMDM{
 			{
 				HardwareSerial: deviceInfo.Serial,
