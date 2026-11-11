@@ -1533,6 +1533,7 @@ func preProcessSoftwareResults(
 	preProcessSoftwareExtraResults(ctx, goBinariesExtraQuery, host.ID, results, statuses, messages, osquery_utils.DetailQuery{}, logger)
 
 	// >>> OPENFRAME(winget-packages): rows of the winget_packages table join the Windows software rows — openframe/docs/winget-packages.md
+	appendWingetRowsToWindowsDetails(results, statuses)
 	wingetPackagesExtraQuery := hostDetailQueryPrefix + "software_winget_packages"
 	preProcessSoftwareExtraResults(ctx, wingetPackagesExtraQuery, host.ID, results, statuses, messages, osquery_utils.DetailQuery{}, logger)
 	// <<< OPENFRAME(winget-packages)
@@ -1727,7 +1728,7 @@ func preProcessSoftwareExtraResults(
 }
 
 // OPENFRAME(software-windows-details): an override that rewrites rows rewrites the details rows the same way; rows it
-// appends carry no ARP key or package family name and are dropped, the details query only reports rows with one
+// appends carry no ARP key, package family name or winget id and are dropped, the details rows always have one
 func applyOverrideToWindowsDetails(results fleet.OsqueryDistributedQueryResults, statuses map[string]fleet.OsqueryStatus,
 	override osquery_utils.DetailQuery, softwareExtraRows []map[string]string,
 ) {
@@ -1742,7 +1743,7 @@ func applyOverrideToWindowsDetails(results fleet.OsqueryDistributedQueryResults,
 	processed := override.SoftwareProcessResults(rows, softwareExtraRows)
 	kept := make([]map[string]string, 0, len(processed))
 	for _, row := range processed {
-		if row["arp_key"] != "" || row["package_family_name"] != "" {
+		if row["arp_key"] != "" || row["package_family_name"] != "" || row["winget_id"] != "" {
 			kept = append(kept, row)
 		}
 	}

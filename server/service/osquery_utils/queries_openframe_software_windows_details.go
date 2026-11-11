@@ -22,11 +22,16 @@ FROM programs WHERE arp_key <> '' OR package_family_name <> ''`,
 }
 
 // The rows are matched to the host's software rows by the checksum software_windows gives them, so every field the
-// checksum reads must be built the same way here.
+// checksum reads must be built the same way here. Rows without a source are programs rows; winget_packages rows are
+// added before ingestion.
 func directIngestSoftwareWindowsDetails(ctx context.Context, logger *slog.Logger, host *fleet.Host, ds fleet.Datastore, rows []map[string]string) error {
 	details := make(map[string]fleet.SoftwareWindowsDetails, len(rows))
 	for _, row := range rows {
-		s, err := fleet.SoftwareFromOsqueryRow(row["name"], row["version"], "programs", row["vendor"],
+		source := row["source"]
+		if source == "" {
+			source = "programs"
+		}
+		s, err := fleet.SoftwareFromOsqueryRow(row["name"], row["version"], source, row["vendor"],
 			"", "", "", "", "", "", "", row["upgrade_code"])
 		if err != nil {
 			logger.DebugContext(ctx, "failed to parse software windows details row", "host_id", host.ID, "err", err)
@@ -53,6 +58,7 @@ func windowsDetailsOf(row map[string]string) fleet.SoftwareWindowsDetails {
 		InstallerType:     nonEmpty(row["installer_type"]),
 		InstallScope:      nonEmpty(row["install_scope"]),
 		InstallArch:       nonEmpty(row["install_arch"]),
+		WingetID:          nonEmpty(row["winget_id"]),
 	}
 }
 

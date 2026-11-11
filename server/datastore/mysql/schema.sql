@@ -1407,6 +1407,7 @@ CREATE TABLE `host_software_windows_details` (
   `installer_type` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `install_scope` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `install_arch` varchar(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `winget_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `updated_at` timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`host_id`,`software_id`),
   KEY `idx_host_software_windows_details_software_id` (`software_id`),

@@ -1,8 +1,8 @@
 // OPENFRAME(winget-packages): reports the packages winget installed, from the OpenFrame osquery winget_packages table
 package osquery_utils
 
-// Kept apart from software_windows: an osquery without the winget_packages table skips only this query. The winget id
-// is not reported: a Fleet title is keyed by name and source and its API does not return extension_id.
+// Kept apart from software_windows: an osquery without the winget_packages table skips only this query. winget_id is
+// not a software column: Fleet ignores it on the software row and the windows details keep it.
 var softwareWingetPackages = DetailQuery{
 	Query: `
 SELECT
@@ -12,7 +12,8 @@ SELECT
   '' AS extension_for,
   'winget_packages' AS source,
   '' AS vendor,
-  '' AS installed_path
+  '' AS installed_path,
+  id AS winget_id
 FROM winget_packages`,
 	Platforms: []string{"windows"},
 	Discovery: discoveryTable("winget_packages"),
