@@ -81,6 +81,24 @@ func NewOpenframeTeamContext(ctx context.Context, teamID uint) context.Context {
 	return context.WithValue(ctx, openframeTeamIDCtxKey{}, teamID)
 }
 
+type OpenframeInstanceMDMFlag string
+
+const (
+	OpenframeInstanceMDMFlagApple   OpenframeInstanceMDMFlag = "enabled_and_configured"
+	OpenframeInstanceMDMFlagAndroid OpenframeInstanceMDMFlag = "android_enabled_and_configured"
+)
+
+type openframeInstanceMDMFlagCtxKey struct{}
+
+func NewOpenframeInstanceMDMFlagContext(ctx context.Context, flag OpenframeInstanceMDMFlag) context.Context {
+	return context.WithValue(ctx, openframeInstanceMDMFlagCtxKey{}, flag)
+}
+
+func OpenframeInstanceMDMFlagFromContext(ctx context.Context) (OpenframeInstanceMDMFlag, bool) {
+	flag, ok := ctx.Value(openframeInstanceMDMFlagCtxKey{}).(OpenframeInstanceMDMFlag)
+	return flag, ok
+}
+
 // openframeTeamIDFromEnv parses FLEET_OPENFRAME_TEAM_ID exactly once. The team pin is a
 // process-level constant, so the read+parse is cached rather than repeated on every datastore
 // call (OpenframeTeamID is on hot enrollment/query paths). The master multitenancy flag is part

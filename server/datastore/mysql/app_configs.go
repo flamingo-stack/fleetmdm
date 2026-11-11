@@ -73,15 +73,19 @@ func openframeAppConfigDefaultsOnMissing(ctx context.Context) bool {
 // >>> OPENFRAME(mysql-multitenancy): shared mode keeps the instance-wide MDM flags on the instance row — openframe/docs/mysql-multitenancy-feature.md
 type openframeInstanceMDMFlags struct {
 	EnabledAndConfigured        bool `json:"enabled_and_configured"`
-	AppleBMEnabledAndConfigured bool `json:"apple_bm_enabled_and_configured"`
 	AndroidEnabledAndConfigured bool `json:"android_enabled_and_configured"`
 }
 
-const openframeInstanceMDMFlagsUpdate = `UPDATE app_config_json SET json_value = JSON_SET(json_value,
-	'$.mdm.enabled_and_configured', CAST(? AS JSON),
-	'$.mdm.apple_bm_enabled_and_configured', CAST(? AS JSON),
-	'$.mdm.android_enabled_and_configured', CAST(? AS JSON))
-	WHERE id = ?`
+const openframeInstanceMDMFlagUpdate = `UPDATE app_config_json SET json_value = JSON_SET(json_value, ?, CAST(? AS JSON)) WHERE id = ?`
+
+type openframeSharedModeCtxKey struct{}
+
+func openframeSharedMode(ctx context.Context) bool {
+	if shared, ok := ctx.Value(openframeSharedModeCtxKey{}).(bool); ok {
+		return shared
+	}
+	return fleet.IsOpenframeSharedMode()
+}
 
 func openframeInstanceMDMFlagsDecision(pinned, shared bool) bool {
 	return pinned && shared
@@ -89,7 +93,7 @@ func openframeInstanceMDMFlagsDecision(pinned, shared bool) bool {
 
 func openframeUsesInstanceMDMFlags(ctx context.Context) bool {
 	_, pinned := fleet.OpenframeTeamID(ctx)
-	return openframeInstanceMDMFlagsDecision(pinned, fleet.IsOpenframeSharedMode())
+	return openframeInstanceMDMFlagsDecision(pinned, openframeSharedMode(ctx))
 }
 
 func openframeReadInstanceMDMFlags(ctx context.Context, q sqlx.QueryerContext) (openframeInstanceMDMFlags, error) {
@@ -112,7 +116,6 @@ func openframeReadInstanceMDMFlags(ctx context.Context, q sqlx.QueryerContext) (
 
 func openframeApplyInstanceMDMFlags(info *fleet.AppConfig, flags openframeInstanceMDMFlags) {
 	info.MDM.EnabledAndConfigured = flags.EnabledAndConfigured
-	info.MDM.AppleBMEnabledAndConfigured = flags.AppleBMEnabledAndConfigured
 	info.MDM.AndroidEnabledAndConfigured = flags.AndroidEnabledAndConfigured
 }
 
@@ -128,15 +131,33 @@ func openframeWithInstanceMDMFlags(ctx context.Context, q sqlx.QueryerContext, i
 	return info, nil
 }
 
-func openframeWriteInstanceMDMFlags(ctx context.Context, tx sqlx.ExtContext, info *fleet.AppConfig) error {
-	_, err := tx.ExecContext(ctx, openframeInstanceMDMFlagsUpdate,
-		strconv.FormatBool(info.MDM.EnabledAndConfigured),
-		strconv.FormatBool(info.MDM.AppleBMEnabledAndConfigured),
-		strconv.FormatBool(info.MDM.AndroidEnabledAndConfigured),
+func openframeInstanceMDMFlagValue(info *fleet.AppConfig, flag fleet.OpenframeInstanceMDMFlag) (bool, bool) {
+	switch flag {
+	case fleet.OpenframeInstanceMDMFlagApple:
+		return info.MDM.EnabledAndConfigured, true
+	case fleet.OpenframeInstanceMDMFlagAndroid:
+		return info.MDM.AndroidEnabledAndConfigured, true
+	default:
+		return false, false
+	}
+}
+
+func openframeWriteInstanceMDMFlag(ctx context.Context, tx sqlx.ExtContext, info *fleet.AppConfig) error {
+	flag, ok := fleet.OpenframeInstanceMDMFlagFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	value, known := openframeInstanceMDMFlagValue(info, flag)
+	if !known {
+		return ctxerr.Errorf(ctx, "unknown instance mdm flag %q", flag)
+	}
+	_, err := tx.ExecContext(ctx, openframeInstanceMDMFlagUpdate,
+		"$.mdm."+string(flag),
+		strconv.FormatBool(value),
 		openframeGlobalAppConfigID,
 	)
 	if err != nil {
-		return ctxerr.Wrap(ctx, err, "update instance mdm flags")
+		return ctxerr.Wrap(ctx, err, "update instance mdm flag")
 	}
 	return nil
 }
@@ -218,7 +239,7 @@ func (ds *Datastore) SaveAppConfig(ctx context.Context, info *fleet.AppConfig) e
 				teamID, configBytes,
 			)
 			if err == nil && openframeUsesInstanceMDMFlags(ctx) {
-				err = openframeWriteInstanceMDMFlags(ctx, tx, info)
+				err = openframeWriteInstanceMDMFlag(ctx, tx, info)
 			}
 		} else {
 			_, err = tx.ExecContext(ctx,
@@ -265,6 +286,7 @@ func (ds *Datastore) insertOrReplaceConfigAsset(ctx context.Context, tx sqlx.Ext
 
 func (ds *Datastore) SetAndroidEnabledAndConfigured(ctx context.Context, configured bool) error {
 	ctx = ctxdb.RequirePrimary(ctx, true)
+	ctx = fleet.NewOpenframeInstanceMDMFlagContext(ctx, fleet.OpenframeInstanceMDMFlagAndroid) // OPENFRAME(mysql-multitenancy): instance-wide MDM flags
 	appConfig, err := ds.AppConfig(ctx)
 	if err != nil {
 		return err
