@@ -105,6 +105,13 @@ func NewOpenframeHostTenantChangeContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, openframeHostTenantChangeCtxKey{}, true)
 }
 
+func OpenframeTeamLogValue(teamID *uint) any {
+	if teamID == nil {
+		return "none"
+	}
+	return *teamID
+}
+
 func OpenframeHostTenantChangeFromContext(ctx context.Context) bool {
 	change, _ := ctx.Value(openframeHostTenantChangeCtxKey{}).(bool)
 	return change
