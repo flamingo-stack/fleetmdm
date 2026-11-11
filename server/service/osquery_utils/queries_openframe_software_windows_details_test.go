@@ -61,3 +61,24 @@ func TestDirectIngestSoftwareWindowsDetails_noRows_clearsTheHost(t *testing.T) {
 	require.True(t, ds.OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked)
 	require.Empty(t, stored)
 }
+
+// OPENFRAME(winget-packages): a winget row is keyed by the checksum its winget_packages software row gets
+func TestDirectIngestSoftwareWindowsDetails_wingetRow_keyedByItsSoftwareRow(t *testing.T) {
+	ds := new(mock.Store)
+	var stored map[string]fleet.SoftwareWindowsDetails
+	ds.OpenframeReplaceHostSoftwareWindowsDetailsFunc = func(ctx context.Context, hostID uint, details map[string]fleet.SoftwareWindowsDetails) error {
+		stored = details
+		return nil
+	}
+	rows := []map[string]string{{"name": "7-Zip", "version": "24.08", "vendor": "", "source": "winget_packages", "winget_id": "7zip.7zip"}}
+
+	require.NoError(t, directIngestSoftwareWindowsDetails(context.Background(), slog.Default(), &fleet.Host{ID: 1, Platform: "windows"}, ds, rows))
+
+	// the software row is built from the softwareWingetPackages columns
+	s, err := fleet.SoftwareFromOsqueryRow("7-Zip", "24.08", "winget_packages", "", "", "", "", "", "", "", "", "")
+	require.NoError(t, err)
+	MutateSoftwareOnIngestion(context.Background(), s, slog.Default())
+	raw, err := s.ComputeRawChecksum()
+	require.NoError(t, err)
+	require.Equal(t, map[string]fleet.SoftwareWindowsDetails{string(raw): {WingetID: ptr.String("7zip.7zip")}}, stored)
+}

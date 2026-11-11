@@ -100,3 +100,29 @@ func TestOpenframeHostSoftwareWindowsDetails(t *testing.T) {
 		}
 	}
 }
+
+// OPENFRAME(winget-packages): a winget_packages software row keeps the winget id of the host that reported it
+func TestOpenframeHostSoftwareWindowsDetails_wingetID(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	host := test.NewHost(t, ds, "host1", "", "host1key", "host1uuid", time.Now())
+	sevenZip := fleet.Software{Name: "7-Zip", Version: "24.08", Source: "winget_packages"}
+	_, err := ds.UpdateHostSoftware(ctx, host.ID, []fleet.Software{sevenZip})
+	require.NoError(t, err)
+	require.NoError(t, ds.SyncHostsSoftware(ctx, time.Now()))
+	require.NoError(t, ds.SyncHostsSoftwareTitles(ctx, time.Now()))
+	raw, err := sevenZip.ComputeRawChecksum()
+	require.NoError(t, err)
+
+	require.NoError(t, ds.OpenframeReplaceHostSoftwareWindowsDetails(ctx, host.ID, map[string]fleet.SoftwareWindowsDetails{
+		string(raw): {WingetID: ptr.String("7zip.7zip")},
+	}))
+
+	host.Platform = "windows"
+	hostSoftware, _, err := ds.ListHostSoftware(ctx, host, fleet.HostSoftwareTitleListOptions{ListOptions: fleet.ListOptions{PerPage: 10}})
+	require.NoError(t, err)
+	require.Len(t, hostSoftware, 1)
+	require.Len(t, hostSoftware[0].InstalledVersions, 1)
+	require.Equal(t, fleet.SoftwareWindowsDetails{WingetID: ptr.String("7zip.7zip")}, hostSoftware[0].InstalledVersions[0].SoftwareWindowsDetails)
+}

@@ -12,6 +12,7 @@ func TestSoftwareWingetPackages_windowsOnlyAndDiscoveredByTable(t *testing.T) {
 	require.Equal(t, []string{"windows"}, softwareWingetPackages.Platforms)
 	require.Equal(t, discoveryTable("winget_packages"), softwareWingetPackages.Discovery)
 	require.Contains(t, softwareWingetPackages.Query, "'winget_packages' AS source")
+	require.Contains(t, softwareWingetPackages.Query, "id AS winget_id")
 }
 
 // the rows go through the regular software ingestion: a winget package becomes a software row with its own source

@@ -3560,7 +3560,8 @@ func hostInstalledSoftware(ds *Datastore, ctx context.Context, hostID uint) ([]*
 			software_titles.upgrade_code AS upgrade_code,
 			software.vendor AS software_vendor, -- OPENFRAME(software-windows-details)
 			hswd.arp_key, hswd.package_family_name, hswd.system_component, -- OPENFRAME(software-windows-details)
-			hswd.installer_type, hswd.install_scope, hswd.install_arch -- OPENFRAME(software-windows-details)
+			hswd.installer_type, hswd.install_scope, hswd.install_arch, -- OPENFRAME(software-windows-details)
+			hswd.winget_id -- OPENFRAME(winget-packages): openframe/docs/winget-packages.md
 		FROM
 			host_software
 		INNER JOIN
