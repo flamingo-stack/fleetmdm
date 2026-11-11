@@ -6,15 +6,15 @@ import (
 )
 
 func init() {
-	MigrationClient.AddMigration(Up_20261111000001, Down_20261111000001)
+	MigrationClient.AddMigration(Up_20261111000002, Down_20261111000002)
 }
 
-// Up_20261111000001 adds `openframe_apple_enrollment_intents`: in shared mode, the team an Apple device asked to enroll
+// Up_20261111000002 adds `openframe_apple_enrollment_intents`: in shared mode, the team an Apple device asked to enroll
 // into through another tenant's OTA link while its host row still belongs to a different team. The MDM Authenticate
 // check-in applies it. See openframe/docs/mysql-multitenancy-feature.md.
 //
 // Idempotent.
-func Up_20261111000001(tx *sql.Tx) error {
+func Up_20261111000002(tx *sql.Tx) error {
 	if _, err := tx.Exec(`
 CREATE TABLE IF NOT EXISTS openframe_apple_enrollment_intents (
   hardware_serial VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -29,6 +29,6 @@ CREATE TABLE IF NOT EXISTS openframe_apple_enrollment_intents (
 	return nil
 }
 
-func Down_20261111000001(tx *sql.Tx) error {
+func Down_20261111000002(tx *sql.Tx) error {
 	return nil
 }

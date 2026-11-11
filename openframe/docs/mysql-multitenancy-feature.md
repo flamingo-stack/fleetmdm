@@ -49,7 +49,7 @@ Applied by `fleet prepare db`. Idempotent (`columnExists`/`indexExists` guards).
 | `20260626000001_ScopeHostIdentityUniqueToTeam` | `hosts` virtual col `openframe_team_key = IFNULL(team_id,0)` + `UNIQUE(osquery_host_id, openframe_team_key)`, drop global `UNIQUE(osquery_host_id)` | host identity unique **per team** — the same device can exist in two tenants |
 | `20260620000001_ScopeLabelUniqueNameToTeam` | same generated-column pattern for `labels.name` | label names unique per team; built-ins stay global |
 | `20260722000001_AddTeamIdToCdcTables` | nullable `team_id` on `activity_past`, `activity_host_past`, `query_results`, `policy_membership` (no index, no FK) | the Debezium CDC tables must be self-describing on a shared DB — see "CDC team stamping" below |
-| `20261111000001_AddAppleEnrollmentIntentsTable` | `openframe_apple_enrollment_intents` (serial, UDID, team, IdP account, created_at) | the team an Apple device asked for through another tenant's OTA link, applied at the Authenticate check-in — see "Enrollment" below |
+| `20261111000002_AddAppleEnrollmentIntentsTable` | `openframe_apple_enrollment_intents` (serial, UDID, team, IdP account, created_at) | the team an Apple device asked for through another tenant's OTA link, applied at the Authenticate check-in — see "Enrollment" below |
 
 The `IFNULL(team_id,0)` sentinel collapses all NULL-team rows onto key `0` (team ids start at 1), so
 **flag-off / pre-backfill the uniqueness is bit-for-bit the old global uniqueness**, and the

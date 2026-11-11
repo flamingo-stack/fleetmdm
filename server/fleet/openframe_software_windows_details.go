@@ -16,4 +16,6 @@ type SoftwareWindowsDetails struct {
 	InstallScope *string `db:"install_scope" json:"install_scope,omitempty"`
 	// InstallArch is 64 or 32 for a machine scope entry.
 	InstallArch *string `db:"install_arch" json:"install_arch,omitempty"`
+	// WingetID is the winget package id of a winget_packages software row.
+	WingetID *string `db:"winget_id" json:"winget_id,omitempty"`
 }

@@ -43,26 +43,27 @@ func upsertHostSoftwareWindowsDetails(ctx context.Context, tx sqlx.ExtContext, h
 		return nil
 	}
 	values := make([]string, 0, len(checksums))
-	args := make([]any, 0, 1+7*len(checksums))
+	args := make([]any, 0, 1+8*len(checksums))
 	args = append(args, hostID)
 	for _, checksum := range checksums {
 		d := detailsByChecksum[checksum]
 		values = append(values, "SELECT UNHEX(?) AS checksum, ? AS arp_key, ? AS package_family_name, "+
-			"? AS system_component, ? AS installer_type, ? AS install_scope, ? AS install_arch")
+			"? AS system_component, ? AS installer_type, ? AS install_scope, ? AS install_arch, ? AS winget_id")
 		args = append(args, hex.EncodeToString([]byte(checksum)), d.ArpKey, d.PackageFamilyName, d.SystemComponent,
-			d.InstallerType, d.InstallScope, d.InstallArch)
+			d.InstallerType, d.InstallScope, d.InstallArch, d.WingetID)
 	}
 	stmt := `
 INSERT INTO host_software_windows_details
-  (host_id, software_id, arp_key, package_family_name, system_component, installer_type, install_scope, install_arch)
+  (host_id, software_id, arp_key, package_family_name, system_component, installer_type, install_scope, install_arch,
+  winget_id)
 SELECT ?, s.id, incoming.arp_key, incoming.package_family_name, incoming.system_component, incoming.installer_type,
-  incoming.install_scope, incoming.install_arch
+  incoming.install_scope, incoming.install_arch, incoming.winget_id
 FROM software s
 JOIN (` + strings.Join(values, " UNION ALL ") + `) incoming ON incoming.checksum = s.checksum
 ON DUPLICATE KEY UPDATE
   arp_key = VALUES(arp_key), package_family_name = VALUES(package_family_name),
   system_component = VALUES(system_component), installer_type = VALUES(installer_type),
-  install_scope = VALUES(install_scope), install_arch = VALUES(install_arch)`
+  install_scope = VALUES(install_scope), install_arch = VALUES(install_arch), winget_id = VALUES(winget_id)`
 	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
 		return ctxerr.Wrap(ctx, err, "upsert host software windows details")
 	}

@@ -30,7 +30,8 @@ func TestAllOpenframeMigrationsRegistered(t *testing.T) {
 		20260818000002, // AddQueriesOpenframeManagedColumn
 		20260831000001, // SeedGlobalAppConfigRow
 		20261105000001, // AddHostSoftwareWindowsDetailsTable
-		20261111000001, // AddAppleEnrollmentIntentsTable
+		20261111000001, // AddHostSoftwareWindowsDetailsWingetId
+		20261111000002, // AddAppleEnrollmentIntentsTable
 	}
 
 	var got []int64
