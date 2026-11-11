@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/pkg/optjson"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
@@ -141,4 +142,80 @@ func TestOpenframeAppConfigDefaultsOnMissing(t *testing.T) {
 		require.Equal(t, fleet.IsOpenframeMultitenancy(), got,
 			"unpinned falls back to defaults exactly when multitenancy is on")
 	})
+}
+
+func TestOpenframeInstanceMDMFlagsDecision(t *testing.T) {
+	cases := []struct {
+		name           string
+		pinned, shared bool
+		want           bool
+	}{
+		{"pinned request in shared mode uses the instance row", true, true, true},
+		{"unpinned reader already reads the instance row", false, true, false},
+		{"process-pinned mode keeps the tenant row", true, false, false},
+		{"multitenancy off keeps upstream", false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, openframeInstanceMDMFlagsDecision(c.pinned, c.shared))
+		})
+	}
+}
+
+func TestOpenframeInstanceMDMFlagsSharedAcrossTenants(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	instance := &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "instance-org"}}
+	instance.MDM.EnableDiskEncryption = optjson.SetBool(true)
+	require.NoError(t, ds.SaveAppConfig(ctx, instance))
+
+	ctxA := fleet.NewOpenframeTeamContext(ctx, 5)
+	ctxB := fleet.NewOpenframeTeamContext(ctx, 6)
+	require.NoError(t, ds.SaveAppConfig(ctxA, &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "tenant-a"}}))
+	require.NoError(t, ds.SaveAppConfig(ctxB, &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "tenant-b"}}))
+
+	tenantA, err := ds.AppConfig(ctxA)
+	require.NoError(t, err)
+	tenantA.MDM.EnabledAndConfigured = true
+	tenantA.MDM.AndroidEnabledAndConfigured = true
+	require.NoError(t, openframeWriteInstanceMDMFlags(ctx, ds.writer(ctx), tenantA))
+
+	flags, err := openframeReadInstanceMDMFlags(ctx, ds.reader(ctx))
+	require.NoError(t, err)
+	require.Equal(t, openframeInstanceMDMFlags{EnabledAndConfigured: true, AndroidEnabledAndConfigured: true}, flags)
+
+	unpinned, err := ds.AppConfig(ctx)
+	require.NoError(t, err)
+	require.True(t, unpinned.MDM.EnabledAndConfigured, "the unpinned enrollment routes read the instance row")
+	require.Equal(t, "instance-org", unpinned.OrgInfo.OrgName, "only the MDM flags change on the instance row")
+	require.True(t, unpinned.MDM.EnableDiskEncryption.Value, "only the MDM flags change on the instance row")
+
+	tenantB, err := ds.AppConfig(ctxB)
+	require.NoError(t, err)
+	require.False(t, tenantB.MDM.EnabledAndConfigured, "the stored tenant row is untouched")
+	openframeApplyInstanceMDMFlags(tenantB, flags)
+	require.True(t, tenantB.MDM.EnabledAndConfigured)
+	require.True(t, tenantB.MDM.AndroidEnabledAndConfigured)
+	require.False(t, tenantB.MDM.AppleBMEnabledAndConfigured)
+	require.Equal(t, "tenant-b", tenantB.OrgInfo.OrgName)
+
+	tenantA.MDM.EnabledAndConfigured = false
+	require.NoError(t, openframeWriteInstanceMDMFlags(ctx, ds.writer(ctx), tenantA))
+	flags, err = openframeReadInstanceMDMFlags(ctx, ds.reader(ctx))
+	require.NoError(t, err)
+	require.False(t, flags.EnabledAndConfigured, "removing the APNs cert clears the flag for every tenant")
+	require.True(t, flags.AndroidEnabledAndConfigured)
+}
+
+func TestOpenframeInstanceMDMFlagsMissingInstanceRow(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	_, err := ds.writer(ctx).ExecContext(ctx, `DELETE FROM app_config_json WHERE id = ?`, openframeGlobalAppConfigID)
+	require.NoError(t, err)
+
+	flags, err := openframeReadInstanceMDMFlags(ctx, ds.reader(ctx))
+	require.NoError(t, err)
+	require.Equal(t, openframeInstanceMDMFlags{}, flags)
 }

@@ -91,6 +91,14 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   seeds `id = 1`; a zero-value config would disable software inventory and historical data instance-wide).
   Non-multitenant keeps the upstream statement and fallback byte-identical. Migration
   `20260831000001` seeds/repairs the row and reserves team id 1.
+- **MDM enabled flags** (`app_configs.go`) — `mdm.enabled_and_configured`,
+  `mdm.apple_bm_enabled_and_configured` and `mdm.android_enabled_and_configured` describe the
+  instance (one APNs certificate, one ABM key pair, one Android enterprise), so in shared mode they
+  live on the instance row: a pinned read takes them from `id = 1`, and a pinned save writes them
+  there with `JSON_SET`, leaving the rest of the instance row alone. An APNs upload by one tenant
+  turns MDM on for every tenant and for the unpinned enrollment routes, with no restart. The
+  tenant row keeps its own stale copy, which is never read. A process-pinned Fleet keeps the flags
+  on its tenant row.
 - **software titles + vulnerabilities** (`software_titles.go`, `vulnerabilities.go`) —
   `ListSoftwareTitles`, `SoftwareTitleByID`, `ListVulnerabilities`, `CountVulnerabilities`,
   `Vulnerability`, `SoftwareByCVE`, `OSVersionsByCVE` replace the caller's team scope with the
@@ -126,6 +134,11 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   the osquery header pre-auth paths (`osquery_header_auth.go`); fail-closed on a team-less host.
 - **Enrollment** — after `VerifyEnrollSecret`, `osquery.go`/`orbit.go` pin from `secret.TeamID`
   (reject if the secret has no team). The host row is then created carrying that `team_id`.
+  Android enrollment (`server/mdm/android/service/pubsub.go`) takes the team from the secret
+  embedded in the Google enrollment token. Upstream then restores the device's last team, found by
+  its `enterprise_specific_id`; with one Android enterprise per instance that id is the same in
+  every tenant, so a wiped device re-enrolled by another tenant would land in the first tenant's
+  team. In shared mode the secret's team wins (`openframeAndroidEnrollTeam`).
 - **Live-query results websocket** (`endpoint_campaigns.go`) — the sockjs handler rebuilds its
   context from `context.Background()`, discarding the middleware-pinned upgrade-request context,
   so it **re-pins from `session.Request().Context()`** (read once — polling transports mutate the
@@ -206,11 +219,14 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are
   unused. New-format stats are team-scoped.
 - **`IsEnrollSecretAvailable`** — intentionally unfenced (cross-team uniqueness check).
-- **MDM enabled flags across config rows** — the APNs upload sets the Apple flag on the calling
-  tenant's row, while the unpinned enrollment routes read the instance row, which `fleet serve`
-  recomputes from the stored assets only at start. Restart Fleet after the first APNs upload.
-  The Android enterprise and its flag are per instance (`android_enterprises` has no `team_id`):
-  a second signup replaces the first tenant's enterprise.
+- **One Android enterprise per instance** — `android_enterprises` has no `team_id`. A second
+  tenant's signup is refused (409) because the instance flag is already set, but
+  `DELETE /android_enterprise` from any tenant removes the instance's enterprise.
+- **One APNs certificate and SCEP CA per instance** — `mdm_config_assets` has no `team_id`; a
+  later APNs upload or delete changes it for every tenant. Treat APNs, ABM and the Android
+  enterprise as operator actions, not tenant settings. The OTA enrollment profile takes the server
+  URL and org name from the instance row, so `server_settings.server_url` there must be the
+  instance's public MDM address.
 
 ## Deployment / cutover
 
