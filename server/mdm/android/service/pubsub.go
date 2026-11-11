@@ -630,6 +630,14 @@ func (svc *Service) enrollHost(ctx context.Context, device *androidmanagement.De
 			return ctxerr.Wrap(ctx, err, "verifying enroll secret")
 		}
 		if err == nil {
+			// >>> OPENFRAME(mysql-multitenancy): in shared mode a device enrolling into another tenant starts as a new host — openframe/docs/mysql-multitenancy-feature.md
+			if openframeAndroidReenrollAsNewHost(host.TeamID, enrollSecret.GetTeamID(), openframeSharedMode(ctx)) {
+				if err := svc.fleetDS.DeleteHost(ctx, host.Host.ID); err != nil {
+					return ctxerr.Wrap(ctx, err, "deleting the previous tenant's Android host")
+				}
+				return svc.addNewHost(ctx, device)
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 			host.TeamID = enrollSecret.GetTeamID()
 		}
 
@@ -640,7 +648,7 @@ func (svc *Service) enrollHost(ctx context.Context, device *androidmanagement.De
 			svc.logger.ErrorContext(ctx, "failed to look up prior android team, using enroll secret", "err", err)
 			ctxerr.Handle(ctx, err)
 		} else {
-			host.TeamID = openframeAndroidEnrollTeam(host.TeamID, priorTeamID, found, fleet.IsOpenframeSharedMode())
+			host.TeamID = openframeAndroidEnrollTeam(host.TeamID, priorTeamID, found, openframeSharedMode(ctx))
 		}
 		// <<< OPENFRAME(mysql-multitenancy)
 
@@ -885,7 +893,7 @@ func (svc *Service) addNewHost(ctx context.Context, device *androidmanagement.De
 		svc.logger.ErrorContext(ctx, "failed to look up prior android team, using enroll secret", "err", tlErr)
 		ctxerr.Handle(ctx, tlErr)
 	} else {
-		teamID = openframeAndroidEnrollTeam(teamID, priorTeamID, found, fleet.IsOpenframeSharedMode())
+		teamID = openframeAndroidEnrollTeam(teamID, priorTeamID, found, openframeSharedMode(ctx))
 	}
 	// <<< OPENFRAME(mysql-multitenancy)
 

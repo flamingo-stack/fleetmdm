@@ -91,14 +91,16 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   seeds `id = 1`; a zero-value config would disable software inventory and historical data instance-wide).
   Non-multitenant keeps the upstream statement and fallback byte-identical. Migration
   `20260831000001` seeds/repairs the row and reserves team id 1.
-- **MDM enabled flags** (`app_configs.go`) — `mdm.enabled_and_configured`,
-  `mdm.apple_bm_enabled_and_configured` and `mdm.android_enabled_and_configured` describe the
-  instance (one APNs certificate, one ABM key pair, one Android enterprise), so in shared mode they
-  live on the instance row: a pinned read takes them from `id = 1`, and a pinned save writes them
-  there with `JSON_SET`, leaving the rest of the instance row alone. An APNs upload by one tenant
-  turns MDM on for every tenant and for the unpinned enrollment routes, with no restart. The
-  tenant row keeps its own stale copy, which is never read. A process-pinned Fleet keeps the flags
-  on its tenant row.
+- **MDM enabled flags** (`app_configs.go`) — `mdm.enabled_and_configured` and
+  `mdm.android_enabled_and_configured` describe the instance (one APNs certificate, one Android
+  enterprise), so in shared mode they live on the instance row: a pinned read takes them from
+  `id = 1`. Only the flows that change a flag write it there, one flag per save, with `JSON_SET`:
+  the APNs upload and delete (`server/service/mdm.go`) and `SetAndroidEnabledAndConfigured` mark
+  their save with `fleet.NewOpenframeInstanceMDMFlagContext`. Any other pinned save leaves the
+  instance row alone, so a stale copy of the config cannot turn a flag back. An APNs upload by one
+  tenant turns MDM on for every tenant and for the unpinned enrollment routes, with no restart.
+  The tenant row keeps its own stale copy, which is never read. `mdm.apple_bm_enabled_and_configured`
+  stays on the tenant row. A process-pinned Fleet keeps all flags on its tenant row.
 - **software titles + vulnerabilities** (`software_titles.go`, `vulnerabilities.go`) —
   `ListSoftwareTitles`, `SoftwareTitleByID`, `ListVulnerabilities`, `CountVulnerabilities`,
   `Vulnerability`, `SoftwareByCVE`, `OSVersionsByCVE` replace the caller's team scope with the
@@ -138,7 +140,11 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   embedded in the Google enrollment token. Upstream then restores the device's last team, found by
   its `enterprise_specific_id`; with one Android enterprise per instance that id is the same in
   every tenant, so a wiped device re-enrolled by another tenant would land in the first tenant's
-  team. In shared mode the secret's team wins (`openframeAndroidEnrollTeam`).
+  team. In shared mode the secret's team wins (`openframeAndroidEnrollTeam`). When the device's
+  host row still exists in another tenant, shared mode deletes that host and enrolls the device as
+  a new host (`openframeAndroidReenrollAsNewHost`), so the previous tenant's host history does not
+  move with it; the `android_devices` row is kept and reused, as upstream does after a host
+  deletion. The previous tenant loses the host as soon as the device enrolls elsewhere.
 - **Live-query results websocket** (`endpoint_campaigns.go`) — the sockjs handler rebuilds its
   context from `context.Background()`, discarding the middleware-pinned upgrade-request context,
   so it **re-pins from `session.Request().Context()`** (read once — polling transports mutate the
@@ -204,7 +210,12 @@ MySQL-backed (`MYSQL_TEST=1`), all in `*_openframe_test.go`: enrollment isolatio
 per-team, host by-id/list/identifier fences, policy/query CRUD + by-id + GitOps, enroll-secret
 fence, host-assignment fence, live-query target fence, teams read fence, app-config isolation,
 `EnsureOpenframeTeamID` (incl. secret seeding), delete-global-policies pin, migration pipeline,
-software-title / vulnerability / CVE-detail fences.
+software-title / vulnerability / CVE-detail fences, instance-wide MDM flags through `AppConfig` and
+`SaveAppConfig` in shared mode, Android re-enrollment after a host deletion. Shared mode is switched
+on per test through an unexported context key (`openframeSharedModeCtxKey`, in the datastore and the
+Android service packages), because `fleet.IsOpenframeSharedMode` is read once per process and the
+MySQL tests run in parallel. Android service tests with the mock datastore cover the cross-tenant
+re-enrollment.
 Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. Middleware tests in
 `server/service/openframe_middleware_test.go`. Harness: `make openframe-verify` (add `MYSQL_TEST=1`
 + Docker for the deep tier).
@@ -219,12 +230,21 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are
   unused. New-format stats are team-scoped.
 - **`IsEnrollSecretAvailable`** — intentionally unfenced (cross-team uniqueness check).
+- **"Instance" means every Fleet on the shared database** — one instance row, one APNs
+  certificate, one Android enterprise and one MDM URL for every cluster on that MySQL (seven on
+  prod). The MDM URL on the instance row must be an address that serves all of them, not one
+  cluster's domain.
 - **One Android enterprise per instance** — `android_enterprises` has no `team_id`. A second
   tenant's signup is refused (409) because the instance flag is already set, but
-  `DELETE /android_enterprise` from any tenant removes the instance's enterprise.
+  `DELETE /android_enterprise` from any tenant removes the instance's enterprise. The signup is
+  pinned, so `EnterpriseSignup` builds Google's callback URL from the tenant row's
+  `server_settings.server_url`, while the unpinned callback builds the Pub/Sub push URL from the
+  instance row's. Both rows need the public address until the signup reads the instance row.
 - **One APNs certificate and SCEP CA per instance** — `mdm_config_assets` has no `team_id`; a
   later APNs upload or delete changes it for every tenant. Treat APNs, ABM and the Android
-  enterprise as operator actions, not tenant settings. The OTA enrollment profile takes the server
+  enterprise as operator actions, not tenant settings. ABM tokens are instance-wide too, but
+  `apple_bm_enabled_and_configured` is still the tenant row's: only the tenant that added the token
+  sees it until a Fleet restart recomputes the instance row. The OTA enrollment profile takes the server
   URL and org name from the instance row, so `server_settings.server_url` there must be the
   instance's public MDM address.
 
