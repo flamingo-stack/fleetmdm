@@ -152,7 +152,7 @@ func (svc *Service) EnterpriseSignup(ctx context.Context) (*android.SignupDetail
 		}
 	}
 
-	appConfig, err := svc.checkIfAndroidAlreadyConfigured(ctx)
+	appConfig, err := svc.checkIfAndroidAlreadyConfigured(openframeInstanceConfigContext(ctx)) // OPENFRAME(mysql-multitenancy): the enterprise is instance-wide, so are its flag and callback URL
 	if err != nil {
 		return nil, err
 	}

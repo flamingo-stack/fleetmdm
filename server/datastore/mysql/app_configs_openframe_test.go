@@ -263,3 +263,33 @@ func TestOpenframeInstanceMDMFlagsMissingInstanceRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, openframeInstanceMDMFlags{}, flags)
 }
+
+func TestOpenframeAppConfigInstanceConfigMarker(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := context.Background()
+
+	instance := &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "instance-org"}}
+	instance.ServerSettings.ServerURL = "https://mdm.example.com"
+	instance.MDM.AndroidEnabledAndConfigured = true
+	require.NoError(t, ds.SaveAppConfig(ctx, instance))
+
+	ctxA := openframeSharedTestContext(ctx, 5)
+	tenant := &fleet.AppConfig{OrgInfo: fleet.OrgInfo{OrgName: "tenant-a"}}
+	tenant.ServerSettings.ServerURL = "https://tenant-a.example.com"
+	require.NoError(t, ds.SaveAppConfig(ctxA, tenant))
+
+	pinned, err := ds.AppConfig(ctxA)
+	require.NoError(t, err)
+	require.Equal(t, "tenant-a", pinned.OrgInfo.OrgName)
+	require.Equal(t, "https://tenant-a.example.com", pinned.ServerSettings.ServerURL)
+
+	marked, err := ds.AppConfig(fleet.NewOpenframeInstanceConfigContext(ctxA))
+	require.NoError(t, err)
+	require.Equal(t, "instance-org", marked.OrgInfo.OrgName)
+	require.Equal(t, "https://mdm.example.com", marked.ServerSettings.ServerURL)
+	require.True(t, marked.MDM.AndroidEnabledAndConfigured)
+
+	urls, err := ds.AppConfigUrls(fleet.NewOpenframeInstanceConfigContext(ctxA))
+	require.NoError(t, err)
+	require.Equal(t, "https://mdm.example.com", urls.ServerSettings.ServerURL)
+}

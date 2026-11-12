@@ -59,12 +59,12 @@ func openframeAppConfigSelectDecision(teamID uint, pinned, multitenancy bool) (s
 }
 
 func openframeAppConfigSelect(ctx context.Context) (string, []any) {
-	teamID, pinned := fleet.OpenframeTeamID(ctx)
+	teamID, pinned := fleet.OpenframeAppConfigTeamID(ctx)
 	return openframeAppConfigSelectDecision(teamID, pinned, fleet.IsOpenframeMultitenancy())
 }
 
 func openframeAppConfigDefaultsOnMissing(ctx context.Context) bool {
-	_, pinned := fleet.OpenframeTeamID(ctx)
+	_, pinned := fleet.OpenframeAppConfigTeamID(ctx)
 	return pinned || fleet.IsOpenframeMultitenancy()
 }
 
@@ -92,7 +92,7 @@ func openframeInstanceMDMFlagsDecision(pinned, shared bool) bool {
 }
 
 func openframeUsesInstanceMDMFlags(ctx context.Context) bool {
-	_, pinned := fleet.OpenframeTeamID(ctx)
+	_, pinned := fleet.OpenframeAppConfigTeamID(ctx)
 	return openframeInstanceMDMFlagsDecision(pinned, openframeSharedMode(ctx))
 }
 

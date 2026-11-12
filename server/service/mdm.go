@@ -3224,7 +3224,7 @@ func (svc *Service) GetMDMAppleCSR(ctx context.Context) ([]byte, error) {
 	}
 
 	// Generate new APNS CSR every time this is called
-	appConfig, err := svc.ds.AppConfig(ctx)
+	appConfig, err := svc.ds.AppConfig(fleet.OpenframeInstanceConfigContext(ctx)) // OPENFRAME(mysql-multitenancy): the APNs certificate is instance-wide, so is its org name
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "get app config")
 	}

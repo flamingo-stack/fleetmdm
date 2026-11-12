@@ -99,7 +99,11 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   their save with `fleet.NewOpenframeInstanceMDMFlagContext`. Any other pinned save leaves the
   instance row alone, so a stale copy of the config cannot turn a flag back. An APNs upload by one
   tenant turns MDM on for every tenant and for the unpinned enrollment routes, with no restart.
-  The tenant row keeps its own stale copy, which is never read. `mdm.apple_bm_enabled_and_configured`
+  The tenant row keeps its own stale copy, which is never read. A pinned request that needs the
+  instance row itself marks its context with `fleet.OpenframeInstanceConfigContext` (shared mode
+  only): `fleet.OpenframeAppConfigTeamID` then reports it unpinned to the app-config row selection
+  and to the app-config cache key, and to nothing else. The APNs CSR (org name) and the Android
+  signup (enabled flag and callback URL) use it. `mdm.apple_bm_enabled_and_configured`
   stays on the tenant row. A process-pinned Fleet keeps all flags on its tenant row.
 - **software titles + vulnerabilities** (`software_titles.go`, `vulnerabilities.go`) —
   `ListSoftwareTitles`, `SoftwareTitleByID`, `ListVulnerabilities`, `CountVulnerabilities`,
@@ -210,6 +214,13 @@ without touching Fleet's API. Platform side of this pipeline: shared connector r
 `FLEET_OPENFRAME_MULTI_TENANCY_ENABLED` (+ optional `FLEET_OPENFRAME_TENANT_UUID` /
 `FLEET_OPENFRAME_TEAM_ID`); `job-migration.yaml` gets the flag too (so the `GET_LOCK` guard engages).
 
+Shared mode also reads two optional envs at boot (`cmd/fleet/serve.go`, set through the chart's
+`environments` map): `FLEET_OPENFRAME_INSTANCE_SERVER_URL`, the instance's public MDM address
+(an http(s) URL with a host and no query, fragment or credentials; a trailing slash is dropped),
+and `FLEET_OPENFRAME_INSTANCE_ORG_NAME`. Each set value is written to the instance row
+(`server_settings.server_url`, `org_info.org_name`) in the same boot-time save that recomputes the
+Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot.
+
 ## Backward compatibility
 
 Flag off ⇒ pre-feature fork behavior everywhere **except the schema**: the three migrations run
@@ -252,18 +263,17 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
   cluster's domain.
 - **One Android enterprise per instance** — `android_enterprises` has no `team_id`. A second
   tenant's signup is refused (409) because the instance flag is already set, but
-  `DELETE /android_enterprise` from any tenant removes the instance's enterprise. The signup is
-  pinned, so `EnterpriseSignup` builds Google's callback URL from the tenant row's
-  `server_settings.server_url`, while the unpinned callback builds the Pub/Sub push URL from the
-  instance row's. Both rows need the public address until the signup reads the instance row.
+  `DELETE /android_enterprise` from any tenant removes the instance's enterprise.
 - **One APNs certificate and SCEP CA per instance** — `mdm_config_assets` has no `team_id`; a
   later APNs upload or delete changes it for every tenant. Treat APNs, ABM and the Android
   enterprise as operator actions, not tenant settings. ABM tokens are instance-wide too, but
   `apple_bm_enabled_and_configured` stays on each tenant row: only the tenant that added the token
   ever sees it, and the instance row (read by unpinned work such as the DEP sync) gets it only when
-  a Fleet restart recomputes it. The OTA enrollment profile takes the server
-  URL and org name from the instance row, so `server_settings.server_url` there must be the
-  instance's public MDM address.
+  a Fleet restart recomputes it. The OTA enrollment profile, the SCEP URL, the
+  Android signup callback and Pub/Sub push URLs and the APNs CSR all take the server URL or org
+  name from the instance row; set them with `FLEET_OPENFRAME_INSTANCE_SERVER_URL` and
+  `FLEET_OPENFRAME_INSTANCE_ORG_NAME` (see "Helm / config wiring"). A non-empty
+  `mdm.apple_server_url` on the instance row still takes precedence for Apple MDM.
 - **Any tenant can obtain a device identity for the shared SCEP CA** — the SCEP challenge is
   instance-wide and is embedded in every tenant's OTA profile, and nanomdm accepts an Authenticate
   with any new certificate (`nano_cert_auth_associations` keeps the real device's certificate as

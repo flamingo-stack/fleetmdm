@@ -31,3 +31,10 @@ func openframeAndroidReenrollAsNewHost(hostTeamID, secretTeamID *uint, shared bo
 	}
 	return *hostTeamID != *secretTeamID
 }
+
+func openframeInstanceConfigContext(ctx context.Context) context.Context {
+	if openframeSharedMode(ctx) {
+		return fleet.NewOpenframeInstanceConfigContext(ctx)
+	}
+	return ctx
+}

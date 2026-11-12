@@ -3,10 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"strings"
 	"testing"
 
+	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/contexts/viewer"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm/android"
+	android_mock "github.com/fleetdm/fleet/v4/server/mdm/android/mock"
 	common_mysql "github.com/fleetdm/fleet/v4/server/platform/mysql"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/androidmanagement/v1"
@@ -172,5 +177,48 @@ func TestOpenframeAndroidReenrollIntoAnotherTenant(t *testing.T) {
 		require.False(t, got.newHostInvoked)
 		require.True(t, got.updateInvoked)
 		require.Equal(t, new(tenantA), got.movedHostTeamID)
+	})
+}
+
+func TestOpenframeEnterpriseSignupUsesInstanceConfig(t *testing.T) {
+	run := func(t *testing.T, shared bool) (signupServerURL string, instanceRead bool) {
+		androidAPIClient := android_mock.Client{}
+		androidAPIClient.InitCommonMocks()
+		androidAPIClient.SignupURLsCreateFunc = func(ctx context.Context, serverURL, callbackURL string) (*android.SignupDetails, error) {
+			signupServerURL = serverURL
+			require.True(t, strings.HasPrefix(callbackURL, serverURL+"/api/v1/fleet/android_enterprise/connect/"))
+			return &android.SignupDetails{Url: "https://signup.example.com", Name: "signup"}, nil
+		}
+		mockDS := InitCommonDSMocks()
+		mockDS.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) {
+			cfg := &fleet.AppConfig{}
+			if fleet.OpenframeInstanceConfigFromContext(ctx) {
+				instanceRead = true
+				cfg.ServerSettings.ServerURL = "https://mdm.example.com"
+			} else {
+				cfg.ServerSettings.ServerURL = "https://tenant.example.com"
+			}
+			return cfg, nil
+		}
+		svc, err := NewServiceWithClient(slog.New(slog.DiscardHandler), mockDS, &androidAPIClient, "test-private-key", &mockDS.DataStore, noopNewActivity, config.AndroidAgentConfig{})
+		require.NoError(t, err)
+
+		ctx := viewer.NewContext(context.Background(), viewer.Viewer{User: &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}})
+		ctx = context.WithValue(ctx, openframeSharedModeCtxKey{}, shared)
+		_, err = svc.EnterpriseSignup(ctx)
+		require.NoError(t, err)
+		return signupServerURL, instanceRead
+	}
+
+	t.Run("shared mode signs up with the instance row's URL", func(t *testing.T) {
+		serverURL, instanceRead := run(t, true)
+		require.True(t, instanceRead)
+		require.Equal(t, "https://mdm.example.com", serverURL)
+	})
+
+	t.Run("upstream signs up with the request's config", func(t *testing.T) {
+		serverURL, instanceRead := run(t, false)
+		require.False(t, instanceRead)
+		require.Equal(t, "https://tenant.example.com", serverURL)
 	})
 }

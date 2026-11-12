@@ -1104,4 +1104,6 @@ func TestOpenframeCachedAppConfigPerTeam(t *testing.T) {
 
 	// An unpinned ctx uses the historical constant key.
 	require.Equal(t, appConfigKey, openframeAppConfigKey(context.Background()))
+	// So does a pinned ctx that asks for the instance row.
+	require.Equal(t, appConfigKey, openframeAppConfigKey(fleet.NewOpenframeInstanceConfigContext(ctxA)))
 }
