@@ -1,4 +1,5 @@
-{{- if .Values.vulnProcessing.dedicated }}
+{{- /* OPENFRAME(vuln-single-runner): enabled */}}
+{{- if and .Values.vulnProcessing.dedicated .Values.vulnProcessing.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:

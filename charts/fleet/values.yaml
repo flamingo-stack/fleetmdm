@@ -218,6 +218,11 @@ fleet:
 # tries to run.
 vulnProcessing:
   dedicated: false
+  # >>> OPENFRAME(vuln-single-runner): false renders no CronJob, PVC or bind Job while the server keeps its schedule
+  # disabled (dedicated); for releases sharing one database, where another release does the processing.
+  # The command's lock does not serialize them (same owner on every release). openframe/docs/helm-chart.md
+  enabled: true
+  # <<< OPENFRAME(vuln-single-runner)
   schedule: "0 * * * *"
   # >>> OPENFRAME(vuln-persistence): fork-added feed-cache persistence for the vuln cron — openframe/docs/helm-chart.md
   # When true, `schedule` is ignored and the job runs hourly at a minute derived
