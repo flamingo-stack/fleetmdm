@@ -1,4 +1,4 @@
-{{- if and .Values.vulnProcessing.dedicated .Values.vulnProcessing.persistence .Values.vulnProcessing.persistence.enabled (not .Values.vulnProcessing.persistence.existingClaim) }}
+{{- if and .Values.vulnProcessing.dedicated .Values.vulnProcessing.enabled .Values.vulnProcessing.persistence .Values.vulnProcessing.persistence.enabled (not .Values.vulnProcessing.persistence.existingClaim) }}
 # >>> OPENFRAME(vuln-persistence): fork-added PVC caching vulnerability feeds across cron runs — openframe/docs/helm-chart.md
 # ReadWriteOnce is safe here: the CronJob runs with concurrencyPolicy=Forbid, so
 # at most one pod attaches the volume at any time.
