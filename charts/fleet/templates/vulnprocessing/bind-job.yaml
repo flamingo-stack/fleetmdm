@@ -1,4 +1,4 @@
-{{- if and .Values.vulnProcessing.dedicated .Values.vulnProcessing.persistence .Values.vulnProcessing.persistence.enabled .Values.vulnProcessing.persistence.bindJob .Values.vulnProcessing.persistence.bindJob.enabled }}
+{{- if and .Values.vulnProcessing.dedicated .Values.vulnProcessing.enabled .Values.vulnProcessing.persistence .Values.vulnProcessing.persistence.enabled .Values.vulnProcessing.persistence.bindJob .Values.vulnProcessing.persistence.bindJob.enabled }}
 # >>> OPENFRAME(vuln-persistence): fork-added one-shot Job binding the feed PVC at install — openframe/docs/helm-chart.md
 # A WaitForFirstConsumer claim stays Pending until the first cron tick, and Argo CD
 # sync operations gate on its health even with ignore-healthcheck (issue #22940).

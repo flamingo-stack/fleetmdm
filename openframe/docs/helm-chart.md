@@ -213,6 +213,7 @@ intra-wave kind ordering.
 | Deployment annotations | `deploymentAnnotations` | Arbitrary annotations merged onto the Fleet Deployment metadata (e.g. for ArgoCD / reloader). |
 | Additional CA certs | `fleet.additionalCAs.*` | Init-container injection of CA bundles from named ConfigMaps/Secrets, for private PKI. |
 | Dedicated vuln processing | `vulnProcessing.dedicated`, `vulnProcessing.schedule` | When `true`, runs vulnerability processing as a separate CronJob ([vulnprocessing/cronjob.yaml](../../charts/fleet/templates/vulnprocessing/cronjob.yaml)) and disables it in the main deployment. |
+| Single vuln runner | `vulnProcessing.enabled` (default `true`) | `false` with `dedicated: true` renders no CronJob, PVC or bind Job and keeps the server schedule off, so a release on a shared database leaves processing to one other release. Processing is database-wide, and `vuln_processing`'s lock owner is the same string on every release, so parallel CronJobs all run (seen: 3 at once, deadlocks on vulnerability inserts). |
 | Vuln feed persistence | `vulnProcessing.persistence.*`, `vulnProcessing.staggerSchedule`, `vulnProcessing.staggerKey` | See [below](#vulnerability-feed-persistence-vuln-persistence). |
 | Probe split | `fleet.probes.*` | See [below](#probes). |
 
