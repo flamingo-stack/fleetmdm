@@ -25,7 +25,7 @@ func TestParseOpenframeInstanceSettings(t *testing.T) {
 		})
 	}
 
-	for _, raw := range []string{"mdm.example.com", "ftp://mdm.example.com", "https://", "https://mdm.example.com?x=1", "https://mdm.example.com#a", "https://u:p@mdm.example.com", "https://mdm example.com"} {
+	for _, raw := range []string{"mdm.example.com", "ftp://mdm.example.com", "https://", "https://mdm.example.com?x=1", "https://mdm.example.com?", "https://mdm.example.com#a", "https://mdm.example.com#", "https://mdm.example.com/?", "https://u:p@mdm.example.com", "https://mdm example.com"} {
 		t.Run("rejects "+raw, func(t *testing.T) {
 			_, err := parseOpenframeInstanceSettings(raw, "")
 			require.ErrorContains(t, err, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")

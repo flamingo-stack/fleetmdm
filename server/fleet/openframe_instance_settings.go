@@ -32,7 +32,7 @@ func parseOpenframeInstanceSettings(rawServerURL, rawOrgName string) (OpenframeI
 	if err != nil {
 		return OpenframeInstanceSettings{}, fmt.Errorf("invalid FLEET_OPENFRAME_INSTANCE_SERVER_URL %q: %w", rawServerURL, err)
 	}
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || strings.ContainsAny(settings.ServerURL, "?#") {
 		return OpenframeInstanceSettings{}, fmt.Errorf("invalid FLEET_OPENFRAME_INSTANCE_SERVER_URL %q: must be an http(s) URL with a host and no query, fragment or credentials", rawServerURL)
 	}
 	return settings, nil

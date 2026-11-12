@@ -219,7 +219,10 @@ Shared mode also reads two optional envs at boot (`cmd/fleet/serve.go`, set thro
 (an http(s) URL with a host and no query, fragment or credentials; a trailing slash is dropped),
 and `FLEET_OPENFRAME_INSTANCE_ORG_NAME`. Each set value is written to the instance row
 (`server_settings.server_url`, `org_info.org_name`) in the same boot-time save that recomputes the
-Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot.
+Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot. The
+Android enterprise signup reads the URL from the instance row, so in shared mode it is refused
+(400) while that row has no server URL with a host; before a version with this change reaches an
+environment, check the instance row's `server_settings.server_url` there or set the variable.
 
 ## Backward compatibility
 

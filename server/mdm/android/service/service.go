@@ -162,6 +162,11 @@ func (svc *Service) EnterpriseSignup(ctx context.Context) (*android.SignupDetail
 	if err != nil {
 		return nil, &fleet.BadRequestError{Message: "parsing Fleet server URL: " + err.Error(), InternalErr: err}
 	}
+	// >>> OPENFRAME(mysql-multitenancy): in shared mode the instance row must carry the public address Google calls back — openframe/docs/mysql-multitenancy-feature.md
+	if openframeSharedMode(ctx) && u.Host == "" {
+		return nil, &fleet.BadRequestError{Message: "Android Enterprise cannot be enabled: the instance has no public server URL. Set FLEET_OPENFRAME_INSTANCE_SERVER_URL."}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	if !svc.AllowLocalhostServerURL {
 		host := u.Hostname()
 		if host == "localhost" || host == "127.0.0.1" || host == "::1" {

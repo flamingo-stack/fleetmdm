@@ -222,3 +222,24 @@ func TestOpenframeEnterpriseSignupUsesInstanceConfig(t *testing.T) {
 		require.Equal(t, "https://tenant.example.com", serverURL)
 	})
 }
+
+func TestOpenframeEnterpriseSignupRequiresInstanceServerURL(t *testing.T) {
+	androidAPIClient := android_mock.Client{}
+	androidAPIClient.InitCommonMocks()
+	mockDS := InitCommonDSMocks()
+	mockDS.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) {
+		return &fleet.AppConfig{}, nil
+	}
+	svc, err := NewServiceWithClient(slog.New(slog.DiscardHandler), mockDS, &androidAPIClient, "test-private-key", &mockDS.DataStore, noopNewActivity, config.AndroidAgentConfig{})
+	require.NoError(t, err)
+
+	ctx := viewer.NewContext(context.Background(), viewer.Viewer{User: &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}})
+	ctx = context.WithValue(ctx, openframeSharedModeCtxKey{}, true)
+	_, err = svc.EnterpriseSignup(ctx)
+
+	var badRequest *fleet.BadRequestError
+	require.ErrorAs(t, err, &badRequest)
+	require.Contains(t, badRequest.Message, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")
+	require.False(t, androidAPIClient.SignupURLsCreateFuncInvoked, "nothing is sent to Google")
+	require.False(t, mockDS.CreateEnterpriseFuncInvoked, "no enterprise row is created")
+}
