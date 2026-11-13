@@ -66,7 +66,6 @@ require (
 	github.com/go-ini/ini v1.67.0
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
 	github.com/go-kit/kit v0.12.0
-	github.com/go-kit/log v0.2.1
 	github.com/go-ole/go-ole v1.2.6
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gocarina/gocsv v0.0.0-20220310154401-d4df709ca055
@@ -169,17 +168,17 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.step.sm/crypto v0.77.1
-	golang.org/x/crypto v0.52.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
 	golang.org/x/image v0.38.0
-	golang.org/x/mod v0.35.0
-	golang.org/x/net v0.55.0
+	golang.org/x/mod v0.41.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.35.0
-	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.45.0
-	golang.org/x/term v0.43.0
-	golang.org/x/text v0.37.0
-	golang.org/x/tools v0.44.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
+	golang.org/x/text v0.43.0
+	golang.org/x/tools v0.51.0
 	google.golang.org/api v0.269.0
 	google.golang.org/grpc v1.79.3
 	gopkg.in/guregu/null.v3 v3.5.0
@@ -270,6 +269,7 @@ require (
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
+	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
