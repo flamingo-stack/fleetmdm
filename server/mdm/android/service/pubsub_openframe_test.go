@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -227,6 +228,9 @@ func TestOpenframeEnterpriseSignupRequiresInstanceServerURL(t *testing.T) {
 	androidAPIClient := android_mock.Client{}
 	androidAPIClient.InitCommonMocks()
 	mockDS := InitCommonDSMocks()
+	mockDS.GetEnterpriseFunc = func(ctx context.Context) (*android.Enterprise, error) {
+		return nil, common_mysql.NotFound("enterprise")
+	}
 	mockDS.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) {
 		return &fleet.AppConfig{}, nil
 	}
@@ -242,4 +246,59 @@ func TestOpenframeEnterpriseSignupRequiresInstanceServerURL(t *testing.T) {
 	require.Contains(t, badRequest.Message, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")
 	require.False(t, androidAPIClient.SignupURLsCreateFuncInvoked, "nothing is sent to Google")
 	require.False(t, mockDS.CreateEnterpriseFuncInvoked, "no enterprise row is created")
+}
+
+func TestOpenframeEnterpriseSignupVerifiesWithInstanceServerURL(t *testing.T) {
+	const instanceURL = "https://mdm.example.com"
+
+	run := func(t *testing.T, shared bool, instanceServerURL string) (*android_mock.Client, *AndroidMockDS, error) {
+		androidAPIClient := android_mock.Client{}
+		androidAPIClient.InitCommonMocks()
+		androidAPIClient.EnterprisesListFunc = func(ctx context.Context, serverURL string) ([]*androidmanagement.Enterprise, error) {
+			if serverURL != instanceURL {
+				return nil, nil
+			}
+			return []*androidmanagement.Enterprise{{Name: "enterprises/LC-existing"}}, nil
+		}
+		mockDS := InitCommonDSMocks()
+		mockDS.GetEnterpriseFunc = func(ctx context.Context) (*android.Enterprise, error) {
+			return &android.Enterprise{ID: 1, EnterpriseID: "LC-existing"}, nil
+		}
+		mockDS.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) {
+			cfg := &fleet.AppConfig{}
+			if fleet.OpenframeInstanceConfigFromContext(ctx) {
+				cfg.ServerSettings.ServerURL = instanceServerURL
+				cfg.MDM.AndroidEnabledAndConfigured = true
+			} else {
+				cfg.ServerSettings.ServerURL = "https://tenant.example.com"
+			}
+			return cfg, nil
+		}
+		svc, err := NewServiceWithClient(slog.New(slog.DiscardHandler), mockDS, &androidAPIClient, "test-private-key", &mockDS.DataStore, noopNewActivity, config.AndroidAgentConfig{})
+		require.NoError(t, err)
+
+		ctx := viewer.NewContext(context.Background(), viewer.Viewer{User: &fleet.User{ID: 1, GlobalRole: new(fleet.RoleAdmin)}})
+		ctx = context.WithValue(ctx, openframeSharedModeCtxKey{}, shared)
+		_, err = svc.EnterpriseSignup(ctx)
+		return &androidAPIClient, mockDS, err
+	}
+
+	t.Run("shared mode finds the instance's enterprise and answers 409", func(t *testing.T) {
+		client, mockDS, err := run(t, true, instanceURL)
+		var conflict interface{ Status() int }
+		require.ErrorAs(t, err, &conflict)
+		require.Equal(t, http.StatusConflict, conflict.Status())
+		require.False(t, client.EnterpriseDeleteFuncInvoked, "the enterprise is not deleted at the proxy")
+		require.False(t, mockDS.DeleteAllEnterprisesFuncInvoked, "the enterprise rows are kept")
+		require.False(t, mockDS.BulkSetAndroidHostsUnenrolledFuncInvoked, "no Android host is unenrolled")
+	})
+
+	t.Run("shared mode without an instance URL fails and deletes nothing", func(t *testing.T) {
+		client, mockDS, err := run(t, true, "")
+		require.ErrorContains(t, err, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")
+		require.False(t, client.EnterprisesListFuncInvoked, "the proxy is not asked without an origin")
+		require.False(t, client.EnterpriseDeleteFuncInvoked)
+		require.False(t, mockDS.DeleteAllEnterprisesFuncInvoked)
+		require.False(t, mockDS.BulkSetAndroidHostsUnenrolledFuncInvoked)
+	})
 }

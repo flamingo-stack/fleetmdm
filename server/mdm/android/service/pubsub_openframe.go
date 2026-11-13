@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
@@ -37,4 +38,9 @@ func openframeInstanceConfigContext(ctx context.Context) context.Context {
 		return fleet.NewOpenframeInstanceConfigContext(ctx)
 	}
 	return ctx
+}
+
+func openframeHasHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	return err == nil && u.Host != ""
 }

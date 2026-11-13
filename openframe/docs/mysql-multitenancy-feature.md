@@ -102,8 +102,12 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   The tenant row keeps its own stale copy, which is never read. A pinned request that needs the
   instance row itself marks its context with `fleet.OpenframeInstanceConfigContext` (shared mode
   only): `fleet.OpenframeAppConfigTeamID` then reports it unpinned to the app-config row selection
-  and to the app-config cache key, and to nothing else. The APNs CSR (org name) and the Android
-  signup (enabled flag and callback URL) use it. The marker is for reads only: `SaveAppConfig`
+  and to the app-config cache key, and to nothing else. The APNs CSR (org name), the Android
+  signup (enabled flag and callback URL) and the Android enterprise check
+  (`verifyEnterpriseExistsWithGoogle`, which the signup runs before its 409 check) use it. The
+  proxy finds the enterprise by the URL it was created with, so a check with a tenant row's URL
+  would report the instance's enterprise as deleted and wipe it for every tenant; with no instance
+  URL at all the check fails instead of treating the enterprise as deleted. The marker is for reads only: `SaveAppConfig`
   (and so `NewAppConfig`) refuses a marked context, so a tenant request can never write the
   instance row through it, and the cache never stores a tenant's object under the instance key. `mdm.apple_bm_enabled_and_configured`
   stays on the tenant row. A process-pinned Fleet keeps all flags on its tenant row.
@@ -221,7 +225,9 @@ Shared mode also reads two optional envs at boot (`cmd/fleet/serve.go`, set thro
 (an http(s) URL with a host and no query, fragment or credentials; a trailing slash is dropped),
 and `FLEET_OPENFRAME_INSTANCE_ORG_NAME`. Each set value is written to the instance row
 (`server_settings.server_url`, `org_info.org_name`) in the same boot-time save that recomputes the
-Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot. The
+Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot.
+Every cluster on the shared database writes the same row at boot, so the values must be identical
+on all of them; different values would flip the row on each restart. The
 Android enterprise signup reads the URL from the instance row, so in shared mode it is refused
 (400) while that row has no server URL with a host; before a version with this change reaches an
 environment, check the instance row's `server_settings.server_url` there or set the variable.
