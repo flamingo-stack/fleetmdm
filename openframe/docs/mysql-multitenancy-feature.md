@@ -222,12 +222,18 @@ without touching Fleet's API. Platform side of this pipeline: shared connector r
 
 Shared mode also reads two optional envs at boot (`cmd/fleet/serve.go`, set through the chart's
 `environments` map): `FLEET_OPENFRAME_INSTANCE_SERVER_URL`, the instance's public MDM address
-(an http(s) URL with a host and no query, fragment or credentials; a trailing slash is dropped),
+(an http(s) URL with a valid host and port and no query, fragment, credentials or whitespace; a
+trailing slash is dropped and the scheme and host are lowercased),
 and `FLEET_OPENFRAME_INSTANCE_ORG_NAME`. Each set value is written to the instance row
 (`server_settings.server_url`, `org_info.org_name`) in the same boot-time save that recomputes the
 Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot.
 Every cluster on the shared database writes the same row at boot, so the values must be identical
-on all of them; different values would flip the row on each restart. The
+on all of them; different values would flip the row on each restart. Set the URL before the
+Android enterprise is created and do not change it afterwards: the proxy finds the enterprise by
+the URL it was created with, and the `cleanup_android_enterprise` cron, checking with a new URL,
+would treat it as deleted and wipe it for every tenant. Changing the URL therefore means deleting
+the enterprise and signing up again (and re-enrolling Android and Apple devices, whose profiles
+carry the old address). The
 Android enterprise signup reads the URL from the instance row, so in shared mode it is refused
 (400) while that row has no server URL with a host; before a version with this change reaches an
 environment, check the instance row's `server_settings.server_url` there or set the variable.

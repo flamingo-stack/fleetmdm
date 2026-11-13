@@ -295,7 +295,9 @@ func TestOpenframeEnterpriseSignupVerifiesWithInstanceServerURL(t *testing.T) {
 
 	t.Run("shared mode without an instance URL fails and deletes nothing", func(t *testing.T) {
 		client, mockDS, err := run(t, true, "")
-		require.ErrorContains(t, err, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")
+		var badRequest *fleet.BadRequestError
+		require.ErrorAs(t, err, &badRequest)
+		require.Contains(t, badRequest.Message, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")
 		require.False(t, client.EnterprisesListFuncInvoked, "the proxy is not asked without an origin")
 		require.False(t, client.EnterpriseDeleteFuncInvoked)
 		require.False(t, mockDS.DeleteAllEnterprisesFuncInvoked)

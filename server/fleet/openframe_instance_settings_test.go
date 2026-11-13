@@ -16,6 +16,10 @@ func TestParseOpenframeInstanceSettings(t *testing.T) {
 		{"trailing slash and spaces trimmed", " https://mdm.example.com/ ", " Flamingo ", OpenframeInstanceSettings{ServerURL: "https://mdm.example.com", OrgName: "Flamingo"}},
 		{"path prefix kept", "https://example.com/fleet", "", OpenframeInstanceSettings{ServerURL: "https://example.com/fleet"}},
 		{"org name alone", "", "Flamingo", OpenframeInstanceSettings{OrgName: "Flamingo"}},
+		{"scheme and host lowercased", "HTTPS://MDM.Example.com/Fleet", "", OpenframeInstanceSettings{ServerURL: "https://mdm.example.com/Fleet"}},
+		{"explicit port", "https://mdm.example.com:8443", "", OpenframeInstanceSettings{ServerURL: "https://mdm.example.com:8443"}},
+		{"IPv4 host", "http://10.0.0.5:8080", "", OpenframeInstanceSettings{ServerURL: "http://10.0.0.5:8080"}},
+		{"IPv6 host", "https://[2001:db8::1]:8443", "", OpenframeInstanceSettings{ServerURL: "https://[2001:db8::1]:8443"}},
 	}
 	for _, c := range valid {
 		t.Run(c.name, func(t *testing.T) {
@@ -25,7 +29,7 @@ func TestParseOpenframeInstanceSettings(t *testing.T) {
 		})
 	}
 
-	for _, raw := range []string{"mdm.example.com", "ftp://mdm.example.com", "https://", "https://mdm.example.com?x=1", "https://mdm.example.com?", "https://mdm.example.com#a", "https://mdm.example.com#", "https://mdm.example.com/?", "https://u:p@mdm.example.com", "https://mdm example.com"} {
+	for _, raw := range []string{"mdm.example.com", "ftp://mdm.example.com", "https://", "https://mdm.example.com?x=1", "https://mdm.example.com?", "https://mdm.example.com#a", "https://mdm.example.com#", "https://mdm.example.com/?", "https://mdm.example.com/a b", "https://mdm.example.com:99999", "https://mdm.example.com:0", "https://mdm.example.com:", "https://mdm.example.com,evil.com", "https://-mdm.example.com", "https://mdm..example.com", "https://[::ffff:10.0.0.1]", "https://u:p@mdm.example.com", "https://mdm example.com"} {
 		t.Run("rejects "+raw, func(t *testing.T) {
 			_, err := parseOpenframeInstanceSettings(raw, "")
 			require.ErrorContains(t, err, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")

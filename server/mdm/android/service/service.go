@@ -759,7 +759,7 @@ func (svc *Service) verifyEnterpriseExistsWithGoogle(ctx context.Context, enterp
 	}
 	// >>> OPENFRAME(mysql-multitenancy): without the instance's public URL the proxy cannot find the enterprise, so do not treat it as deleted — openframe/docs/mysql-multitenancy-feature.md
 	if openframeSharedMode(ctx) && !openframeHasHost(appConfig.ServerSettings.ServerURL) {
-		return errors.New("verifying enterprise with Google: the instance has no public server URL; set FLEET_OPENFRAME_INSTANCE_SERVER_URL")
+		return &fleet.BadRequestError{Message: "Android Enterprise cannot be verified: the instance has no public server URL. Set FLEET_OPENFRAME_INSTANCE_SERVER_URL."}
 	}
 	// <<< OPENFRAME(mysql-multitenancy)
 
