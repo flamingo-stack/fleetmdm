@@ -103,7 +103,9 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   instance row itself marks its context with `fleet.OpenframeInstanceConfigContext` (shared mode
   only): `fleet.OpenframeAppConfigTeamID` then reports it unpinned to the app-config row selection
   and to the app-config cache key, and to nothing else. The APNs CSR (org name) and the Android
-  signup (enabled flag and callback URL) use it. `mdm.apple_bm_enabled_and_configured`
+  signup (enabled flag and callback URL) use it. The marker is for reads only: `SaveAppConfig`
+  (and so `NewAppConfig`) refuses a marked context, so a tenant request can never write the
+  instance row through it, and the cache never stores a tenant's object under the instance key. `mdm.apple_bm_enabled_and_configured`
   stays on the tenant row. A process-pinned Fleet keeps all flags on its tenant row.
 - **software titles + vulnerabilities** (`software_titles.go`, `vulnerabilities.go`) —
   `ListSoftwareTitles`, `SoftwareTitleByID`, `ListVulnerabilities`, `CountVulnerabilities`,

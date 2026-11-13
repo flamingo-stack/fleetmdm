@@ -225,6 +225,11 @@ func (ds *Datastore) AppConfigUrls(ctx context.Context) (*fleet.AppConfigUrls, e
 }
 
 func (ds *Datastore) SaveAppConfig(ctx context.Context, info *fleet.AppConfig) error {
+	// >>> OPENFRAME(mysql-multitenancy): the instance-config marker is for reads only — openframe/docs/mysql-multitenancy-feature.md
+	if fleet.OpenframeInstanceConfigFromContext(ctx) {
+		return ctxerr.New(ctx, "app config cannot be saved on an instance-config context")
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	return ds.withTx(ctx, func(tx sqlx.ExtContext) error {
 		configBytes, err := json.Marshal(info)
 		if err != nil {
