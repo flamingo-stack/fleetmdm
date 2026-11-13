@@ -152,7 +152,7 @@ func (svc *Service) EnterpriseSignup(ctx context.Context) (*android.SignupDetail
 		}
 	}
 
-	appConfig, err := svc.checkIfAndroidAlreadyConfigured(ctx)
+	appConfig, err := svc.checkIfAndroidAlreadyConfigured(openframeInstanceConfigContext(ctx)) // OPENFRAME(mysql-multitenancy): the enterprise is instance-wide, so are its flag and callback URL
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +162,11 @@ func (svc *Service) EnterpriseSignup(ctx context.Context) (*android.SignupDetail
 	if err != nil {
 		return nil, &fleet.BadRequestError{Message: "parsing Fleet server URL: " + err.Error(), InternalErr: err}
 	}
+	// >>> OPENFRAME(mysql-multitenancy): in shared mode the instance row must carry the public address Google calls back — openframe/docs/mysql-multitenancy-feature.md
+	if openframeSharedMode(ctx) && !openframeHasHost(serverURL) {
+		return nil, &fleet.BadRequestError{Message: "Android Enterprise cannot be enabled: the instance has no public server URL. Set FLEET_OPENFRAME_INSTANCE_SERVER_URL."}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	if !svc.AllowLocalhostServerURL {
 		host := u.Hostname()
 		if host == "localhost" || host == "127.0.0.1" || host == "::1" {
@@ -748,10 +753,15 @@ func (svc *Service) verifyEnterpriseExistsWithGoogle(ctx context.Context, enterp
 	_ = svc.androidAPIClient.SetAuthenticationSecret(secret)
 
 	// Get server URL from app config
-	appConfig, err := svc.ds.AppConfig(ctx)
+	appConfig, err := svc.ds.AppConfig(openframeInstanceConfigContext(ctx)) // OPENFRAME(mysql-multitenancy): the proxy finds the enterprise by the instance's URL
 	if err != nil {
 		return ctxerr.Wrap(ctx, err, "getting app config")
 	}
+	// >>> OPENFRAME(mysql-multitenancy): without the instance's public URL the proxy cannot find the enterprise, so do not treat it as deleted — openframe/docs/mysql-multitenancy-feature.md
+	if openframeSharedMode(ctx) && !openframeHasHost(appConfig.ServerSettings.ServerURL) {
+		return &fleet.BadRequestError{Message: "Android Enterprise cannot be verified: the instance has no public server URL. Set FLEET_OPENFRAME_INSTANCE_SERVER_URL."}
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	// Use LIST API as primary verification method
 	enterprises, err := svc.androidAPIClient.EnterprisesList(ctx, appConfig.ServerSettings.ServerURL)

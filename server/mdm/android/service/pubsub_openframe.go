@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
@@ -30,4 +31,16 @@ func openframeAndroidReenrollAsNewHost(hostTeamID, secretTeamID *uint, shared bo
 		return hostTeamID != secretTeamID
 	}
 	return *hostTeamID != *secretTeamID
+}
+
+func openframeInstanceConfigContext(ctx context.Context) context.Context {
+	if openframeSharedMode(ctx) {
+		return fleet.NewOpenframeInstanceConfigContext(ctx)
+	}
+	return ctx
+}
+
+func openframeHasHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	return err == nil && u.Host != ""
 }
