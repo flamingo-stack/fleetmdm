@@ -2,9 +2,13 @@
 package osquery_utils
 
 import (
+	"context"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	"github.com/fleetdm/fleet/v4/server/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,10 +27,35 @@ func TestSoftwareHomebrewCasks_conditionIsTheReverseOfSoftwareMacOS(t *testing.T
 	require.Contains(t, softwareMacOS.Query, "WHERE type = 'cask'\nAND NOT "+appOfTheCask)
 }
 
-// the rows go through the regular software ingestion: a cask becomes a software row with its own source
-func TestSoftwareHomebrewCasks_rowIsSoftware(t *testing.T) {
-	s, err := fleet.SoftwareFromOsqueryRow("slack", "4.41.105", "homebrew_casks", "", "", "", "", "", "", "", "", "")
+// the software ingestion keeps a cask row whole: its own source, and the cask's folder as the installed path
+func TestSoftwareHomebrewCasks_rowIngestedWithItsSourceAndPath(t *testing.T) {
+	ds := new(mock.Store)
+	host := fleet.Host{ID: 1, Platform: "darwin"}
+	rows := []map[string]string{
+		{"name": "Slack.app", "version": "4.41.105", "source": "apps", "bundle_identifier": "com.tinyspeck.slackmacgap", "installed_path": "/Applications/Slack.app"},
+		{"name": "slack", "version": "4.41.105", "source": "homebrew_casks", "installed_path": "/opt/homebrew/Caskroom/slack/4.41.105"},
+	}
+	var ingested []fleet.Software
+	ds.UpdateHostSoftwareFunc = func(ctx context.Context, hostID uint, software []fleet.Software) (*fleet.UpdateHostSoftwareDBResult, error) {
+		ingested = software
+		return nil, nil
+	}
+	var paths []string
+	ds.UpdateHostSoftwareInstalledPathsFunc = func(ctx context.Context, hostID uint, sPaths map[string]struct{}, result *fleet.UpdateHostSoftwareDBResult) error {
+		for path := range sPaths {
+			paths = append(paths, path)
+		}
+		return nil
+	}
+
+	err := directIngestSoftware(t.Context(), slog.New(slog.DiscardHandler), &host, ds, rows)
+
 	require.NoError(t, err)
-	require.Equal(t, "slack", s.Name)
-	require.Equal(t, "homebrew_casks", s.Source)
+	require.Len(t, ingested, 2)
+	require.Equal(t, "slack", ingested[1].Name)
+	require.Equal(t, "homebrew_casks", ingested[1].Source)
+	require.Equal(t, "4.41.105", ingested[1].Version)
+	require.Len(t, paths, 2)
+	caskPath := "/opt/homebrew/Caskroom/slack/4.41.105" + fleet.SoftwareFieldSeparator
+	require.Contains(t, strings.Join(paths, "\n"), caskPath)
 }
