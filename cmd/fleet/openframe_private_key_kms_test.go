@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -12,6 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/server/config"
+	"github.com/fleetdm/fleet/v4/server/datastore/mysql/mysqltest"
+	"github.com/fleetdm/fleet/v4/server/platform/mysql/testing_utils"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/cloudkms/v1"
 	"google.golang.org/api/option"
@@ -20,11 +25,12 @@ import (
 const openframeTestKMSKeyName = "projects/p/locations/l/keyRings/r/cryptoKeys/k"
 
 type openframeFakeKMSServer struct {
-	calls          atomic.Int32
-	failFirst      int32
-	failStatus     int
-	corruptCRC     bool
-	skipVerifyFlag bool
+	calls           atomic.Int32
+	failFirst       int32
+	failStatus      int
+	corruptCRC      bool
+	corruptPlainCRC bool
+	skipVerifyFlag  bool
 }
 
 func (f *openframeFakeKMSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -69,24 +75,33 @@ func (f *openframeFakeKMSServer) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		}
 		pt := slices.Clone(ct[len("wrapped:"):])
 		slices.Reverse(pt)
+		crc := openframeCRC32CValue(pt)
+		if f.corruptPlainCRC {
+			crc++
+		}
 		_ = json.NewEncoder(w).Encode(cloudkms.DecryptResponse{
 			Plaintext:       base64.StdEncoding.EncodeToString(pt),
-			PlaintextCrc32c: openframeCRC32CValue(pt),
+			PlaintextCrc32c: crc,
 		})
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
-func newOpenframeTestCloudKMS(t *testing.T, fake *openframeFakeKMSServer) openframeCloudKMS {
+func openframeFakeKMSOptions(t *testing.T, fake *openframeFakeKMSServer) []option.ClientOption {
 	t.Helper()
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
-	svc, err := cloudkms.NewService(t.Context(),
-		option.WithEndpoint(srv.URL+"/"),
+	return []option.ClientOption{
+		option.WithEndpoint(srv.URL + "/"),
 		option.WithoutAuthentication(),
 		option.WithHTTPClient(srv.Client()),
-	)
+	}
+}
+
+func newOpenframeTestCloudKMS(t *testing.T, fake *openframeFakeKMSServer) openframeCloudKMS {
+	t.Helper()
+	svc, err := cloudkms.NewService(t.Context(), openframeFakeKMSOptions(t, fake)...)
 	require.NoError(t, err)
 	return openframeCloudKMS{svc: svc, maxElapsed: 2 * time.Second}
 }
@@ -135,6 +150,13 @@ func TestOpenframeCloudKMSRejectsUnverifiedResponses(t *testing.T) {
 		require.ErrorContains(t, err, "ciphertext checksum mismatch")
 		require.Greater(t, fake.calls.Load(), int32(1))
 	})
+	t.Run("plaintext checksum", func(t *testing.T) {
+		fake := &openframeFakeKMSServer{corruptPlainCRC: true}
+		kms := newOpenframeTestCloudKMS(t, fake)
+		_, err := kms.Decrypt(t.Context(), openframeTestKMSKeyName, []byte("wrapped:yek"))
+		require.ErrorContains(t, err, "plaintext checksum mismatch")
+		require.Greater(t, fake.calls.Load(), int32(1))
+	})
 	t.Run("request checksums not verified", func(t *testing.T) {
 		fake := &openframeFakeKMSServer{skipVerifyFlag: true}
 		kms := newOpenframeTestCloudKMS(t, fake)
@@ -154,4 +176,48 @@ func TestOpenframeNewServerPrivateKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, raw, 32)
 	require.NotEqual(t, a, b)
+}
+
+func TestOpenframeServerPrivateKeyFromKMS(t *testing.T) {
+	const dbName = "openframe_server_private_key_kms_boot"
+	ds := mysqltest.CreateNamedMySQLDS(t, dbName)
+	logger := slog.New(slog.DiscardHandler)
+
+	cfg := config.FleetConfig{
+		Mysql: config.MysqlConfig{
+			Address:  testing_utils.TestAddress,
+			Username: testing_utils.TestUsername,
+			Password: testing_utils.TestPassword,
+			Database: dbName,
+		},
+		Server: config.ServerConfig{PrivateKeyKMSKey: openframeTestKMSKeyName},
+	}
+	var fatal []error
+	initFatal := func(err error, msg string) { fatal = append(fatal, err) }
+
+	fake := &openframeFakeKMSServer{}
+	kmsOpts := openframeFakeKMSOptions(t, fake)
+
+	first := openframeServerPrivateKeyFromKMS(t.Context(), cfg, logger, initFatal, kmsOpts...)
+	require.Empty(t, fatal)
+	require.Len(t, first, 44)
+
+	var stored struct {
+		KMSKeyName string `db:"kms_key_name"`
+		WrappedKey []byte `db:"wrapped_key"`
+	}
+	mysqltest.ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
+		return sqlx.GetContext(t.Context(), q, &stored, `SELECT kms_key_name, wrapped_key FROM openframe_server_private_key WHERE id = 1`)
+	})
+	require.Equal(t, openframeTestKMSKeyName, stored.KMSKeyName)
+	require.NotContains(t, string(stored.WrappedKey), first)
+
+	second := openframeServerPrivateKeyFromKMS(t.Context(), cfg, logger, initFatal, kmsOpts...)
+	require.Empty(t, fatal)
+	require.Equal(t, first, second)
+
+	cfg.Server.PrivateKeyKMSKey = openframeTestKMSKeyName + "-other"
+	require.Empty(t, openframeServerPrivateKeyFromKMS(t.Context(), cfg, logger, initFatal, kmsOpts...))
+	require.Len(t, fatal, 1)
+	require.ErrorContains(t, fatal[0], "but private_key_kms_key is "+openframeTestKMSKeyName+"-other")
 }
