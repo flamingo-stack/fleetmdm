@@ -51,6 +51,9 @@ type OrbitClient struct {
 	// forceReenroll is armed once 401s have persisted past unauthenticatedReenrollGracePeriod. When set, getNodeKeyOrEnroll
 	// re-enrolls (overwriting the existing key).
 	forceReenroll bool
+	// >>> OPENFRAME(orbit-reenroll-persist): the 401 streak is kept on disk so the grace period spans orbit restarts — openframe/docs/node-key-management.md
+	unauthenticatedStreakLoaded bool
+	// <<< OPENFRAME(orbit-reenroll-persist)
 
 	lastRecordedErrMu sync.Mutex
 	lastRecordedErr   error
@@ -831,6 +834,10 @@ func (oc *OrbitClient) noteUnauthenticated() (reenroll bool, waited time.Duratio
 	oc.reenrollMu.Lock()
 	defer oc.reenrollMu.Unlock()
 	now := time.Now()
+	// >>> OPENFRAME(orbit-reenroll-persist): continue the streak of an earlier orbit run and save changes to it — openframe/docs/node-key-management.md
+	oc.loadUnauthenticatedStreakLocked(now)
+	defer oc.saveUnauthenticatedStreakLocked(oc.unauthenticatedSince, oc.forceReenroll)
+	// <<< OPENFRAME(orbit-reenroll-persist)
 	if oc.unauthenticatedSince.IsZero() {
 		oc.unauthenticatedSince = now
 	}
@@ -846,6 +853,9 @@ func (oc *OrbitClient) noteUnauthenticated() (reenroll bool, waited time.Duratio
 func (oc *OrbitClient) reenrollForced() bool {
 	oc.reenrollMu.Lock()
 	defer oc.reenrollMu.Unlock()
+	// >>> OPENFRAME(orbit-reenroll-persist): a re-enroll armed by an earlier orbit run still applies — openframe/docs/node-key-management.md
+	oc.loadUnauthenticatedStreakLocked(time.Now())
+	// <<< OPENFRAME(orbit-reenroll-persist)
 	return oc.forceReenroll
 }
 
@@ -854,6 +864,9 @@ func (oc *OrbitClient) reenrollForced() bool {
 func (oc *OrbitClient) clearReenrollState() {
 	oc.reenrollMu.Lock()
 	defer oc.reenrollMu.Unlock()
+	// >>> OPENFRAME(orbit-reenroll-persist): drop the saved streak with the in-memory one — openframe/docs/node-key-management.md
+	oc.removeUnauthenticatedStreakLocked()
+	// <<< OPENFRAME(orbit-reenroll-persist)
 	oc.unauthenticatedSince = time.Time{}
 	oc.forceReenroll = false
 }
