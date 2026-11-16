@@ -44,6 +44,7 @@ The agent has its own switch, `--openframe-mode` / `ORBIT_OPENFRAME_MODE`.
 | [api-expose-osquery-host-id.md](api-expose-osquery-host-id.md) | Exposes `osquery_host_id` in the host JSON so the OpenFrame control plane can match agents. |
 | [query-results-ttl-cleanup.md](query-results-ttl-cleanup.md) | Time-based cleanup of `query_results` (keeps the Debezium CDC pipeline alive without unbounded growth). Gated by OpenFrame mode **and** a positive TTL. |
 | [redis-key-prefix.md](redis-key-prefix.md) | Per-tenant Redis key/channel prefix (`FLEET_REDIS_KEY_PREFIX`) so tenants can share one Redis. |
+| [server-private-key-kms.md](server-private-key-kms.md) | Server private key wrapped with Google Cloud KMS and stored in MySQL (`FLEET_SERVER_PRIVATE_KEY_KMS_KEY`) instead of passed in plaintext. |
 
 ## Agent-side (orbit / fleetd)
 

@@ -2355,6 +2355,17 @@ CREATE TABLE `network_interfaces` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `openframe_server_private_key` (
+  `id` tinyint unsigned NOT NULL,
+  `kms_key_name` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `wrapped_key` varbinary(1024) NOT NULL,
+  `created_at` timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ck_openframe_server_private_key_single_row` CHECK ((`id` = 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `operating_system_version_vulnerabilities` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `os_version_id` int unsigned NOT NULL,
