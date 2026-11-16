@@ -239,6 +239,12 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		config.Server.PrivateKey = privateKey
 	}
 
+	// >>> OPENFRAME(server-private-key-kms): server private key wrapped with Cloud KMS and stored in MySQL — openframe/docs/server-private-key-kms.md
+	if config.Server.PrivateKeyKMSKey != "" {
+		config.Server.PrivateKey = openframeServerPrivateKeyFromKMS(cmd.Context(), config, logger, initFatal)
+	}
+	// <<< OPENFRAME(server-private-key-kms)
+
 	config.Server.ValidatePrivateKeyLength(initFatal)
 	if len(config.Server.PrivateKey) > 0 {
 		// Truncate to 32 bytes because AES-256 requires a 32 byte (256 bit) PK;

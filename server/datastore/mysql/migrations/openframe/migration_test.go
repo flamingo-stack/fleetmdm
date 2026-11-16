@@ -31,6 +31,7 @@ func TestAllOpenframeMigrationsRegistered(t *testing.T) {
 		20260831000001, // SeedGlobalAppConfigRow
 		20261105000001, // AddHostSoftwareWindowsDetailsTable
 		20261111000001, // AddHostSoftwareWindowsDetailsWingetId
+		20261116000001, // AddServerPrivateKeyTable
 	}
 
 	var got []int64
