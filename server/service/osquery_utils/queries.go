@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/fleetdm/fleet/v4/pkg/str"
 	"github.com/fleetdm/fleet/v4/server/config"
@@ -1754,10 +1755,20 @@ func processProgramFilesScan(mainSoftwareResults, fileScanResults []map[string]s
 		`\program files (x86)\`: {},
 	}
 	knownPaths := make(map[string]struct{})
+	// >>> OPENFRAME(program-files-scan-duplicates): also match by folder name — upstream fleetdm/fleet#59098
+	// Many programs entries have no install_location, so their executables are also matched by
+	// folder name: "C:\Program Files\7-Zip\7z.exe" belongs to "7-Zip 26.06 (x64 edition)".
+	knownNames := make(map[string]struct{})
+	// <<< OPENFRAME(program-files-scan-duplicates)
 	for _, row := range mainSoftwareResults {
 		if row["source"] != "programs" {
 			continue
 		}
+		// >>> OPENFRAME(program-files-scan-duplicates)
+		if name := programFolderName(row["name"]); name != "" {
+			knownNames[name] = struct{}{}
+		}
+		// <<< OPENFRAME(program-files-scan-duplicates)
 		p := normalizeWindowsDir(row["installed_path"])
 		if p == "" {
 			continue
@@ -1777,6 +1788,12 @@ func processProgramFilesScan(mainSoftwareResults, fileScanResults []map[string]s
 			continue
 		}
 
+		// >>> OPENFRAME(program-files-scan-duplicates)
+		if skipProgramFilesScanExe(exePath) {
+			continue
+		}
+		// <<< OPENFRAME(program-files-scan-duplicates)
+
 		// Extract and normalize the directory containing the exe.
 		exeDir := normalizeWindowsDir(windowsDirname(exePath))
 
@@ -1790,6 +1807,16 @@ func processProgramFilesScan(mainSoftwareResults, fileScanResults []map[string]s
 				break
 			}
 		}
+		// >>> OPENFRAME(program-files-scan-duplicates)
+		if !duplicate {
+			for _, dir := range programFilesScanDirs(exePath) {
+				if _, ok := knownNames[programFolderName(dir)]; ok {
+					duplicate = true
+					break
+				}
+			}
+		}
+		// <<< OPENFRAME(program-files-scan-duplicates)
 		if duplicate {
 			continue
 		}
@@ -1817,6 +1844,75 @@ func processProgramFilesScan(mainSoftwareResults, fileScanResults []map[string]s
 
 	return mainSoftwareResults
 }
+
+// >>> OPENFRAME(program-files-scan-duplicates)
+// programFilesWindowsComponentDirs are folders Windows itself installs under Program Files. Their
+// executables are parts of the OS, not applications.
+var programFilesWindowsComponentDirs = map[string]struct{}{
+	"common files":      {},
+	"internet explorer": {},
+	"windows defender":  {},
+	"windows defender advanced threat protection": {},
+	"windows mail":                {},
+	"windows media player":        {},
+	"windows multimedia platform": {},
+	"windows nt":                  {},
+	"windows photo viewer":        {},
+	"windows portable devices":    {},
+	"windows security":            {},
+	"windows sidebar":             {},
+	"windowspowershell":           {},
+}
+
+// skipProgramFilesScanExe reports whether a scanned executable is never an application of its own:
+// uninstallers, and the Windows component folders except MsMpEng.exe, which stands for Windows Defender.
+func skipProgramFilesScanExe(exePath string) bool {
+	path := strings.ToLower(exePath)
+	filename := path[strings.LastIndex(path, `\`)+1:]
+	if strings.HasPrefix(filename, "unins") {
+		return true
+	}
+	if filename == "msmpeng.exe" {
+		return false
+	}
+	dirs := programFilesScanDirs(path)
+	if len(dirs) == 0 {
+		return false
+	}
+	_, ok := programFilesWindowsComponentDirs[dirs[0]]
+	return ok
+}
+
+// programFilesScanDirs returns the folders between Program Files and the executable, outermost first.
+func programFilesScanDirs(exePath string) []string {
+	_, rel, ok := strings.Cut(strings.ToLower(exePath), `\program files\`)
+	if !ok {
+		return nil
+	}
+	parts := strings.Split(rel, `\`)
+	return parts[:len(parts)-1]
+}
+
+// programFolderName reduces a program or folder name to the form both share: lowercase letters and
+// digits, without a trailing version or edition ("7-Zip 26.06 (x64 edition)" and "7-Zip" give "7zip").
+func programFolderName(name string) string {
+	words := strings.Fields(name)
+	for i, word := range words {
+		if i > 0 && (word[0] == '(' || unicode.IsDigit(rune(word[0]))) {
+			words = words[:i]
+			break
+		}
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.Join(words, "")) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// <<< OPENFRAME(program-files-scan-duplicates)
 
 // windowsDirname returns the directory portion of a Windows path (everything before the last backslash).
 func windowsDirname(path string) string {
