@@ -1538,6 +1538,11 @@ func preProcessSoftwareResults(
 	preProcessSoftwareExtraResults(ctx, wingetPackagesExtraQuery, host.ID, results, statuses, messages, osquery_utils.DetailQuery{}, logger)
 	// <<< OPENFRAME(winget-packages)
 
+	// >>> OPENFRAME(homebrew-casks): the casks that have an app join the Mac software rows — openframe/docs/homebrew-casks.md
+	homebrewCasksExtraQuery := hostDetailQueryPrefix + "software_homebrew_casks"
+	preProcessSoftwareExtraResults(ctx, homebrewCasksExtraQuery, host.ID, results, statuses, messages, osquery_utils.DetailQuery{}, logger)
+	// <<< OPENFRAME(homebrew-casks)
+
 	for name, query := range overrides {
 		fullQueryName := hostDetailQueryPrefix + "software_" + name
 		preProcessSoftwareExtraResults(ctx, fullQueryName, host.ID, results, statuses, messages, query, logger)

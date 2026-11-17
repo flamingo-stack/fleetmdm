@@ -3423,6 +3423,9 @@ func GetDetailQueries(
 		// >>> OPENFRAME(winget-packages): the winget_packages software query — openframe/docs/winget-packages.md
 		generatedMap["software_winget_packages"] = softwareWingetPackages
 		// <<< OPENFRAME(winget-packages)
+		// >>> OPENFRAME(homebrew-casks): the casks that have an app — openframe/docs/homebrew-casks.md
+		generatedMap["software_homebrew_casks"] = softwareHomebrewCasks
+		// <<< OPENFRAME(homebrew-casks)
 
 		for key, query := range SoftwareOverrideQueries {
 			generatedMap["software_"+key] = query

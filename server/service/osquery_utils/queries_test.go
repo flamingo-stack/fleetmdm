@@ -588,6 +588,9 @@ func TestGetDetailQueries(t *testing.T) {
 		// >>> OPENFRAME(winget-packages): the winget_packages software query — openframe/docs/winget-packages.md
 		"software_winget_packages",
 		// <<< OPENFRAME(winget-packages)
+		// >>> OPENFRAME(homebrew-casks): the casks that have an app — openframe/docs/homebrew-casks.md
+		"software_homebrew_casks",
+		// <<< OPENFRAME(homebrew-casks)
 	)
 	require.Len(t, queriesWithUsersAndSoftware, len(qs))
 	sortedKeysCompare(t, queriesWithUsersAndSoftware, qs)
