@@ -25,5 +25,6 @@ func TestTranslateSoftwareToCPE_skipsWingetPackages(t *testing.T) {
 
 	require.NotEmpty(t, excluded)
 	require.Contains(t, excluded[0], "winget_packages")
+	require.Contains(t, excluded[0], "homebrew_casks") // OPENFRAME(homebrew-casks)
 	require.Contains(t, excluded[0], "ios_apps")
 }
