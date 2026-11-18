@@ -13,6 +13,10 @@ deploymentAnnotations: {} # Additional annotations to add to the Fleet Deploymen
 podAnnotations: {} # Additional annotations to add to the Fleet pod
 serviceAnnotations: {} # Additional annotations to add to the Fleet service
 serviceAccountAnnotations: {} # Additional annotations to add to the Fleet service account
+# >>> OPENFRAME(helm): fork-added ServiceAccount name (openframe/docs/helm-chart.md)
+serviceAccount:
+  name: fleet # The ServiceAccount every Fleet pod runs as; a Workload Identity grant must name the same one
+# <<< OPENFRAME(helm)
 resources:
   limits:
     cpu: 1 # 1 CPU Core
