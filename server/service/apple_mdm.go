@@ -150,6 +150,12 @@ func (svc *Service) GetMDMAppleCommandResults(ctx context.Context, commandUUID s
 	if err != nil {
 		return nil, err
 	}
+	// >>> OPENFRAME(mysql-multitenancy): only the pinned team's results; a command sent only to another tenant is not found
+	hosts = openframeKeepPinnedTeamHosts(ctx, hosts)
+	if results, err = openframeKeepPinnedTeamCommandResults(ctx, results, hosts); err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "get mdm apple command results")
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	if len(hosts) == 0 {
 		// do not return 404 here, as it's possible for a command to not have
 		// results yet
@@ -1923,6 +1929,9 @@ func (svc *Service) EnqueueMDMAppleCommand(
 	if len(hosts) == 0 {
 		return nil, newNotFoundError()
 	}
+	// >>> OPENFRAME(mysql-multitenancy): enqueue for the pinned team's hosts only, not every uuid the request named
+	deviceIDs = openframePinnedHostUUIDs(ctx, deviceIDs, hosts)
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	// using a padding agnostic decoder because we released this using
 	// base64.RawStdEncoding, but it was causing problems as many standard

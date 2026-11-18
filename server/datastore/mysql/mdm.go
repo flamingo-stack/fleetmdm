@@ -200,6 +200,12 @@ func (ds *Datastore) ListMDMCommands(
 	paginateBranch := func(branch string, params []any) (string, []any, error) {
 		wrapped := fmt.Sprintf("SELECT * FROM (%s) AS branch WHERE ", branch)
 		wrapped += ds.whereFilterHostsByTeams(tmFilter, "branch")
+		// >>> OPENFRAME(mysql-multitenancy): only commands queued for the pinned team's hosts
+		if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+			wrapped += " AND branch.team_id = ?"
+			params = append(params, teamID)
+		}
+		// <<< OPENFRAME(mysql-multitenancy)
 		wrapped, params = addRequestTypeFilter(wrapped, &listOpts.Filters, params)
 		return appendListOptionsWithCursorToSQLSecure(wrapped, params, &innerOpts, mdmCommandsOrderAllowlist)
 	}
@@ -301,6 +307,12 @@ WHERE ` + whereTeam
 
 	var dest []fleet.Host // NOTE: we're using the hosts struct for convenience, but it will not be fully populated
 	args := []any{identifier, identifier, identifier}
+	// >>> OPENFRAME(mysql-multitenancy): another tenant's host is not found, so its commands are not listed
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += " AND h.team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	err := sqlx.SelectContext(ctx, ds.reader(ctx), &dest, stmt, args...)
 	switch {
 	case err != nil:
@@ -3214,6 +3226,12 @@ WHERE ` + whereTeam
 
 	var dest []*fleet.HostMDMIdentifiers
 	args := []any{identifier, identifier, identifier}
+	// >>> OPENFRAME(mysql-multitenancy): another tenant's host is not found
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		stmt += " AND h.team_id = ?"
+		args = append(args, teamID)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	err := sqlx.SelectContext(ctx, ds.reader(ctx), &dest, stmt, args...)
 	switch {
 	case err != nil:
