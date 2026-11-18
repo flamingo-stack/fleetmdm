@@ -8,65 +8,75 @@
 
 ## Overview
 
-Orbit authenticates with the Fleet server using a **node key** — a secret token
-obtained during enrollment. The node key is stored in two places:
+Orbit authenticates with the Fleet server using a **node key**, a secret token
+obtained during enrollment and kept in `secret-orbit-node-key.txt`
+(`constant.OrbitNodeKeyFileName`). `getNodeKeyOrEnroll` in
+[`client/orbit_client.go`](../../client/orbit_client.go) reads the file on every
+authenticated request and enrolls (`POST /api/fleet/orbit/enroll`) when the file
+is missing or empty. A new key is written atomically: a temp file in the same
+directory, renamed over the old one, so an existing key is never truncated or
+deleted before its replacement exists.
 
-- **In-memory cache** (primary) — authoritative while the process is running
-  (`nodeKey` / `nodeKeyMu` in
-  [`server/service/orbit_client.go`](../../server/service/orbit_client.go)).
-- **On-disk file** (`secret-orbit-node-key.txt`,
-  `constant.OrbitNodeKeyFileName`) — persistent cache for surviving restarts.
-
-> Source commit: `fix: enrollment key` (bcb124c0a6). Related logging:
-> `chore: add enrollment logs` (bb39445e45).
-
-## Enrollment flow
-
-1. Check in-memory cache → return if present
-2. Read node key file from disk → cache in memory and return if present
-3. Enroll with Fleet server (`POST /api/fleet/orbit/enroll`) → cache in memory,
-   persist to disk
+The fork's earlier in-memory key cache and `.stale` rename fallback
+(`fix: enrollment key`, bcb124c0a6) are no longer in the code; the atomic write
+above (upstream #47652) covers the interrupted-write case they handled.
 
 ## Re-enrollment (401 handling)
 
-When the server responds with HTTP 401 (`authenticated request got 401,
-invalidating node key`):
+Upstream behaviour (#47652): a 401 on an authenticated request does not drop the
+key.
 
-1. Clear the in-memory node key
-2. Mark the client as unenrolled
-3. Best-effort delete of the on-disk file
-4. Next request triggers a fresh enrollment (step 3 above)
+1. The first 401 starts a streak (`unauthenticatedSince`).
+2. A 401 that arrives once the streak is older than
+   `unauthenticatedReenrollGracePeriod` (45 s) arms a re-enroll
+   (`forceReenroll`). With a host identity certificate, arming also deletes the
+   certificate and restarts orbit.
+3. The next authenticated request sees the armed re-enroll, enrolls and replaces
+   the key.
+4. A successful request or enrollment clears the streak.
 
-## Windows file-lock resilience
+### Fork: the streak survives orbit restarts
 
-On Windows, `secret-orbit-node-key.txt` may become locked by antivirus, ACLs, or
-other processes, preventing deletion or overwriting. The fallback chain (around
-`oc.nodeKeyFilePath + ".stale"` in `orbit_client.go`) handles this:
+Upstream keeps the streak in memory only. A host whose orbit lives shorter than
+the grace period (osqueryd exits about 10 s after start and orbit exits with it)
+started a new streak in every process, so re-enroll never armed and the host
+stayed offline with a rejected key (CU-17tkuw63f94).
 
-1. **Direct overwrite** (`WriteFile` with truncate)
-2. **Rename fallback** — rename the locked file to `.stale`, create a fresh file,
-   clean up
-3. **In-memory only** — if all file operations fail, the key is cached in memory
-   and Orbit continues working. Diagnostic logs are emitted with file/directory
-   stat info and a write-probe result.
+The fork saves the streak next to the node key, in
+`secret-orbit-node-key.txt.unauthenticated`, as `<RFC 3339 start>` or
+`<RFC 3339 start> armed` (`client/orbit_reenroll_openframe.go`, hooks marked
+`OPENFRAME(orbit-reenroll-persist)` in `client/orbit_client.go`):
 
-If Orbit restarts while the file is still locked, it reads the stale key, gets a
-401, and re-enrolls — one extra round-trip per restart until the lock is released.
+- read once per process, on the first streak check;
+- written when a streak starts and when re-enroll arms;
+- deleted when the streak is cleared (a successful request or enrollment).
+
+On a crash-looping host this gives:
+
+| Orbit run | What happens |
+|-----------|--------------|
+| 1 | First 401 starts the streak and saves its start. |
+| 2 (at least 45 s later) | The first 401 is past the grace period: re-enroll arms and is saved as `armed`. |
+| 3 | `getNodeKeyOrEnroll` sees the saved arming and enrolls before the first request. |
+
+Run 2 re-enrolls itself if it makes another authenticated request before it
+exits. A start time in the future or unreadable content is ignored. A 401 at the
+end of one run and another at the start of a run hours later count as one
+streak, so the second 401 arms re-enroll at once. Deleting the Orbit directory
+(the OpenFrame client's Fleet reinstall) deletes the file with the key.
 
 ## Diagnostic logs
 
-When file persistence fails, the following diagnostics are logged at WARN/ERROR
-level (search logs for `node key file diagnostics start`):
-
-- OS, architecture, PID
-- File stat: size, permissions, modification time
-- Directory stat: permissions
-- Write probe: whether a temp file can be created in the same directory
-  (distinguishes "file locked" from "directory not writable")
+- `authenticated request got 401, invalidating node key` (`path`, `has_auth_token`)
+- `orbit received 401 unauthenticated, retrying with existing node key before re-enrolling` (`after` = streak age, counted across restarts)
+- `orbit node key repeatedly rejected with 401, will re-enroll on next request`
+- `orbit node key was rejected by the server, re-enrolling` / `orbit node key file is empty, enrolling` / `orbit node key file not found, enrolling`
+- `read orbit 401 streak file` / `write orbit 401 streak file` / `remove orbit 401 streak file`: the streak file could not be used; orbit goes on with the in-memory streak.
 
 ## Files changed
 
 | File | Purpose |
 |------|---------|
-| `server/service/orbit_client.go` | In-memory + on-disk node key cache, 401 re-enrollment, Windows file-lock fallback, diagnostics |
-| `server/service/base_client.go` | Additional request/enrollment logging |
+| `client/orbit_client.go` | Hooks that load, save and remove the saved streak (`OPENFRAME(orbit-reenroll-persist)`) |
+| `client/orbit_reenroll_openframe.go` | Streak file read, write and delete |
+| `client/orbit_reenroll_openframe_test.go` | Restart, clear-on-success and bad-content tests |
