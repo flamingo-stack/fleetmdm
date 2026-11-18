@@ -19,7 +19,14 @@ rows join the macOS software rows before ingestion, like `go_binaries` and the o
   `auto_updates`) moves on without brew, so the installed version is the one on the `apps` row.
 - No CPE is made for `homebrew_casks` rows: each has an `apps` twin for the same install, which carries the CVEs. A CPE
   for the cask row would count them twice.
-- The upstream query is not changed.
+- A cask has an app when `<cask>/<version>/` holds an entry named `*.app` (Homebrew links or moves the app there).
+  Only that level is listed. The upstream condition walked the cask folder with osquery's recursive `%%` pattern, which
+  follows symlinks: `gcloud-cli` links to the Cloud SDK, so one cask read 48,238 files and matched a stray `.app` deep
+  inside it. Two copies of that walk ran on every Mac's software refresh, in the same batch as live queries, and held
+  them past Fleet's 25 second window ("timeout waiting for results"). The upstream `software_macos` condition is
+  changed to the same bounded form, so the two stay exact opposites (`TestSoftwareHomebrewCasks_*`).
+- The second condition reads `rtrim(file.path, '/')`, not `file.path`: osquery expands every `path LIKE` constraint
+  as a pattern of its own, and returns folders with a trailing slash.
 
 ## Files
 

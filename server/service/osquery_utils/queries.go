@@ -1025,6 +1025,9 @@ var windowsEntraIDDetails = DetailQuery{
 	DirectIngestFunc: directIngestEntraIDDetails,
 }
 
+// OPENFRAME(homebrew-casks): the cask condition lists only <cask>/<version>/ and never walks below it. osquery's
+// recursive pattern follows symlinks, so the upstream walk read whole trees a cask links to (48,238 files for gcloud-cli)
+// on every software refresh; software_homebrew_casks holds the reverse condition, openframe/docs/homebrew-casks.md
 var softwareMacOS = DetailQuery{
 	// Note that we create the cached_users CTE (the WITH clause) in order to suggest to SQLite
 	// that it generates the users once instead of once for each UNIONed query. We use CROSS JOIN to
@@ -1123,7 +1126,7 @@ SELECT
   path AS installed_path
 FROM homebrew_packages
 WHERE type = 'cask'
-AND NOT EXISTS (SELECT 1 FROM file WHERE file.path LIKE CONCAT(homebrew_packages.path, '/%%%%') AND file.path LIKE '%%.app%%' LIMIT 1);
+AND NOT EXISTS (SELECT 1 FROM file WHERE file.path LIKE homebrew_packages.path || '/%%/%%' AND rtrim(file.path, '/') LIKE '%%.app');
 `),
 	Platforms:        []string{"darwin"},
 	DirectIngestFunc: directIngestSoftware,

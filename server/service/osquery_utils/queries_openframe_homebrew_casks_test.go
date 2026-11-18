@@ -20,11 +20,19 @@ func TestSoftwareHomebrewCasks_macOnlyWithItsOwnSource(t *testing.T) {
 
 // a cask must be reported by exactly one of the two queries: this one takes those software_macos refuses
 func TestSoftwareHomebrewCasks_conditionIsTheReverseOfSoftwareMacOS(t *testing.T) {
-	appOfTheCask := "EXISTS (SELECT 1 FROM file WHERE file.path LIKE CONCAT(homebrew_packages.path, '/%%') " +
-		"AND file.path LIKE '%.app%' LIMIT 1)"
+	appOfTheCask := "EXISTS (SELECT 1 FROM file WHERE file.path LIKE homebrew_packages.path || '/%/%' " +
+		"AND rtrim(file.path, '/') LIKE '%.app')"
 
 	require.Contains(t, softwareHomebrewCasks.Query, "WHERE type = 'cask'\nAND "+appOfTheCask)
 	require.Contains(t, softwareMacOS.Query, "WHERE type = 'cask'\nAND NOT "+appOfTheCask)
+}
+
+// a recursive file pattern follows symlinks out of the Caskroom, so neither query may walk below <cask>/<version>/
+func TestSoftwareHomebrewCasks_neverWalksTheCaskFolder(t *testing.T) {
+	for _, query := range []string{softwareHomebrewCasks.Query, softwareMacOS.Query} {
+		require.NotContains(t, query, "%%")
+		require.NotContains(t, query, "'%.app%'")
+	}
 }
 
 // the software ingestion keeps a cask row whole: its own source, and the cask's folder as the installed path
