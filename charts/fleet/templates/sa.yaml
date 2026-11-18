@@ -15,5 +15,7 @@ metadata:
     chart: fleet
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
-  name: fleet
+  # >>> OPENFRAME(helm): serviceAccount.name (openframe/docs/helm-chart.md)
+  name: {{ include "fleet.serviceAccountName" . }}
+  # <<< OPENFRAME(helm)
   namespace: {{ .Release.Namespace }}

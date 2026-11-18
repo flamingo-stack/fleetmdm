@@ -220,7 +220,9 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8}}
       {{- end }}
-      serviceAccountName: fleet
+      # >>> OPENFRAME(helm): serviceAccount.name (openframe/docs/helm-chart.md)
+      serviceAccountName: {{ include "fleet.serviceAccountName" . }}
+      # <<< OPENFRAME(helm)
       volumes:
         # >>> OPENFRAME(hardening): writable /tmp under the read-only rootfs — openframe/docs/helm-chart.md
         - name: tmp

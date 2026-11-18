@@ -642,7 +642,9 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8}}
       {{- end }}
-      serviceAccountName: fleet
+      # >>> OPENFRAME(helm): serviceAccount.name (openframe/docs/helm-chart.md)
+      serviceAccountName: {{ include "fleet.serviceAccountName" . }}
+      # <<< OPENFRAME(helm)
       # >>> OPENFRAME(hardening): unconditional — tmp is always mounted
       volumes:
         # <<< OPENFRAME(hardening)
