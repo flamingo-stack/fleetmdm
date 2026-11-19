@@ -279,3 +279,14 @@ func openframeDeleteTenantChangeIdPLinks(ctx context.Context, tx sqlx.ExtContext
 	}
 	return nil
 }
+
+// OPENFRAME(instance-identity): uuidHostPriority ranks the uuid-mode host below every upstream match
+// in matchHostDuringEnrollment — openframe/docs/enroll-instance-identity.md
+const uuidHostPriority = 4
+
+// OPENFRAME(instance-identity): adoptsUUIDHost reports whether an enrollment may take over the host its
+// device enrolled as by hardware UUID: OpenFrame mode, an instance identifier that differs from the
+// UUID, and not Android, whose hosts upstream matches by UUID on its own path.
+func adoptsUUIDHost(ctx context.Context, osqueryID, uuid, platform string) bool {
+	return fleet.IsOpenframeModeContext(ctx) && osqueryID != "" && uuid != "" && osqueryID != uuid && platform != "android"
+}
