@@ -2447,6 +2447,17 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 		}
 		enrolledHostInfo, err := matchHostDuringEnrollment(ctx, tx, orbitEnroll, isAppleMDMEnabled, hostInfo.OsqueryIdentifier,
 			hostInfo.HardwareUUID, serialToMatch, hostInfo.Platform)
+		// >>> OPENFRAME(instance-identity): another enrollment of the same uuid may have claimed the host since the match — openframe/docs/enroll-instance-identity.md
+		if err == nil && enrolledHostInfo.AdoptsUUIDHost {
+			unclaimed, lockErr := lockUnclaimedUUIDHost(ctx, tx, enrolledHostInfo.ID)
+			if lockErr != nil {
+				return lockErr
+			}
+			if !unclaimed {
+				err = sql.ErrNoRows
+			}
+		}
+		// <<< OPENFRAME(instance-identity)
 
 		// If the osquery identifier that osqueryd will use was not sent by Orbit, then use the hardware UUID as identifier
 		// (using the hardware UUID is Orbit's default behavior).
@@ -2645,6 +2656,17 @@ func (ds *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreE
 
 		var hostID uint
 		enrolledHostInfo, err := matchHostDuringEnrollment(ctx, tx, osqueryEnroll, isAppleMDMEnabled, osqueryHostID, hardwareUUID, hardwareSerial, "")
+		// >>> OPENFRAME(instance-identity): another enrollment of the same uuid may have claimed the host since the match — openframe/docs/enroll-instance-identity.md
+		if err == nil && enrolledHostInfo.AdoptsUUIDHost {
+			unclaimed, lockErr := lockUnclaimedUUIDHost(ctx, tx, enrolledHostInfo.ID)
+			if lockErr != nil {
+				return lockErr
+			}
+			if !unclaimed {
+				err = sql.ErrNoRows
+			}
+		}
+		// <<< OPENFRAME(instance-identity)
 		switch {
 		case err != nil && !errors.Is(err, sql.ErrNoRows):
 			return ctxerr.Wrap(ctx, err, "check existing")

@@ -37,7 +37,10 @@ WHERE uuid = ?
 ORDER BY last_enrolled_at DESC, id DESC LIMIT 1
 ```
 
-That is a host enrolled by hardware UUID that no instance has claimed yet. When it is the match:
+That is a host enrolled by hardware UUID that no instance has claimed yet. When it is the match,
+the enrollment first locks the row (`lockUnclaimedUUIDHost`, `SELECT ... FOR UPDATE`) and checks it
+is still unclaimed; if a device sharing the UUID claimed it in the meantime, the enrollment goes on
+as if nothing matched and creates a new host. Then:
 
 - orbit enrollment updates the host as upstream does, then sets `osquery_host_id` to the instance
   identifier;
@@ -66,14 +69,18 @@ With OpenFrame mode off, enrollment is unchanged. Tests switch the mode with
 [`server/datastore/mysql/hosts_instance_identity_openframe_test.go`](../../server/datastore/mysql/hosts_instance_identity_openframe_test.go)
 (MySQL, `MYSQL_TEST=1`): orbit and osquery enrollment take over the uuid-mode host; a second
 device with the same UUID gets its own host; re-enrolling with the same instance keeps the adopted
-host; another tenant's host is not taken over; without OpenFrame mode an instance identifier gets
+host; another tenant's host is not taken over; two devices sharing a UUID that enroll at once get one
+host each; without OpenFrame mode an instance identifier gets
 a new host, as upstream.
+[`server/fleet/openframe_mode_context_test.go`](../../server/fleet/openframe_mode_context_test.go):
+OpenFrame mode from the env var and from the context.
 
 ## Rebase notes
 
-Two marked blocks in `hosts.go`: the extra `UNION` candidate at the end of
-`matchHostDuringEnrollment` (and `AdoptsUUIDHost` in `enrolledHostInfo`), and the
-`osquery_host_id` update after the existing-host `UPDATE` in `EnrollOrbit`. If upstream reworks the
+Marked blocks in `hosts.go`: the extra `UNION` candidate at the end of
+`matchHostDuringEnrollment` (and `AdoptsUUIDHost` in `enrolledHostInfo`), the row lock right after
+the match in `EnrollOrbit` and `EnrollOsquery`, and the `osquery_host_id` update after the
+existing-host `UPDATE` in `EnrollOrbit`. If upstream reworks the
 match query, keep the candidate last in priority and keep the team filter on it.
 
 ## Upstream

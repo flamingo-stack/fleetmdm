@@ -116,6 +116,36 @@ func TestOpenframeInstanceIdentity(t *testing.T) {
 		require.Equal(t, "uuid-tenant-1", osqueryHostIDOf(t, foreign.ID))
 	})
 
+	t.Run("two devices sharing the uuid that enroll at once get one host each", func(t *testing.T) {
+		existing := uuidModeHost(t, "uuid-race-1", nil)
+		ids := make(chan uint, 2)
+		errs := make(chan error, 2)
+		for _, instance := range []string{"instance-race-a", "instance-race-b"} {
+			go func() {
+				h, err := ds.EnrollOrbit(ctx,
+					fleet.WithEnrollOrbitHostInfo(fleet.OrbitHostInfo{
+						HardwareUUID:      "uuid-race-1",
+						OsqueryIdentifier: instance,
+						Platform:          "windows",
+					}),
+					fleet.WithEnrollOrbitNodeKey("onk-"+instance),
+				)
+				errs <- err
+				if h != nil {
+					ids <- h.ID
+				}
+			}()
+		}
+		require.NoError(t, <-errs)
+		require.NoError(t, <-errs)
+
+		first, second := <-ids, <-ids
+
+		require.NotEqual(t, first, second)
+		require.Contains(t, []uint{first, second}, existing.ID)
+		require.NotEqual(t, osqueryHostIDOf(t, first), osqueryHostIDOf(t, second))
+	})
+
 	t.Run("without OpenFrame mode an instance id gets a new host, as upstream", func(t *testing.T) {
 		existing := uuidModeHost(t, "uuid-upstream-1", nil)
 
