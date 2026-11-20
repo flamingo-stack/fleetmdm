@@ -81,6 +81,24 @@ func NewOpenframeTeamContext(ctx context.Context, teamID uint) context.Context {
 	return context.WithValue(ctx, openframeTeamIDCtxKey{}, teamID)
 }
 
+type openframeModeCtxKey struct{}
+
+// NewOpenframeModeContext turns OpenFrame mode on for one call chain. Production reads
+// FLEET_OPENFRAME_MODE; tests use this, since the MySQL test harness runs in parallel and the env
+// var is process-wide.
+func NewOpenframeModeContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, openframeModeCtxKey{}, true)
+}
+
+// IsOpenframeModeContext reports OpenFrame mode from FLEET_OPENFRAME_MODE or the context.
+func IsOpenframeModeContext(ctx context.Context) bool {
+	if IsOpenframeMode() {
+		return true
+	}
+	on, _ := ctx.Value(openframeModeCtxKey{}).(bool)
+	return on
+}
+
 type OpenframeInstanceMDMFlag string
 
 const (

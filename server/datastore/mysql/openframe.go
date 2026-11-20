@@ -279,3 +279,30 @@ func openframeDeleteTenantChangeIdPLinks(ctx context.Context, tx sqlx.ExtContext
 	}
 	return nil
 }
+
+// OPENFRAME(instance-identity): uuidHostPriority ranks the uuid-mode host below every upstream match
+// in matchHostDuringEnrollment — openframe/docs/enroll-instance-identity.md
+const uuidHostPriority = 4
+
+// OPENFRAME(instance-identity): adoptsUUIDHost reports whether an enrollment may take over the host its
+// device enrolled as by hardware UUID: OpenFrame mode, an instance identifier that differs from the
+// UUID, and not Android, whose hosts upstream matches by UUID on its own path.
+func adoptsUUIDHost(ctx context.Context, osqueryID, uuid, platform string) bool {
+	return fleet.IsOpenframeModeContext(ctx) && osqueryID != "" && uuid != "" && osqueryID != uuid && platform != "android"
+}
+
+// OPENFRAME(instance-identity): lockUnclaimedUUIDHost locks the matched uuid-mode host for the rest of the
+// enrollment transaction and reports whether no instance has claimed it in the meantime, so two
+// devices sharing a UUID that enroll at the same moment cannot both take it over.
+func lockUnclaimedUUIDHost(ctx context.Context, tx sqlx.QueryerContext, hostID uint) (bool, error) {
+	var id uint
+	err := sqlx.GetContext(ctx, tx, &id,
+		`SELECT id FROM hosts WHERE id = ? AND (osquery_host_id IS NULL OR osquery_host_id = '' OR osquery_host_id = uuid) FOR UPDATE`, hostID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, ctxerr.Wrap(ctx, err, "lock uuid host for instance enrollment")
+	}
+	return true, nil
+}
