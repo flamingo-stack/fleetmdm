@@ -140,11 +140,12 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   `GET /api/{v}/fleet/android_enterprise/enrollment_token` (enroll secret) and
   `POST /api/{v}/fleet/android_enterprise/pubsub` (Pub/Sub token). They run unpinned, read the
   instance config row (org name, MDM URL, the Android enabled flag) and put the device into the
-  team of the enroll secret it enrolled with;
-  and the session bootstrap `/api/{v}/fleet/{login,logout,sessions,sso,sso/callback}` (anchored —
-  the admin `/users/{id}/sessions` still needs a tenant), which carry no header and cannot: they
-  are how a caller obtains the token it is afterwards recognised by. Without them a shared-mode
-  Fleet cannot be logged into at all.
+  team of the enroll secret it enrolled with.
+  The same table holds the session bootstrap routes: `POST login`, `POST logout`, `POST sessions`
+  (MFA), `GET`/`POST sso` and `POST sso/callback` under `/api/{v}/fleet/`. They carry no header and
+  cannot: they are how a caller obtains the token it is afterwards recognised by, and without them a
+  shared-mode Fleet cannot be logged into at all. `GET`/`DELETE sessions/{id}` and
+  `/users/{id}/sessions` are admin endpoints and still need a tenant.
 - **Agent plane** — `openframePinHostTeam` pins from the authenticated `host.team_id` in
   `authenticatedHost`/`authenticatedOrbitHost`/`authenticatedDevice` (`endpoint_middleware.go`) and
   the osquery header pre-auth paths (`osquery_header_auth.go`); fail-closed on a team-less host.

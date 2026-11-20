@@ -28,14 +28,6 @@ const openframeTenantHeader = "X-Tenant-Id"
 // cookie is the only place the caller's identity can come from.
 var openframeSessionCookieNames = []string{"__Host-token", "token"}
 
-// openframeSessionBootstrapPath matches the unauthenticated session endpoints a caller must reach
-// before it holds the token the superuser check recognises it by, plus the SSO settings the login
-// page reads before anyone has logged in. None of them read tenant-scoped data: Fleet users and
-// sessions are instance-wide, and the SSO settings come from the instance app config row.
-// Anchored on purpose — /api/{v}/fleet/users/{id}/sessions is an authenticated admin endpoint and
-// must keep requiring a tenant.
-var openframeSessionBootstrapPath = regexp.MustCompile(`^/api/[^/]+/fleet/(login|logout|sessions|sso(/callback)?)$`)
-
 type openframeTeamEnsurer interface {
 	EnsureOpenframeTeamID(ctx context.Context, tenantUUID string) (uint, error)
 }
@@ -75,8 +67,7 @@ func openframeTenantHandler(ds openframeTeamEnsurer, resolveViewer openframeView
 		// authenticated host / enroll secret (openframePinHostTeam, the enrollment pins). The
 		// session endpoints carry none either, and cannot: they are what a caller goes through to
 		// obtain the token it is then recognised by.
-		if openframeTenantExemptPath(r.URL.Path) || openframeTenantExemptRoute(r.Method, r.URL.Path) ||
-			openframeSessionBootstrapPath.MatchString(r.URL.Path) {
+		if openframeTenantExemptPath(r.URL.Path) || openframeTenantExemptRoute(r.Method, r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -156,6 +147,10 @@ func openframeTenantExemptPath(path string) bool {
 //   - GET android_enterprise/enrollment_token: the enroll secret; the token carries it, and the
 //     enrollment Pub/Sub event puts the device into that secret's team.
 //   - POST android_enterprise/pubsub: the Pub/Sub push token.
+//   - POST login, POST logout, POST sessions (MFA), GET and POST sso, POST sso/callback: how a caller
+//     obtains the session it is then recognised by, so they cannot carry a tenant. Fleet users and
+//     sessions are instance-wide and the SSO settings come from the instance config row. GET and
+//     DELETE sessions/{id} are admin endpoints and keep requiring a tenant.
 //
 // The Android enterprise and its enabled flag are per instance, so the unpinned callback and token
 // routes read and write the instance config row. Paths are anchored at both ends: a prefix route
@@ -168,6 +163,12 @@ var openframeTenantExemptRoutes = []struct {
 	{http.MethodGet, regexp.MustCompile(`^/api/[^/]+/fleet/android_enterprise/connect/[^/]+$`)},
 	{http.MethodGet, regexp.MustCompile(`^/api/[^/]+/fleet/android_enterprise/enrollment_token$`)},
 	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/android_enterprise/pubsub$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/login$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/logout$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/sessions$`)},
+	{http.MethodGet, regexp.MustCompile(`^/api/[^/]+/fleet/sso$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/sso$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/[^/]+/fleet/sso/callback$`)},
 }
 
 func openframeTenantExemptRoute(method, path string) bool {

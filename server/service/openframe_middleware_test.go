@@ -399,27 +399,33 @@ func TestOpenframeSuperuserStaysFailClosed(t *testing.T) {
 	})
 }
 
-func TestOpenframeSessionBootstrapPathsNeedNoTenant(t *testing.T) {
+func TestOpenframeSessionBootstrapRoutesNeedNoTenant(t *testing.T) {
 	// Without these a shared-mode Fleet cannot be logged into at all: the login page reads the SSO
 	// settings and posts credentials before anyone holds a token.
-	bootstrap := []string{
-		"/api/v1/fleet/login",
-		"/api/latest/fleet/logout",
-		"/api/v1/fleet/sessions",
-		"/api/v1/fleet/sso",
-		"/api/v1/fleet/sso/callback",
+	exempt := []struct{ method, path string }{
+		{"POST", "/api/v1/fleet/login"},
+		{"POST", "/api/latest/fleet/logout"},
+		{"POST", "/api/v1/fleet/sessions"},
+		{"GET", "/api/v1/fleet/sso"},
+		{"POST", "/api/v1/fleet/sso"},
+		{"POST", "/api/v1/fleet/sso/callback"},
 	}
-	for _, path := range bootstrap {
-		assert.True(t, openframeSessionBootstrapPath.MatchString(path), path)
+	for _, r := range exempt {
+		assert.True(t, openframeTenantExemptRoute(r.method, r.path), "expected exempt: %s %s", r.method, r.path)
 	}
 
-	// Anchored: the admin endpoint that merely ends in /sessions must keep requiring a tenant.
-	pinned := []string{
-		"/api/v1/fleet/users/3/sessions",
-		"/api/latest/fleet/hosts",
-		"/api/v1/fleet/login/extra",
+	// Method and both ends of the path are matched: the admin session endpoints and anything that
+	// merely contains a login path keep requiring a tenant.
+	pinned := []struct{ method, path string }{
+		{"GET", "/api/v1/fleet/login"},
+		{"GET", "/api/v1/fleet/sessions/3"},
+		{"DELETE", "/api/v1/fleet/sessions/3"},
+		{"GET", "/api/v1/fleet/users/3/sessions"},
+		{"POST", "/api/v1/fleet/login/extra"},
+		{"POST", "/api/v1/fleet/results/x/api/v1/fleet/login"},
+		{"DELETE", "/api/v1/fleet/sso"},
 	}
-	for _, path := range pinned {
-		assert.False(t, openframeSessionBootstrapPath.MatchString(path), path)
+	for _, r := range pinned {
+		assert.False(t, openframeTenantExemptRoute(r.method, r.path), "expected NOT exempt: %s %s", r.method, r.path)
 	}
 }
