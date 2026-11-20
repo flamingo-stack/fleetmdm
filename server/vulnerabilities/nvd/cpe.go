@@ -646,6 +646,16 @@ func CPEFromSoftware(ctx context.Context, logger *slog.Logger, db *sqlx.DB, soft
 	}
 	// <<< OPENFRAME(vlc-android-cve-rule)
 
+	// >>> OPENFRAME(adobe-package-placeholder-cves): no CPE for Adobe package placeholders — upstream fleetdm/fleet#59099
+	// Adobe Admin Console deployment packages register an MSI named after the app ("Photoshop",
+	// "AcrobatPro") with the placeholder version 1.0.0000, which stays behind after the app is removed.
+	// The real app registers separately with its real version; matching the placeholder would report
+	// every CVE of the product.
+	if software.Source == "programs" && software.Vendor == "Adobe Systems Incorporated" && software.Version == "1.0.0000" {
+		return "", nil
+	}
+	// <<< OPENFRAME(adobe-package-placeholder-cves)
+
 	mutateSoftware(ctx, software, logger) // tweak e.g. software versions prior to CPE matching if needed
 
 	translation, match, err := translations.Translate(reCache, software)
