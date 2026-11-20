@@ -7,12 +7,18 @@
 - `kubectl` with access to the tenant cluster
 - `jq` for test scripts
 
-## 1. Port-forward MySQL and Redis
+## 1. Bring up MySQL and Redis
+
+The repo ships both, which is the quickest path and keeps you off tenant data:
 
 ```bash
-kubectl -n integrated-tools port-forward fleetmdm-mysql-0 3307:3306 &
-kubectl -n integrated-tools port-forward fleetmdm-redis-0 6380:6379 &
+docker compose up -d mysql redis   # mysql on 127.0.0.1:3306 (fleet/insecure, db "fleet"), redis on 6379
 ```
+
+> A tenant cluster is **not** a substitute. Under shared multi-tenancy Fleet talks to Cloud SQL over
+> private service access and to a managed Redis, both over TLS — neither is a pod, so the
+> `kubectl port-forward fleetmdm-mysql-0` / `fleetmdm-redis-0` that older setups used no longer
+> applies. Reaching them needs a relay pod or the Cloud SQL Auth Proxy.
 
 ## 2. Build Fleet
 
@@ -28,11 +34,11 @@ go build -tags full -o build/fleet ./cmd/fleet
 ## 3. Run database migrations
 
 ```bash
-./build/fleet prepare db \
-  --mysql_address=127.0.0.1:3307 \
-  --mysql_database=fleet-mdm-database \
-  --mysql_username=fleet-mdm-user \
-  --mysql_password=fleet-mdm-password-1234
+./build/fleet prepare db --no-prompt \
+  --mysql_address=127.0.0.1:3306 \
+  --mysql_database=fleet \
+  --mysql_username=fleet \
+  --mysql_password=insecure
 ```
 
 ## 4. Start Fleet
@@ -40,11 +46,11 @@ go build -tags full -o build/fleet ./cmd/fleet
 ```bash
 FLEET_OPENFRAME_MODE=1 ./build/fleet serve \
   --dev \
-  --mysql_address=127.0.0.1:3307 \
-  --mysql_database=fleet-mdm-database \
-  --mysql_username=fleet-mdm-user \
-  --mysql_password=fleet-mdm-password-1234 \
-  --redis_address=127.0.0.1:6380 \
+  --mysql_address=127.0.0.1:3306 \
+  --mysql_database=fleet \
+  --mysql_username=fleet \
+  --mysql_password=insecure \
+  --redis_address=127.0.0.1:6379 \
   --server_address=0.0.0.0:8080 \
   --server_tls=false
 ```
@@ -53,11 +59,58 @@ Fleet UI will be available at `http://localhost:8080/login`.
 
 > **Note:** `FLEET_OPENFRAME_MODE=1` is required for openframe-specific endpoints (policy/query host assignments).
 
+## 5. Reproducing shared multi-tenancy locally
+
+Deployed tenants run in **shared mode**, and none of its fences exist without the flag — so a bug
+that only shows there will not reproduce under the plain `serve` above. Add:
+
+```bash
+FLEET_OPENFRAME_MULTI_TENANCY_ENABLED=true \
+FLEET_OPENFRAME_TENANT_UUID= \
+FLEET_OPENFRAME_SUPERUSER_EMAIL=research@flamingo.cx \
+FLEET_OPENFRAME_SUPERUSER_PASSWORD='Research-pass-123!' \
+FLEET_OPENFRAME_SUPERUSER_ROLE=maintainer \
+FLEET_OPENFRAME_MODE=1 ./build/fleet serve --dev ...
+```
+
+An empty `FLEET_OPENFRAME_TENANT_UUID` is what selects shared mode (a value pins the process to one
+tenant instead); startup confirms it with
+`OpenFrame multitenancy: shared per-request mode (no process pin)`. Every `/api/**` call then needs
+`X-Tenant-Id: <any uuid>` — the team is created on first use — and the quickest sanity check is:
+
+```bash
+curl -o /dev/null -w '%{http_code}\n' http://localhost:8080/api/v1/fleet/results/info               # 401
+curl -o /dev/null -w '%{http_code}\n' -H "X-Tenant-Id: $UUID" http://localhost:8080/api/v1/fleet/results/info  # 200
+```
+
+The `FLEET_OPENFRAME_SUPERUSER_*` variables make Fleet create that account once it is set up and
+let it run unpinned: log in to the UI as it and every tenant's hosts show up — see
+[mysql-multitenancy-feature.md](./mysql-multitenancy-feature.md#superuser-shared-mode-only).
+
+To see hosts from more than one tenant, enroll simulated agents with `cmd/osquery-perf`, one run per
+tenant's enroll secret (`select secret, team_id from enroll_secrets`):
+
+```bash
+go build -o build/osquery-perf ./cmd/osquery-perf
+./build/osquery-perf -server_url http://127.0.0.1:8080 -enroll_secret '<tenant A secret>' -host_count 2 -os_templates windows_11
+./build/osquery-perf -server_url http://127.0.0.1:8080 -enroll_secret '<tenant B secret>' -host_count 2 -host_index_offset 100 -os_templates windows_11
+```
+
+On Apple Silicon the compose MySQL image (`linux/x86_64`) runs emulated and `prepare db` takes
+over half an hour; a native `mysql:8.0.44` with `--platform linux/arm64` does it in minutes.
+
 ## Troubleshooting
 
 ### `--dev` flag overrides MySQL credentials
 
 `applyDevFlags` in `cmd/fleet/main.go` sets default MySQL username/password/database. If your credentials differ from the defaults, pass them explicitly via flags or env vars (`FLEET_MYSQL_USERNAME`, etc.) — the patched version only applies defaults when values are empty.
+
+### Cookies are shared across ports
+
+Cookies ignore the port, so a session from another Fleet on `localhost` (a `kubectl port-forward` of
+a deployed one, say) is sent to the local server too. It will not validate against a different
+database, but it does make "logged in / logged out" confusing. Use a different host (`127.0.0.1`
+vs `localhost`) or a private window to keep them apart.
 
 ### gcloud auth expired
 

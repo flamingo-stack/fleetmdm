@@ -231,6 +231,21 @@ spec:
           - name: FLEET_OPENFRAME_TEAM_ID
             value: {{ .Values.fleet.openframe.multiTenancy.teamId | quote }}
           {{- end }}
+          {{- with .Values.fleet.openframe.multiTenancy.superuser }}
+          {{- if .email }}
+          - name: FLEET_OPENFRAME_SUPERUSER_EMAIL
+            value: {{ .email | quote }}
+          {{- if .role }}
+          - name: FLEET_OPENFRAME_SUPERUSER_ROLE
+            value: {{ .role | quote }}
+          {{- end }}
+          - name: FLEET_OPENFRAME_SUPERUSER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ required "fleet.openframe.multiTenancy.superuser.password.existingSecret is required when superuser.email is set" .password.existingSecret }}
+                key: {{ .password.secretKeyKey }}
+          {{- end }}
+          {{- end }}
           # <<< OPENFRAME(mysql-multitenancy)
           ## END FLEET SECTION
           ## BEGIN MYSQL SECTION

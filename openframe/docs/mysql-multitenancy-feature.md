@@ -140,7 +140,11 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   `GET /api/{v}/fleet/android_enterprise/enrollment_token` (enroll secret) and
   `POST /api/{v}/fleet/android_enterprise/pubsub` (Pub/Sub token). They run unpinned, read the
   instance config row (org name, MDM URL, the Android enabled flag) and put the device into the
-  team of the enroll secret it enrolled with.
+  team of the enroll secret it enrolled with;
+  and the session bootstrap `/api/{v}/fleet/{login,logout,sessions,sso,sso/callback}` (anchored —
+  the admin `/users/{id}/sessions` still needs a tenant), which carry no header and cannot: they
+  are how a caller obtains the token it is afterwards recognised by. Without them a shared-mode
+  Fleet cannot be logged into at all.
 - **Agent plane** — `openframePinHostTeam` pins from the authenticated `host.team_id` in
   `authenticatedHost`/`authenticatedOrbitHost`/`authenticatedDevice` (`endpoint_middleware.go`) and
   the osquery header pre-auth paths (`osquery_header_auth.go`); fail-closed on a team-less host.
@@ -173,9 +177,69 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
 - **Live-query results websocket** (`endpoint_campaigns.go`) — the sockjs handler rebuilds its
   context from `context.Background()`, discarding the middleware-pinned upgrade-request context,
   so it **re-pins from `session.Request().Context()`** (read once — polling transports mutate the
-  session request). Fail closed: in shared mode an unpinned session is rejected. Without the
-  re-pin the whole campaign stream ran unfenced and the `live_query` activity was stamped
-  `team_id NULL`.
+  session request). Fail closed: in shared mode an unpinned session is rejected unless its viewer
+  is a superuser. Without the re-pin the whole campaign stream ran unfenced and the `live_query`
+  activity was stamped `team_id NULL`.
+
+## Superuser (shared mode only)
+
+A shared-mode Fleet can name one research account that runs requests **unpinned** — every tenant
+fence inert — which is what a multi-tenant Fleet UI and a live query across all tenants' devices
+require. Configured by `FLEET_OPENFRAME_SUPERUSER_EMAIL`, `FLEET_OPENFRAME_SUPERUSER_PASSWORD` and
+`FLEET_OPENFRAME_SUPERUSER_ROLE` (chart: `fleet.openframe.multiTenancy.superuser.email`, `.role` and
+`.password.existingSecret`). An empty
+e-mail is the default and means no such caller exists, so shared mode stays fail closed; naming one
+is an explicit per-deployment decision. Use a dedicated address, never `admin@openframe.local`:
+every tenant operates as that user and the gateway holds its token.
+
+**Provisioning** (`cmd/fleet/openframe_superuser.go`). A shared-mode Fleet creates the account in
+the background when it does not exist yet, with a global role. Fleet Free has no `observer_plus`
+(it answers 402 at login), so the role is one of:
+
+| Role | Sees | Runs | Can change |
+|---|---|---|---|
+| `observer` (default) | every team | saved queries marked `observer_can_run` | nothing |
+| `maintainer` | every team | any live query | queries and policies in every tenant |
+
+`admin` is refused, and so is any other value — Fleet does not start. It waits until Fleet is
+set up — Fleet treats a database with any user as set up (`SetupRequired` is `!HasUsers`), so an
+account created first would make the setup that creates `admin@openframe.local` fail — and retries
+every minute until it succeeds. An existing account is left as it is, password and role included, so
+a change made in Fleet survives a restart; to apply a new password or role from configuration,
+delete the user and restart. Replicas racing to create it are fine (the loser sees "already exists"). A provisioning failure is
+logged and never stops Fleet. The same e-mail is the allowlist, so
+the account that exists and the account allowed to run unpinned cannot drift apart.
+
+**What the UI shows on Fleet Free.** Teams are a Premium feature (`/teams` answers 402), so there
+is no team switcher: Hosts lists every tenant's hosts together, each carrying its `team_id`. A saved
+query belongs to one tenant's team, and the agent plane delivers its live query only to that team's
+hosts, so one run reaches one tenant. To reach every tenant at once, a `maintainer` superuser runs
+a query it created itself: created unpinned, it has no team, and it reaches hosts in every team
+while staying invisible to tenants (their query lists, inherited ones included, do not show it).
+
+**Where it is consulted.** On the two gates that would otherwise fail closed — the tenant middleware
+and the campaign stream — and only for a caller already holding a **valid Fleet session**. It widens
+what an authenticated operator may reach, never who may authenticate: no session ⇒ 401 as before,
+and a gateway request that lost its header still 401s, since it carries no superuser session.
+Reached only when the gateway header is absent, so normal tenant traffic never pays for the session
+lookup.
+
+**Session key and Origin.** The key is read from `Authorization: Bearer`, falling back to the UI's
+session cookie (`__Host-token` over HTTPS, `token` otherwise). The fallback is not a convenience: a
+browser can attach **neither** `X-Tenant-Id` nor `Authorization` to a WebSocket upgrade, so on the
+live-query result stream — the only transport Fleet's SockJS endpoint serves, as
+`xhr_streaming`/`xhr_send` are registered GET-only and answer 405 — the cookie is the only identity
+the request can carry. A cookie-authenticated request must be **same-origin**: its `Origin` host
+must equal `X-Forwarded-Host` (when a proxy rewrote `Host`) or `Host`, and a missing `Origin` is
+refused. Otherwise any page on the same site — a sibling subdomain passes `SameSite=Lax` — could open
+the stream with the superuser's cookie.
+
+**Audit.** Every unpinned request is logged with the superuser's e-mail, method and path, and every
+unpinned live-query stream with user id, e-mail and campaign id.
+
+**Exposure.** Unpinned reaches the read-views listed under *Known deferred* across all tenants. The
+account's password is the only key to that view, so serve the Fleet UI where only operators can
+reach it.
 
 Agents send **no tenant header** — tenant identity flows in via the enroll secret and thereafter via
 the host record (node key → host → team). This is by design and stronger than a header.
@@ -268,7 +332,9 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 
 - **Users/sessions, software versions (`/software/versions`), os_versions and activities
   read-views** — unfenced; only matters if the Fleet UI is exposed beyond the gateway allowlist and
-  the OpenFrame api does not read them. Not today.
+  the OpenFrame api does not read them. Not today — except for a configured superuser, which is
+  unpinned by definition and therefore sees these across every tenant. Fence them before naming a
+  superuser on an environment holding customer data.
 - **Custom-label creation while unpinned** → `team_id NULL` → distributed globally. OpenFrame seeds
   only built-ins and targets via host-assignments; pinned label writes are team-scoped.
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are

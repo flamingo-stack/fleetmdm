@@ -233,6 +233,87 @@ func openframeMultitenancyConfigError(multitenancyEnabled bool, teamIDRaw, tenan
 	return nil
 }
 
+// openframeSuperuserEmails caches the research-superuser allowlist. It is the one account named by
+// FLEET_OPENFRAME_SUPERUSER_EMAIL, the same account Fleet provisions at startup
+// (OpenframeSuperuserAccountFromEnv), so the user that exists and the user allowed to run unpinned
+// cannot drift apart. Empty — the default — means the escape hatch does not exist and shared mode
+// stays fail-closed for every caller, so naming a superuser is an explicit decision per deployment.
+var openframeSuperuserEmails = sync.OnceValue(func() map[string]struct{} {
+	return parseOpenframeSuperuserEmails(os.Getenv("FLEET_OPENFRAME_SUPERUSER_EMAIL"))
+})
+
+// OpenframeSuperuserAccount is the research account a shared-mode Fleet provisions for itself.
+type OpenframeSuperuserAccount struct {
+	Email    string
+	Password string
+	Role     string
+}
+
+// openframeSuperuserRoles are the global roles the account may get. Fleet Free has no observer_plus:
+// observer reads every team and runs only saved queries marked observer_can_run; maintainer also
+// runs any live query and can change queries and policies in every tenant. Admin is never offered.
+var openframeSuperuserRoles = map[string]struct{}{
+	RoleObserver:   {},
+	RoleMaintainer: {},
+}
+
+// OpenframeSuperuserAccountFromEnv reads the account from FLEET_OPENFRAME_SUPERUSER_EMAIL,
+// FLEET_OPENFRAME_SUPERUSER_PASSWORD and FLEET_OPENFRAME_SUPERUSER_ROLE (observer when unset). ok is
+// false when no e-mail is configured; err is set for a role outside openframeSuperuserRoles.
+func OpenframeSuperuserAccountFromEnv() (account OpenframeSuperuserAccount, ok bool, err error) {
+	email := normalizeOpenframeEmail(os.Getenv("FLEET_OPENFRAME_SUPERUSER_EMAIL"))
+	if email == "" {
+		return OpenframeSuperuserAccount{}, false, nil
+	}
+	role := strings.TrimSpace(os.Getenv("FLEET_OPENFRAME_SUPERUSER_ROLE"))
+	if role == "" {
+		role = RoleObserver
+	}
+	if _, allowed := openframeSuperuserRoles[role]; !allowed {
+		return OpenframeSuperuserAccount{}, true, fmt.Errorf("FLEET_OPENFRAME_SUPERUSER_ROLE %q: must be %s or %s", role, RoleObserver, RoleMaintainer)
+	}
+	password := os.Getenv("FLEET_OPENFRAME_SUPERUSER_PASSWORD")
+	return OpenframeSuperuserAccount{Email: email, Password: password, Role: role}, true, nil
+}
+
+// parseOpenframeSuperuserEmails parses the allowlist into a lookup set. Pure (no env) so it can
+// be unit-tested directly.
+func parseOpenframeSuperuserEmails(raw string) map[string]struct{} {
+	emails := make(map[string]struct{})
+	for _, entry := range strings.Split(raw, ",") {
+		email := normalizeOpenframeEmail(entry)
+		if email != "" {
+			emails[email] = struct{}{}
+		}
+	}
+	return emails
+}
+
+// IsOpenframeSuperuser reports whether this user may run a shared-mode request UNPINNED, i.e.
+// with every tenant fence inert, which is what reaching all tenants' devices from one live query
+// requires. It is consulted only on the two shared-mode gates that would otherwise fail closed
+// (the tenant middleware and the campaign stream), and only for a caller that already holds a
+// valid Fleet session — so it widens what an authenticated operator may see, never who may
+// authenticate.
+func IsOpenframeSuperuser(email string) bool {
+	return isOpenframeSuperuser(openframeSuperuserEmails(), email)
+}
+
+// isOpenframeSuperuser is the pure decision behind IsOpenframeSuperuser. Separated so the
+// allowlist semantics can be unit-tested without mutating process env / the cached set.
+func isOpenframeSuperuser(allowlist map[string]struct{}, email string) bool {
+	normalized := normalizeOpenframeEmail(email)
+	if normalized == "" {
+		return false
+	}
+	_, ok := allowlist[normalized]
+	return ok
+}
+
+func normalizeOpenframeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // openframeUnsafeAgentOptions are osquery options that replace endpoint/plugin flag values on the
 // agent. Serving them rewrote logger_tls_endpoint on openframe agents and silently dropped every
 // scheduled result and status log - behavioral options (intervals etc.) are safe.
