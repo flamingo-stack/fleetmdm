@@ -1922,7 +1922,10 @@ func (svc *Service) ingestDistributedQuery(
 		// If there are no subscribers, the campaign is "orphaned"
 		// and should be closed so that we don't continue trying to
 		// execute that query when we can't write to any subscriber
-		campaign, err := svc.ds.DistributedQueryCampaign(ctx, uint(campaignID)) //nolint:gosec // dismiss G115
+		// >>> OPENFRAME(mysql-multitenancy): a superuser's campaign has no team; let the pinned host load it — openframe/docs/mysql-multitenancy-feature.md#superuser-shared-mode-only
+		campaignCtx := fleet.NewOpenframeCampaignResultsContext(ctx)
+		// <<< OPENFRAME(mysql-multitenancy)
+		campaign, err := svc.ds.DistributedQueryCampaign(campaignCtx, uint(campaignID)) //nolint:gosec // dismiss G115
 		if err != nil {
 			if err := svc.liveQueryStore.StopQuery(strconv.Itoa(campaignID)); err != nil {
 				return newOsqueryError("stop orphaned campaign after load failure: " + err.Error())

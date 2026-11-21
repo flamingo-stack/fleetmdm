@@ -28,6 +28,9 @@ const openframeTenantHeader = "X-Tenant-Id"
 // cookie is the only place the caller's identity can come from.
 var openframeSessionCookieNames = []string{"__Host-token", "token"}
 
+// openframeSameOriginFetchSite is the Sec-Fetch-Site a browser sends on a request from the same origin.
+const openframeSameOriginFetchSite = "same-origin"
+
 type openframeTeamEnsurer interface {
 	EnsureOpenframeTeamID(ctx context.Context, tenantUUID string) (uint, error)
 }
@@ -222,15 +225,17 @@ func openframeSessionKey(r *http.Request) (sessionKey string, fromCookie bool) {
 	return "", false
 }
 
-// isOpenframeSameOriginRequest guards the cookie fallback against cross-site WebSocket hijacking:
-// a browser attaches the session cookie to a WebSocket upgrade started by any page on the same
-// site, and the SameSite=Lax attribute does not stop a sibling subdomain. A browser always sends
-// Origin on a WebSocket upgrade, so a missing Origin is refused too. The host it is compared with is
-// the one the browser addressed: X-Forwarded-Host when a proxy rewrote Host, otherwise Host.
+// isOpenframeSameOriginRequest guards the cookie fallback against cross-site requests: a browser
+// attaches the session cookie to a request started by any page on the same site, and SameSite=Lax
+// does not stop a sibling subdomain. A WebSocket upgrade always carries Origin, which must name the
+// host the browser addressed (X-Forwarded-Host when a proxy rewrote Host). A same-origin GET carries
+// no Origin, such as SockJS's GET /results/info before the upgrade, so then the browser's own
+// Sec-Fetch-Site must say same-origin; a request with neither is refused.
 func isOpenframeSameOriginRequest(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		return false
+		fetchSite := r.Header.Get("Sec-Fetch-Site")
+		return fetchSite == openframeSameOriginFetchSite
 	}
 	originURL, err := url.Parse(origin)
 	if err != nil || originURL.Host == "" {

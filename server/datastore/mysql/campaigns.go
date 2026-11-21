@@ -68,7 +68,12 @@ func (ds *Datastore) DistributedQueryCampaign(ctx context.Context, id uint) (*fl
 	// (and then stream) another tenant's campaign on the shared DB. No-op when unpinned.
 	// — openframe/docs/mysql-multitenancy-feature.md
 	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
-		sql += ` AND EXISTS (SELECT 1 FROM queries q WHERE q.id = distributed_query_campaigns.query_id AND q.team_id = ?)`
+		if fleet.OpenframeCampaignResultsFromContext(ctx) {
+			// A host reporting results may also answer a superuser's campaign, which has no team.
+			sql += ` AND EXISTS (SELECT 1 FROM queries q WHERE q.id = distributed_query_campaigns.query_id AND (q.team_id = ? OR q.team_id IS NULL))`
+		} else {
+			sql += ` AND EXISTS (SELECT 1 FROM queries q WHERE q.id = distributed_query_campaigns.query_id AND q.team_id = ?)`
+		}
 		args = append(args, teamID)
 	}
 	// <<< OPENFRAME(mysql-multitenancy)

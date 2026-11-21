@@ -105,6 +105,21 @@ func NewOpenframeHostTenantChangeContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, openframeHostTenantChangeCtxKey{}, true)
 }
 
+type openframeCampaignResultsCtxKey struct{}
+
+// NewOpenframeCampaignResultsContext marks a host reporting live-query results. A superuser's
+// campaign belongs to no team, so the host's pinned context could not load it and Fleet would stop
+// the query on every host as orphaned; with this mark the campaign fence also admits campaigns of
+// no team. Only the result ingestion sets it, so a tenant request never reads such a campaign.
+func NewOpenframeCampaignResultsContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, openframeCampaignResultsCtxKey{}, true)
+}
+
+func OpenframeCampaignResultsFromContext(ctx context.Context) bool {
+	results, _ := ctx.Value(openframeCampaignResultsCtxKey{}).(bool)
+	return results
+}
+
 func OpenframeTeamLogValue(teamID *uint) any {
 	if teamID == nil {
 		return "none"

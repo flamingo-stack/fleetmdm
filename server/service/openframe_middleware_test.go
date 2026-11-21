@@ -357,6 +357,26 @@ func TestOpenframeSuperuserCookieNeedsSameOrigin(t *testing.T) {
 		})
 	}
 
+	// A same-origin GET carries no Origin; the browser's Sec-Fetch-Site decides. SockJS's GET
+	// /results/info before the upgrade is such a request.
+	fetchSites := map[string]int{
+		"same-origin": http.StatusOK,
+		"same-site":   http.StatusUnauthorized,
+		"cross-site":  http.StatusUnauthorized,
+		"none":        http.StatusUnauthorized,
+	}
+	for fetchSite, want := range fetchSites {
+		t.Run("no origin, Sec-Fetch-Site "+fetchSite, func(t *testing.T) {
+			h := superuserHandler(t, resolverFor(sessionKey, email), allowOnly(email))
+			req := httptest.NewRequest("GET", "https://fleet.example/api/v1/fleet/results/info", nil)
+			req.Header.Set("Sec-Fetch-Site", fetchSite)
+			req.AddCookie(&http.Cookie{Name: "__Host-token", Value: sessionKey})
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+			assert.Equal(t, want, rr.Code)
+		})
+	}
+
 	// A bearer token is not attached by the browser on its own, so it needs no Origin check.
 	t.Run("bearer token from another origin", func(t *testing.T) {
 		h := superuserHandler(t, resolverFor(sessionKey, email), allowOnly(email))
