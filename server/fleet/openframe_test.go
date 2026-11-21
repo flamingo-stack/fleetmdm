@@ -258,3 +258,82 @@ func TestOpenframeTrimAgentOptions(t *testing.T) {
 		}
 	}
 }
+
+// OPENFRAME(mysql-multitenancy): the research-superuser allowlist. Exercised through the pure
+// parse/decide pair so the cached env read is never involved.
+func TestParseOpenframeSuperuserEmails(t *testing.T) {
+	allowlist := parseOpenframeSuperuserEmails(" Research@Flamingo.CX , ops@flamingo.cx ,, ")
+
+	// Trimmed, lowercased, blanks dropped — an operator pasting a spaced list still gets what
+	// they meant, and a trailing comma does not create a "" entry that matches a missing e-mail.
+	if len(allowlist) != 2 {
+		t.Fatalf("expected 2 entries, got %d: %v", len(allowlist), allowlist)
+	}
+	for _, email := range []string{"research@flamingo.cx", "RESEARCH@FLAMINGO.CX", " ops@flamingo.cx "} {
+		if !isOpenframeSuperuser(allowlist, email) {
+			t.Errorf("expected %q to be recognised", email)
+		}
+	}
+	for _, email := range []string{"", "   ", "someone.else@flamingo.cx", "admin@openframe.local"} {
+		if isOpenframeSuperuser(allowlist, email) {
+			t.Errorf("expected %q NOT to be recognised", email)
+		}
+	}
+}
+
+// The default must be "no such caller exists", so a deployment that never names a superuser keeps
+// shared mode fail closed exactly as before this feature.
+func TestOpenframeSuperuserAllowlistEmptyByDefault(t *testing.T) {
+	for _, raw := range []string{"", "   ", ",", " , "} {
+		allowlist := parseOpenframeSuperuserEmails(raw)
+		if len(allowlist) != 0 {
+			t.Errorf("raw %q: expected empty allowlist, got %v", raw, allowlist)
+		}
+		if isOpenframeSuperuser(allowlist, "research@flamingo.cx") {
+			t.Errorf("raw %q: recognised a caller from an empty allowlist", raw)
+		}
+	}
+}
+
+func TestOpenframeSuperuserAccountFromEnv(t *testing.T) {
+	t.Run("unset", func(t *testing.T) {
+		t.Setenv("FLEET_OPENFRAME_SUPERUSER_EMAIL", "")
+		_, ok, err := OpenframeSuperuserAccountFromEnv()
+		if ok || err != nil {
+			t.Fatalf("no e-mail configured must mean no account, got ok=%v err=%v", ok, err)
+		}
+	})
+
+	t.Run("role defaults to observer", func(t *testing.T) {
+		t.Setenv("FLEET_OPENFRAME_SUPERUSER_EMAIL", "  Research@Flamingo.cx ")
+		t.Setenv("FLEET_OPENFRAME_SUPERUSER_PASSWORD", "secret")
+		t.Setenv("FLEET_OPENFRAME_SUPERUSER_ROLE", "")
+		account, ok, err := OpenframeSuperuserAccountFromEnv()
+		if !ok || err != nil {
+			t.Fatalf("configured e-mail must produce an account, got ok=%v err=%v", ok, err)
+		}
+		want := OpenframeSuperuserAccount{Email: "research@flamingo.cx", Password: "secret", Role: RoleObserver}
+		if account != want {
+			t.Fatalf("got %+v, want %+v", account, want)
+		}
+	})
+
+	t.Run("maintainer", func(t *testing.T) {
+		t.Setenv("FLEET_OPENFRAME_SUPERUSER_EMAIL", "research@flamingo.cx")
+		t.Setenv("FLEET_OPENFRAME_SUPERUSER_ROLE", "maintainer")
+		account, _, err := OpenframeSuperuserAccountFromEnv()
+		if err != nil || account.Role != RoleMaintainer {
+			t.Fatalf("got %+v err=%v", account, err)
+		}
+	})
+
+	for _, role := range []string{"admin", "observer_plus", "root"} {
+		t.Run("refuses "+role, func(t *testing.T) {
+			t.Setenv("FLEET_OPENFRAME_SUPERUSER_EMAIL", "research@flamingo.cx")
+			t.Setenv("FLEET_OPENFRAME_SUPERUSER_ROLE", role)
+			if _, _, err := OpenframeSuperuserAccountFromEnv(); err == nil {
+				t.Fatalf("role %q must be refused", role)
+			}
+		})
+	}
+}

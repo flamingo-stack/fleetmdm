@@ -294,6 +294,14 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 			logger.InfoContext(cmd.Context(), "OpenFrame multitenancy: pinned mode", "tenant_uuid", tenantUUID, "team_id", teamID)
 		} else if fleet.IsOpenframeSharedMode() {
 			logger.InfoContext(cmd.Context(), "OpenFrame multitenancy: shared per-request mode (no process pin)")
+			account, ok, err := fleet.OpenframeSuperuserAccountFromEnv()
+			if err != nil {
+				initFatal(err, "reading OpenFrame superuser settings")
+			}
+			if ok {
+				go provisionOpenframeSuperuser(cmd.Context(), mds, account, config.Auth.SaltKeySize, config.Auth.BcryptCost,
+					openframeSuperuserRetryInterval, logger)
+			}
 		}
 	}
 	// <<< OPENFRAME(mysql-multitenancy)
@@ -780,7 +788,7 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		// non-agent paths without it). Returns apiHandler unchanged unless the process runs in
 		// shared per-request mode. Must come after apiendpoints.Validate, which type-asserts the
 		// raw *mux.Router.
-		apiHandler = service.WithOpenframeTenant(mds, logger, apiHandler)
+		apiHandler = service.WithOpenframeTenant(mds, svc, logger, apiHandler)
 		// <<< OPENFRAME(mysql-multitenancy)
 
 		if serveCSP {
