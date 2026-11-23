@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -329,3 +330,43 @@ func openframeTrimStoredAgentOptions(raw *json.RawMessage) *json.RawMessage {
 	trimmed := json.RawMessage(out)
 	return &trimmed
 }
+
+// OPENFRAME(enroll-machine-identity): minimum time between two orbit takeovers of a host — openframe/docs/enroll-machine-identity.md
+const openframeOrbitEnrollCooldownEnv = "FLEET_OPENFRAME_ORBIT_ENROLL_COOLDOWN"
+
+// OPENFRAME(enroll-machine-identity): ValidateOpenframeOrbitEnrollCooldown fails the boot on an unparsable cooldown.
+func ValidateOpenframeOrbitEnrollCooldown() error {
+	_, err := parseOpenframeOrbitEnrollCooldown(os.Getenv(openframeOrbitEnrollCooldownEnv))
+	return err
+}
+
+// OPENFRAME(enroll-machine-identity): OpenframeOrbitEnrollCooldown is zero when unset, as upstream.
+func OpenframeOrbitEnrollCooldown() time.Duration {
+	cooldown, _ := parseOpenframeOrbitEnrollCooldown(os.Getenv(openframeOrbitEnrollCooldownEnv))
+	return cooldown
+}
+
+func parseOpenframeOrbitEnrollCooldown(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	cooldown, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s=%q: %w", openframeOrbitEnrollCooldownEnv, raw, err)
+	}
+	if cooldown < 0 {
+		return 0, fmt.Errorf("%s=%q: must not be negative", openframeOrbitEnrollCooldownEnv, raw)
+	}
+	return cooldown, nil
+}
+
+// OPENFRAME(enroll-machine-identity): WithEnrollOrbitCooldown sets the takeover cooldown.
+func WithEnrollOrbitCooldown(cooldown time.Duration) DatastoreEnrollOrbitOption {
+	return func(c *DatastoreEnrollOrbitConfig) {
+		c.Cooldown = cooldown
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): the server moves a host to its agent's new identifier — openframe/docs/enroll-machine-identity.md
+const CapabilityOpenframeIdentifierMove Capability = "openframe_identifier_move"

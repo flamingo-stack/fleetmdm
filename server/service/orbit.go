@@ -59,6 +59,9 @@ func enrollOrbitEndpoint(ctx context.Context, request interface{}, svc fleet.Ser
 		// >>> OPENFRAME(agent-openframe-mode): carry osquery's instance id — openframe/docs/agent-openframe-mode.md
 		InstanceID: req.InstanceID,
 		// <<< OPENFRAME(agent-openframe-mode)
+		// >>> OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+		PreviousOrbitNodeKey: req.PreviousOrbitNodeKey,
+		// <<< OPENFRAME(enroll-machine-identity)
 	}, req.EnrollSecret, req.EUAToken)
 	if err != nil {
 		return enrollOrbitResponse{fleet.EnrollOrbitResponse{Err: err}}, nil
@@ -302,6 +305,9 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		fleet.WithEnrollOrbitNodeKey(orbitNodeKey),
 		fleet.WithEnrollOrbitTeamID(secret.TeamID),
 		fleet.WithEnrollOrbitIdentityCert(identityCert),
+		// >>> OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+		fleet.WithEnrollOrbitCooldown(fleet.OpenframeOrbitEnrollCooldown()),
+		// <<< OPENFRAME(enroll-machine-identity)
 	)
 	if err != nil {
 		return "", fleet.OrbitError{Message: "failed to enroll " + err.Error()}

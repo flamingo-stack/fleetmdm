@@ -460,7 +460,8 @@ func orbitAction(c *cli.Context) error {
 		}
 	}
 
-	if hostIdentifier := c.String("host-identifier"); hostIdentifier != "uuid" && hostIdentifier != "instance" {
+	if hostIdentifier := c.String("host-identifier"); hostIdentifier != "uuid" && hostIdentifier != "instance" &&
+		!(c.Bool("openframe-mode") && hostIdentifier == openframeHostIdentifier) { // OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
 		return fmt.Errorf("--host-identifier=%s is not supported, currently supported values are 'uuid' and 'instance'", hostIdentifier)
 	}
 
@@ -906,20 +907,6 @@ func orbitAction(c *cli.Context) error {
 	}
 	// <<< OPENFRAME(agent-openframe-mode)
 
-	// >>> OPENFRAME(agent-openframe-mode): persist the enrolled identifier for `orbit uuid` — openframe/docs/agent-openframe-mode.md
-	if c.Bool("openframe-mode") {
-		enrolledIdentifier := orbitHostInfo.OsqueryIdentifier
-		if enrolledIdentifier == "" {
-			enrolledIdentifier = orbitHostInfo.HardwareUUID
-		}
-		if enrolledIdentifier != "" {
-			if err := writeOsqueryIdentifierFile(c.String("root-dir"), enrolledIdentifier); err != nil {
-				log.Error().Err(err).Msg("write osquery identifier file")
-			}
-		}
-	}
-	// <<< OPENFRAME(agent-openframe-mode)
-
 	var (
 		options []osquery.Option
 		// optionsAfterFlagfile is populated with options that will be set after the '--flagfile' argument
@@ -1268,6 +1255,17 @@ func orbitAction(c *cli.Context) error {
 		return fmt.Errorf("error new orbit client: %w", err)
 	}
 
+	// >>> OPENFRAME(enroll-machine-identity): choose the enrollment identifier, moving the host when it changes; recorded for `orbit uuid` — openframe/docs/enroll-machine-identity.md
+	var enrollIdentity openframeEnrollIdentity
+	if c.Bool("openframe-mode") {
+		machineID := openframe.NewOpenFrameMachineIdProvider().GetMachineId()
+		enrollIdentity = openframeEnrollIdentityFor(c.String("root-dir"), c.String("host-identifier"), machineID,
+			osqueryHostInfo.InstanceID, orbitHostInfo.HardwareUUID, orbitClient)
+		orbitHostInfo.OsqueryIdentifier = enrollIdentity.osqueryIdentifier
+		orbitClient.SetOsqueryIdentifier(enrollIdentity.osqueryIdentifier)
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
+
 	// Set the function that will be called to open the SSO window if an enroll
 	// request returns an "end user authentication required" error.
 	orbitClient.SetOpenSSOWindowFunc(func() error {
@@ -1510,6 +1508,12 @@ func orbitAction(c *cli.Context) error {
 	// These options must go after '--flagfile' to not allow users to change their values
 	// on their flagfiles.
 	hostIdentifier := c.String("host-identifier")
+	// >>> OPENFRAME(enroll-machine-identity): osquery enrolls with the identifier orbit chose — openframe/docs/enroll-machine-identity.md
+	if c.Bool("openframe-mode") {
+		hostIdentifier = enrollIdentity.osqueryHostIdentifier
+		optionsAfterFlagfile = append(optionsAfterFlagfile, osquery.WithFlags(enrollIdentity.osqueryFlags))
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
 	options = append(options, osquery.WithFlags([]string{"--host-identifier", hostIdentifier}))
 	options = append(options, optionsAfterFlagfile...)
 

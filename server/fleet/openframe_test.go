@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseOpenframeTeamID(t *testing.T) {
@@ -257,4 +260,32 @@ func TestOpenframeTrimAgentOptions(t *testing.T) {
 			t.Fatalf("payload without trimmable options must pass through unchanged: %q -> %q", raw, got)
 		}
 	}
+}
+
+// OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+func TestParseOpenframeOrbitEnrollCooldown(t *testing.T) {
+	for raw, want := range map[string]time.Duration{
+		"":      0,
+		"  ":    0,
+		"10m":   10 * time.Minute,
+		" 30s ": 30 * time.Second,
+		"0s":    0,
+	} {
+		got, err := parseOpenframeOrbitEnrollCooldown(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"ten minutes", "10", "-1m"} {
+		_, err := parseOpenframeOrbitEnrollCooldown(raw)
+		require.ErrorContains(t, err, openframeOrbitEnrollCooldownEnv, raw)
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+func TestServerOrbitCapabilitiesIdentifierMove(t *testing.T) {
+	t.Setenv("FLEET_OPENFRAME_MODE", "")
+	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+
+	t.Setenv("FLEET_OPENFRAME_MODE", "1")
+	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
 }

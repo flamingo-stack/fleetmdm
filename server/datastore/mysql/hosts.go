@@ -2279,9 +2279,6 @@ type enrolledHostInfo struct {
 	NodeKeySet bool
 	// Platform is the OS of the host.
 	Platform string
-	// >>> OPENFRAME(instance-identity): the match is a uuid-mode host an instance identifier takes over — openframe/docs/enroll-instance-identity.md
-	AdoptsUUIDHost bool
-	// <<< OPENFRAME(instance-identity)
 }
 
 // Attempts to find the matching host ID by osqueryID, host UUID or serial
@@ -2377,20 +2374,6 @@ func matchHostDuringEnrollment(
 		}
 	}
 
-	// >>> OPENFRAME(instance-identity): an agent enrolling with an instance identifier takes over the host its
-	// device enrolled as by hardware UUID, while no other instance has claimed it — openframe/docs/enroll-instance-identity.md
-	if adoptsUUIDHost(ctx, osqueryID, uuid, platform) {
-		if query.Len() > 0 {
-			_, _ = query.WriteString(" UNION ")
-		}
-		_, _ = query.WriteString(fmt.Sprintf(`(SELECT id, last_enrolled_at, %s IS NOT NULL AS node_key_set, %d priority, platform FROM hosts WHERE uuid = ? AND (osquery_host_id IS NULL OR osquery_host_id = '' OR osquery_host_id = uuid) AND platform <> 'android'%s ORDER BY last_enrolled_at DESC, id DESC LIMIT 1)`, nodeKeyColumn, uuidHostPriority, teamFilter))
-		args = append(args, uuid)
-		if teamFilter != "" {
-			args = append(args, teamArg)
-		}
-	}
-	// <<< OPENFRAME(instance-identity)
-
 	if err := sqlx.SelectContext(ctx, q, &rows, query.String(), args...); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "match host during enrollment")
 	}
@@ -2406,9 +2389,6 @@ func matchHostDuringEnrollment(
 		LastEnrolledAt: rows[0].LastEnrolledAt,
 		NodeKeySet:     rows[0].NodeKeySet,
 		Platform:       rows[0].Platform,
-		// >>> OPENFRAME(instance-identity): openframe/docs/enroll-instance-identity.md
-		AdoptsUUIDHost: rows[0].Priority == uuidHostPriority,
-		// <<< OPENFRAME(instance-identity)
 	}, nil
 }
 
@@ -2445,19 +2425,14 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 			// For Windows, don't match by serial number to retain legacy functionality.
 			serialToMatch = ""
 		}
+		// >>> OPENFRAME(enroll-machine-identity): an agent that still holds the host's node key moves the host to its new identifier — openframe/docs/enroll-machine-identity.md
+		sameAgent, err := ds.openframeMoveHostToIdentifier(ctx, tx, hostInfo)
+		if err != nil {
+			return err
+		}
+		// <<< OPENFRAME(enroll-machine-identity)
 		enrolledHostInfo, err := matchHostDuringEnrollment(ctx, tx, orbitEnroll, isAppleMDMEnabled, hostInfo.OsqueryIdentifier,
 			hostInfo.HardwareUUID, serialToMatch, hostInfo.Platform)
-		// >>> OPENFRAME(instance-identity): another enrollment of the same uuid may have claimed the host since the match — openframe/docs/enroll-instance-identity.md
-		if err == nil && enrolledHostInfo.AdoptsUUIDHost {
-			unclaimed, lockErr := lockUnclaimedUUIDHost(ctx, tx, enrolledHostInfo.ID)
-			if lockErr != nil {
-				return lockErr
-			}
-			if !unclaimed {
-				err = sql.ErrNoRows
-			}
-		}
-		// <<< OPENFRAME(instance-identity)
 
 		// If the osquery identifier that osqueryd will use was not sent by Orbit, then use the hardware UUID as identifier
 		// (using the hardware UUID is Orbit's default behavior).
@@ -2468,6 +2443,13 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 
 		switch {
 		case err == nil:
+			// >>> OPENFRAME(enroll-machine-identity): another agent takes the host over: log it, hold it to the cooldown — openframe/docs/enroll-machine-identity.md
+			if enrolledHostInfo.NodeKeySet && !sameAgent {
+				if err := ds.openframeOrbitTakeover(ctx, enrolledHostInfo, hostInfo, enrollConfig.Cooldown); err != nil {
+					return err
+				}
+			}
+			// <<< OPENFRAME(enroll-machine-identity)
 			if enrolledHostInfo.NodeKeySet {
 				// This means a orbit host already enrolled at this hosts entry.
 				// This can happen if two devices have duplicate hardware identifiers or
@@ -2485,6 +2467,11 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 			}
 
 			refetchRequested := fleet.PlatformSupportsOsquery(enrolledHostInfo.Platform)
+			// >>> OPENFRAME(enroll-machine-identity): the same agent under a new identifier keeps its inventory — openframe/docs/enroll-machine-identity.md
+			if sameAgent {
+				refetchRequested = false
+			}
+			// <<< OPENFRAME(enroll-machine-identity)
 
 			sqlUpdate := `
       UPDATE
@@ -2513,13 +2500,6 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 			if _, err := tx.ExecContext(ctx, sqlUpdate, args...); err != nil {
 				return ctxerr.Wrap(ctx, err, "orbit enroll error updating host details")
 			}
-			// >>> OPENFRAME(instance-identity): the adopted host now answers to the instance identifier — openframe/docs/enroll-instance-identity.md
-			if enrolledHostInfo.AdoptsUUIDHost {
-				if _, err := tx.ExecContext(ctx, `UPDATE hosts SET osquery_host_id = ? WHERE id = ?`, osqueryIdentifier, enrolledHostInfo.ID); err != nil {
-					return ctxerr.Wrap(ctx, err, "orbit enroll error adopting uuid host")
-				}
-			}
-			// <<< OPENFRAME(instance-identity)
 			host.ID = enrolledHostInfo.ID
 
 			// clear any host_mdm_actions following re-enrollment here
@@ -2656,17 +2636,6 @@ func (ds *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreE
 
 		var hostID uint
 		enrolledHostInfo, err := matchHostDuringEnrollment(ctx, tx, osqueryEnroll, isAppleMDMEnabled, osqueryHostID, hardwareUUID, hardwareSerial, "")
-		// >>> OPENFRAME(instance-identity): another enrollment of the same uuid may have claimed the host since the match — openframe/docs/enroll-instance-identity.md
-		if err == nil && enrolledHostInfo.AdoptsUUIDHost {
-			unclaimed, lockErr := lockUnclaimedUUIDHost(ctx, tx, enrolledHostInfo.ID)
-			if lockErr != nil {
-				return lockErr
-			}
-			if !unclaimed {
-				err = sql.ErrNoRows
-			}
-		}
-		// <<< OPENFRAME(instance-identity)
 		switch {
 		case err != nil && !errors.Is(err, sql.ErrNoRows):
 			return ctxerr.Wrap(ctx, err, "check existing")

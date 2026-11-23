@@ -1290,6 +1290,11 @@ WHERE
 }
 
 func (ds *Datastore) UpdateMDMWindowsEnrollmentsHostUUID(ctx context.Context, hostUUID string, mdmDeviceID string) (bool, error) {
+	// >>> OPENFRAME(enroll-machine-identity): machines of one team sharing a hardware UUID get no MDM enrollment rather than each other's host — openframe/docs/enroll-machine-identity.md
+	if err := ds.openframeRefuseSharedHardwareUUID(ctx, ds.writer(ctx), hostUUID); err != nil {
+		return false, err
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
 	// The final clause ensures we only update if the host UUID changes so we can tell the caller as this basically
 	// signals a new MDM enrollment in certain cases, as it is the first time we associate a host with an enrollment
 	stmt := `UPDATE mdm_windows_enrollments SET host_uuid = ? WHERE mdm_device_id = ? AND host_uuid <> ?`

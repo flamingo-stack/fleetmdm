@@ -45,7 +45,7 @@ The agent has its own switch, `--openframe-mode` / `ORBIT_OPENFRAME_MODE`.
 | [query-results-ttl-cleanup.md](query-results-ttl-cleanup.md) | Time-based cleanup of `query_results` (keeps the Debezium CDC pipeline alive without unbounded growth). Gated by OpenFrame mode **and** a positive TTL. |
 | [redis-key-prefix.md](redis-key-prefix.md) | Per-tenant Redis key/channel prefix (`FLEET_REDIS_KEY_PREFIX`) so tenants can share one Redis. |
 | [server-private-key-kms.md](server-private-key-kms.md) | Server private key wrapped with Google Cloud KMS and stored in MySQL (`FLEET_SERVER_PRIVATE_KEY_KMS_KEY`) instead of passed in plaintext. |
-| [enroll-instance-identity.md](enroll-instance-identity.md) | An agent enrolling with `--host-identifier=instance` takes over the host its device enrolled as by hardware UUID instead of getting a new one; a second device sharing that UUID gets its own host. Gated by `FLEET_OPENFRAME_MODE`. |
+| [enroll-machine-identity.md](enroll-machine-identity.md) | One Fleet host per OpenFrame machine: the agent enrolls with the OpenFrame machine id (`--host-identifier=openframe`) and moves its host to it with the node key it held, so machines sharing a hardware UUID stop overwriting each other; takeover cooldown, takeover log for alerting, MDM refused for a UUID shared within a team. |
 
 ## Agent-side (orbit / fleetd)
 

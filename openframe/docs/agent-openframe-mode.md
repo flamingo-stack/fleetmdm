@@ -177,9 +177,10 @@ which leaves `--openframe-secret` and its value out of the logged command.
 prints the host's identifier. In OpenFrame mode it reports the identifier orbit
 enrolled with, not a fresh hardware lookup:
 
-1. On every start, after reading host info from its persistent `osquery.db`,
-   orbit writes the identifier it will enroll with (`OsqueryIdentifier`, else
-   `HardwareUUID`) to `<root-dir>/osquery-identifier.txt` (write + rename).
+1. On every start, once it has chosen the identifier it enrolls with (the
+   machine id, the instance id or the hardware UUID, see
+   [enroll-machine-identity.md](enroll-machine-identity.md)), orbit writes it to
+   `<root-dir>/osquery-identifier.txt` (write + rename).
 2. `orbit uuid --openframe-mode` reads that file, waiting up to 10s for it
    (under the client's 15s agent-id command timeout). If it never appears
    (orbit not started), the command exits non-zero and the client retries.

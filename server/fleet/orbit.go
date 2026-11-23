@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/fleetdm/fleet/v4/ee/pkg/hostidentity/types"
 )
@@ -119,6 +120,9 @@ type OrbitHostInfo struct {
 	// >>> OPENFRAME(agent-openframe-mode): osquery instance id, diagnostics only — openframe/docs/agent-openframe-mode.md
 	InstanceID string
 	// <<< OPENFRAME(agent-openframe-mode)
+	// >>> OPENFRAME(enroll-machine-identity): the node key the agent held before it changed its identifier — openframe/docs/enroll-machine-identity.md
+	PreviousOrbitNodeKey string
+	// <<< OPENFRAME(enroll-machine-identity)
 	// ComputerName is the device's friendly name (optional).
 	ComputerName string
 	// HardwareModel is the device's hardware model. For example: Standard PC (Q35 + ICH9, 2009)
@@ -132,6 +136,9 @@ type DatastoreEnrollOrbitConfig struct {
 	OrbitNodeKey string
 	TeamID       *uint
 	IdentityCert *types.HostIdentityCertificate
+	// >>> OPENFRAME(enroll-machine-identity): minimum time between enrollments that take over a host — openframe/docs/enroll-machine-identity.md
+	Cooldown time.Duration
+	// <<< OPENFRAME(enroll-machine-identity)
 }
 
 // DatastoreEnrollOrbitOption is a functional option for configuring datastore Orbit enrollment
