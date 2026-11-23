@@ -217,7 +217,7 @@ intra-wave kind ordering.
 | Vuln feed persistence | `vulnProcessing.persistence.*`, `vulnProcessing.staggerSchedule`, `vulnProcessing.staggerKey` | See [below](#vulnerability-feed-persistence-vuln-persistence). |
 | Probe split | `fleet.probes.*` | See [below](#probes). |
 | ServiceAccount name | `serviceAccount.name` (default `fleet`) | The ServiceAccount the Deployment, the migration Job, the vuln CronJob and the bind Job run as, and the RoleBinding subject. A Workload Identity grant names it (Cloud KMS for `FLEET_SERVER_PRIVATE_KEY_KMS_KEY`), so the deployer passes one name to both. |
-| Service type | `serviceType` (default empty, ClusterIP) | The Fleet Service's `type`. `LoadBalancer` with the internal-LB `serviceAnnotations` makes the Service itself the internal LB that another cluster dials, so no second Service is needed. Ignored when `gke.ingress.useGKEIngress` makes it a NodePort. |
+| Service type | `serviceType` (default empty, ClusterIP) | The Fleet Service's `type`. `LoadBalancer` with the internal-LB `serviceAnnotations` makes the Service itself the internal LB that another cluster dials, so no second Service is needed. |
 
 ## Probes
 
