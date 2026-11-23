@@ -306,7 +306,7 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		fleet.WithEnrollOrbitTeamID(secret.TeamID),
 		fleet.WithEnrollOrbitIdentityCert(identityCert),
 		// >>> OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
-		fleet.WithEnrollOrbitCooldown(fleet.OpenframeOrbitEnrollCooldown()),
+		fleet.WithEnrollOrbitLiveOwnerWindow(fleet.OpenframeEnrollLiveOwnerWindow()),
 		// <<< OPENFRAME(enroll-machine-identity)
 	)
 	if err != nil {

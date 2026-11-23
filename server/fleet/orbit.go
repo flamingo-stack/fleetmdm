@@ -136,8 +136,8 @@ type DatastoreEnrollOrbitConfig struct {
 	OrbitNodeKey string
 	TeamID       *uint
 	IdentityCert *types.HostIdentityCertificate
-	// >>> OPENFRAME(enroll-machine-identity): minimum time between enrollments that take over a host — openframe/docs/enroll-machine-identity.md
-	Cooldown time.Duration
+	// >>> OPENFRAME(enroll-machine-identity): a host its osquery reported to within this window keeps its owner — openframe/docs/enroll-machine-identity.md
+	LiveOwnerWindow time.Duration
 	// <<< OPENFRAME(enroll-machine-identity)
 }
 

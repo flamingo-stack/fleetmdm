@@ -337,27 +337,55 @@ func (ds *Datastore) openframeMoveHostToIdentifier(ctx context.Context, tx sqlx.
 	return true, nil
 }
 
-// OPENFRAME(enroll-machine-identity): an orbit enrollment over another agent's host is logged and held to the cooldown — openframe/docs/enroll-machine-identity.md
-func (ds *Datastore) openframeOrbitTakeover(ctx context.Context, matched *enrolledHostInfo, hostInfo fleet.OrbitHostInfo, cooldown time.Duration) error {
+// OPENFRAME(enroll-machine-identity): a takeover is logged, and refused when another instance enrolls into a host that answers to its hardware UUID while its owner is live — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeTakeover(ctx context.Context, tx sqlx.QueryerContext, agent string, hostID uint, identifier, hardwareUUID, hostname, instanceID string, window time.Duration) error {
 	if !fleet.IsOpenframeModeContext(ctx) {
 		return nil
 	}
-	identifier := hostInfo.OsqueryIdentifier
 	if identifier == "" {
-		identifier = hostInfo.HardwareUUID
+		identifier = hardwareUUID
 	}
-	refused := cooldown > 0 && time.Since(matched.LastEnrolledAt) < cooldown
-	ds.logger.WarnContext(ctx, "openframe: orbit enrollment takes over a host enrolled by another agent",
-		"host_id", matched.ID,
+	var owner struct {
+		ByUUID     bool   `db:"by_uuid"`
+		Live       bool   `db:"live"`
+		InstanceID string `db:"instance_id"`
+	}
+	if err := sqlx.GetContext(ctx, tx, &owner, `
+		SELECT COALESCE(h.osquery_host_id, '') = h.uuid AS by_uuid,
+			COALESCE(hst.seen_time >= ?, FALSE) AS live,
+			COALESCE(o.instance_id, '') AS instance_id
+		FROM hosts h
+		LEFT JOIN host_seen_times hst ON hst.host_id = h.id
+		LEFT JOIN openframe_host_enroll_owners o ON o.host_id = h.id
+		WHERE h.id = ?`, time.Now().Add(-window), hostID); err != nil {
+		return ctxerr.Wrap(ctx, err, "read the host's owner")
+	}
+	otherInstance := instanceID != "" && owner.InstanceID != "" && instanceID != owner.InstanceID
+	refused := window > 0 && owner.ByUUID && owner.Live && otherInstance
+	ds.logger.WarnContext(ctx, "openframe: "+agent+" enrollment takes over a host enrolled by another agent",
+		"host_id", hostID,
 		"identifier", identifier,
-		"hardware_uuid", hostInfo.HardwareUUID,
-		"hostname", hostInfo.Hostname,
-		"computer_name", hostInfo.ComputerName,
-		"instance_id", hostInfo.InstanceID,
-		"refused_by_cooldown", refused,
+		"hardware_uuid", hardwareUUID,
+		"hostname", hostname,
+		"instance_id", instanceID,
+		"owner_instance_id", owner.InstanceID,
+		"refused_live_owner", refused,
 	)
 	if refused {
-		return backoff.Permanent(ctxerr.Errorf(ctx, "host identified by %s enrolling too often", identifier))
+		return backoff.Permanent(ctxerr.Errorf(ctx, "host identified by %s is enrolled by another live agent", identifier))
+	}
+	return nil
+}
+
+// OPENFRAME(enroll-machine-identity): the instance that enrolled last owns the host — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeRecordEnrollOwner(ctx context.Context, tx sqlx.ExecerContext, hostID uint, instanceID string) error {
+	if !fleet.IsOpenframeModeContext(ctx) || instanceID == "" || hostID == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO openframe_host_enroll_owners (host_id, instance_id) VALUES (?, ?)
+		ON DUPLICATE KEY UPDATE instance_id = VALUES(instance_id)`, hostID, instanceID); err != nil {
+		return ctxerr.Wrap(ctx, err, "record the host's owner")
 	}
 	return nil
 }

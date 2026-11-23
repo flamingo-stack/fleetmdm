@@ -59,7 +59,22 @@ node key. osquery keeps its own node key, so a moved agent does not re-enroll os
 | `previous_orbit_node_key` is the orbit node key of a host with the same hardware UUID (in the pinned team), the new identifier is free | that host takes the new identifier; no refetch, no takeover log |
 | the key belongs to no such host (another machine of a pair took the host over) | upstream: the host the identifier matches, or a new one |
 | the new identifier already belongs to another host | upstream match to that host |
-| an orbit enrollment matches a host another agent enrolled | WARN `openframe: orbit enrollment takes over a host enrolled by another agent`; refused while the host enrolled less than `FLEET_OPENFRAME_ORBIT_ENROLL_COOLDOWN` ago |
+| an orbit or osquery enrollment matches a host another agent enrolled | WARN `openframe: orbit enrollment takes over a host enrolled by another agent` (or `osquery …`); refused when the enrolling instance is not the host's owner, the host still answers to its hardware UUID, and its osquery reported within `FLEET_OPENFRAME_ENROLL_LIVE_OWNER_WINDOW` |
+
+The owner is the osquery instance id (`osquery_info.instance_id`, which orbit sends too) of the last
+agent that enrolled into the host, in `openframe_host_enroll_owners`. The first machine keeps its host
+and a second machine with the same hardware UUID is refused, so a pair stops overwriting each other
+as soon as this image runs, before any agent update:
+
+- the same machine re-enrolling (orbit loses its node key a few times a week on some machines) has
+  the owner's instance id and goes through while its osquery is live;
+- a reinstall has a new instance id and goes through once the old osquery has been quiet for the
+  window (`host_seen_times` is written by osquery only), then owns the host;
+- a host whose owner is not recorded yet (enrolled before this image), or an agent that sends no
+  instance id, is not refused; the next enrollment records the owner;
+- a host already on the machine id is never refused: the agent that presents the machine id is its
+  owner, and refusing it would lock the owner out while the other machine's osquery still holds the
+  old key.
 
 MDM identifies a device by its hardware UUID (Apple UDID, `mdm_windows_enrollments.host_uuid`):
 
@@ -76,12 +91,12 @@ Both log WARN `openframe: MDM enrollment refused, several hosts of one team shar
 | Where | Key | Value |
 |---|---|---|
 | Fleet | `FLEET_OPENFRAME_MACHINE_IDENTITY` | `true` to move agents to the machine id |
-| Fleet | `FLEET_OPENFRAME_ORBIT_ENROLL_COOLDOWN` | Go duration, e.g. `10m`; unset means no cooldown. Unparsable refuses to boot |
-| Fleet | `FLEET_OSQUERY_ENROLL_COOLDOWN` | upstream's cooldown for osquery, set to the same value |
+| Fleet | `FLEET_OPENFRAME_ENROLL_LIVE_OWNER_WINDOW` | Go duration, e.g. `5m`; unset means no refusal, as upstream. Unparsable refuses to boot |
 
 ## Rollout
 
-1. This Fleet image (switch off: agents keep the hardware UUID).
+1. This Fleet image with `FLEET_OPENFRAME_ENROLL_LIVE_OWNER_WINDOW` (switch off: agents keep the
+   hardware UUID, pairs stop at once, the second machine has no host).
 2. Agents with this orbit, through the usual agent version update.
 3. `FLEET_OPENFRAME_MACHINE_IDENTITY=true`, per environment: each agent moves its host once at its
    next start; the second machine of a pair gets its own host.
@@ -99,9 +114,11 @@ Both log WARN `openframe: MDM enrollment refused, several hosts of one team shar
 - An agent reinstalled before its host moved (orbit's directory and node key gone) has no proof and
   enrolls as a new host; the old one stays offline. After the move a reinstall keeps the host: the
   agent enrolls with the same machine id.
-- Machines cloned after openframe-client was installed share the machine id; Fleet cannot tell them
-  apart. The cooldown holds them back and the takeover log raises the alert; openframe-client gives
-  the clone a new machine id.
+- Until the switch is on, the second machine of a pair has no Fleet host: it is refused, and the
+  takeover log raises the alert.
+- Machines cloned after the agent was installed share the osquery instance id, so they are not
+  refused; machines cloned after openframe-client was installed share the machine id too. Both loop
+  as upstream does and raise the alert.
 - Two machines sharing a hardware UUID within one team cannot use Fleet MDM.
 
 ## Tests
@@ -110,4 +127,4 @@ Both log WARN `openframe: MDM enrollment refused, several hosts of one team shar
 - `orbit/cmd/orbit/enroll_identifier_openframe_test.go`
 - `client/orbit_identifier_openframe_test.go`
 - `server/service/osquery_utils/queries_openframe_mdm_link_test.go`
-- `server/fleet/openframe_test.go`: the switch, the cooldown, the capabilities
+- `server/fleet/openframe_test.go`: the switch, the window, the capabilities

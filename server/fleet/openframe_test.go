@@ -263,7 +263,7 @@ func TestOpenframeTrimAgentOptions(t *testing.T) {
 }
 
 // OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
-func TestParseOpenframeOrbitEnrollCooldown(t *testing.T) {
+func TestParseOpenframeEnrollLiveOwnerWindow(t *testing.T) {
 	for raw, want := range map[string]time.Duration{
 		"":      0,
 		"  ":    0,
@@ -271,13 +271,13 @@ func TestParseOpenframeOrbitEnrollCooldown(t *testing.T) {
 		" 30s ": 30 * time.Second,
 		"0s":    0,
 	} {
-		got, err := parseOpenframeOrbitEnrollCooldown(raw)
+		got, err := parseOpenframeEnrollLiveOwnerWindow(raw)
 		require.NoError(t, err, raw)
 		require.Equal(t, want, got, raw)
 	}
 	for _, raw := range []string{"ten minutes", "10", "-1m"} {
-		_, err := parseOpenframeOrbitEnrollCooldown(raw)
-		require.ErrorContains(t, err, openframeOrbitEnrollCooldownEnv, raw)
+		_, err := parseOpenframeEnrollLiveOwnerWindow(raw)
+		require.ErrorContains(t, err, openframeEnrollLiveOwnerWindowEnv, raw)
 	}
 }
 

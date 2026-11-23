@@ -331,18 +331,18 @@ func openframeTrimStoredAgentOptions(raw *json.RawMessage) *json.RawMessage {
 	return &trimmed
 }
 
-// OPENFRAME(enroll-machine-identity): minimum time between two orbit takeovers of a host — openframe/docs/enroll-machine-identity.md
-const openframeOrbitEnrollCooldownEnv = "FLEET_OPENFRAME_ORBIT_ENROLL_COOLDOWN"
+// OPENFRAME(enroll-machine-identity): a host its osquery reported to within this window keeps its owner — openframe/docs/enroll-machine-identity.md
+const openframeEnrollLiveOwnerWindowEnv = "FLEET_OPENFRAME_ENROLL_LIVE_OWNER_WINDOW"
 
 // OPENFRAME(enroll-machine-identity): agents in OpenFrame mode enroll with the OpenFrame machine id — openframe/docs/enroll-machine-identity.md
 const openframeMachineIdentityEnv = "FLEET_OPENFRAME_MACHINE_IDENTITY"
 
-// OPENFRAME(enroll-machine-identity): ValidateOpenframeMachineIdentity fails the boot on an unparsable switch or cooldown.
+// OPENFRAME(enroll-machine-identity): ValidateOpenframeMachineIdentity fails the boot on an unparsable switch or window.
 func ValidateOpenframeMachineIdentity() error {
 	if _, err := parseOpenframeMachineIdentity(os.Getenv(openframeMachineIdentityEnv)); err != nil {
 		return err
 	}
-	_, err := parseOpenframeOrbitEnrollCooldown(os.Getenv(openframeOrbitEnrollCooldownEnv))
+	_, err := parseOpenframeEnrollLiveOwnerWindow(os.Getenv(openframeEnrollLiveOwnerWindowEnv))
 	return err
 }
 
@@ -364,31 +364,45 @@ func parseOpenframeMachineIdentity(raw string) (bool, error) {
 	return enabled, nil
 }
 
-// OPENFRAME(enroll-machine-identity): OpenframeOrbitEnrollCooldown is zero when unset, as upstream.
-func OpenframeOrbitEnrollCooldown() time.Duration {
-	cooldown, _ := parseOpenframeOrbitEnrollCooldown(os.Getenv(openframeOrbitEnrollCooldownEnv))
-	return cooldown
+// OPENFRAME(enroll-machine-identity): OpenframeEnrollLiveOwnerWindow is zero when unset: no host keeps its owner, as upstream.
+func OpenframeEnrollLiveOwnerWindow() time.Duration {
+	window, _ := parseOpenframeEnrollLiveOwnerWindow(os.Getenv(openframeEnrollLiveOwnerWindowEnv))
+	return window
 }
 
-func parseOpenframeOrbitEnrollCooldown(raw string) (time.Duration, error) {
+func parseOpenframeEnrollLiveOwnerWindow(raw string) (time.Duration, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, nil
 	}
-	cooldown, err := time.ParseDuration(raw)
+	window, err := time.ParseDuration(raw)
 	if err != nil {
-		return 0, fmt.Errorf("%s=%q: %w", openframeOrbitEnrollCooldownEnv, raw, err)
+		return 0, fmt.Errorf("%s=%q: %w", openframeEnrollLiveOwnerWindowEnv, raw, err)
 	}
-	if cooldown < 0 {
-		return 0, fmt.Errorf("%s=%q: must not be negative", openframeOrbitEnrollCooldownEnv, raw)
+	if window < 0 {
+		return 0, fmt.Errorf("%s=%q: must not be negative", openframeEnrollLiveOwnerWindowEnv, raw)
 	}
-	return cooldown, nil
+	return window, nil
 }
 
-// OPENFRAME(enroll-machine-identity): WithEnrollOrbitCooldown sets the takeover cooldown.
-func WithEnrollOrbitCooldown(cooldown time.Duration) DatastoreEnrollOrbitOption {
+// OPENFRAME(enroll-machine-identity): WithEnrollOrbitLiveOwnerWindow sets the live owner window.
+func WithEnrollOrbitLiveOwnerWindow(window time.Duration) DatastoreEnrollOrbitOption {
 	return func(c *DatastoreEnrollOrbitConfig) {
-		c.Cooldown = cooldown
+		c.LiveOwnerWindow = window
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): WithEnrollOsqueryInstanceID sets the enrolling osquery's instance id.
+func WithEnrollOsqueryInstanceID(instanceID string) DatastoreEnrollOsqueryOption {
+	return func(c *DatastoreEnrollOsqueryConfig) {
+		c.InstanceID = instanceID
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): WithEnrollOsqueryLiveOwnerWindow sets the live owner window.
+func WithEnrollOsqueryLiveOwnerWindow(window time.Duration) DatastoreEnrollOsqueryOption {
+	return func(c *DatastoreEnrollOsqueryConfig) {
+		c.LiveOwnerWindow = window
 	}
 }
 

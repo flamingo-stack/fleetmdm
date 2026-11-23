@@ -2443,9 +2443,9 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 
 		switch {
 		case err == nil:
-			// >>> OPENFRAME(enroll-machine-identity): another agent takes the host over: log it, hold it to the cooldown — openframe/docs/enroll-machine-identity.md
+			// >>> OPENFRAME(enroll-machine-identity): another agent takes the host over: log it, refuse it while the owner is live — openframe/docs/enroll-machine-identity.md
 			if enrolledHostInfo.NodeKeySet && !sameAgent {
-				if err := ds.openframeOrbitTakeover(ctx, enrolledHostInfo, hostInfo, enrollConfig.Cooldown); err != nil {
+				if err := ds.openframeTakeover(ctx, tx, "orbit", enrolledHostInfo.ID, hostInfo.OsqueryIdentifier, hostInfo.HardwareUUID, hostInfo.Hostname, hostInfo.InstanceID, enrollConfig.LiveOwnerWindow); err != nil {
 					return err
 				}
 			}
@@ -2583,6 +2583,11 @@ func (ds *Datastore) EnrollOrbit(ctx context.Context, opts ...fleet.DatastoreEnr
 			return ctxerr.Wrap(ctx, err, "orbit enroll error selecting host details")
 		}
 
+		// >>> OPENFRAME(enroll-machine-identity): the enrolling agent becomes the host's owner — openframe/docs/enroll-machine-identity.md
+		if err := ds.openframeRecordEnrollOwner(ctx, tx, host.ID, hostInfo.InstanceID); err != nil {
+			return err
+		}
+		// <<< OPENFRAME(enroll-machine-identity)
 		// Update the host id for the identity certificate
 		if enrollConfig.IdentityCert != nil {
 			err = updateHostIdentityCertHostIDBySerial(ctx, tx, host.ID, enrollConfig.IdentityCert.SerialNumber)
@@ -2685,6 +2690,13 @@ func (ds *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreE
 			if cooldown > 0 && time.Since(enrolledHostInfo.LastEnrolledAt) < cooldown {
 				return backoff.Permanent(ctxerr.Errorf(ctx, "host identified by %s enrolling too often", osqueryHostID))
 			}
+			// >>> OPENFRAME(enroll-machine-identity): another osquery takes the host over: log it, refuse it while the owner is live — openframe/docs/enroll-machine-identity.md
+			if enrolledHostInfo.NodeKeySet {
+				if err := ds.openframeTakeover(ctx, tx, "osquery", enrolledHostInfo.ID, osqueryHostID, hardwareUUID, "", enrollConfig.InstanceID, enrollConfig.LiveOwnerWindow); err != nil {
+					return err
+				}
+			}
+			// <<< OPENFRAME(enroll-machine-identity)
 
 			if enrolledHostInfo.NodeKeySet {
 				// This means a osquery host already enrolled at this hosts entry.
@@ -2749,6 +2761,11 @@ func (ds *Datastore) EnrollOsquery(ctx context.Context, opts ...fleet.DatastoreE
 			return ctxerr.Wrap(ctx, err, "new host seen time")
 		}
 
+		// >>> OPENFRAME(enroll-machine-identity): the enrolling agent becomes the host's owner — openframe/docs/enroll-machine-identity.md
+		if err := ds.openframeRecordEnrollOwner(ctx, tx, hostID, enrollConfig.InstanceID); err != nil {
+			return err
+		}
+		// <<< OPENFRAME(enroll-machine-identity)
 		// Update the host id for the identity certificate
 		if enrollConfig.IdentityCert != nil {
 			err = updateHostIdentityCertHostIDBySerial(ctx, tx, hostID, enrollConfig.IdentityCert.SerialNumber)
