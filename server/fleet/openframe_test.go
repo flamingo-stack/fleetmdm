@@ -282,10 +282,29 @@ func TestParseOpenframeOrbitEnrollCooldown(t *testing.T) {
 }
 
 // OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
-func TestServerOrbitCapabilitiesIdentifierMove(t *testing.T) {
+func TestServerOrbitCapabilitiesMachineIdentity(t *testing.T) {
 	t.Setenv("FLEET_OPENFRAME_MODE", "")
+	t.Setenv(openframeMachineIdentityEnv, "true")
 	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeMachineIdentity))
 
 	t.Setenv("FLEET_OPENFRAME_MODE", "1")
+	t.Setenv(openframeMachineIdentityEnv, "")
 	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeMachineIdentity))
+
+	t.Setenv(openframeMachineIdentityEnv, "true")
+	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeMachineIdentity))
+}
+
+// OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+func TestParseOpenframeMachineIdentity(t *testing.T) {
+	for raw, want := range map[string]bool{"": false, " ": false, "true": true, "1": true, "false": false, "0": false} {
+		got, err := parseOpenframeMachineIdentity(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	_, err := parseOpenframeMachineIdentity("yes please")
+	require.ErrorContains(t, err, openframeMachineIdentityEnv)
 }

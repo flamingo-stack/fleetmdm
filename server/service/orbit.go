@@ -344,6 +344,15 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		}
 	}
 
+	// >>> OPENFRAME(enroll-machine-identity): no MDM link for a host whose hardware UUID another host of its team shares — openframe/docs/enroll-machine-identity.md
+	if euaDeviceID != "" && fleet.IsOpenframeModeContext(ctx) {
+		if err := svc.ds.OpenframeRefuseSharedHardwareUUID(ctx, host.ID, host.UUID); err != nil {
+			svc.logger.ErrorContext(ctx, "windows mdm enrollment not linked to orbit host",
+				"err", err, "host_uuid", host.UUID, "device_id", euaDeviceID)
+			euaDeviceID = ""
+		}
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
 	if euaDeviceID != "" {
 		updated, err := svc.ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, host.UUID, euaDeviceID)
 		if err != nil {

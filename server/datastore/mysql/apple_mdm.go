@@ -4347,7 +4347,7 @@ func (ds *Datastore) MDMResetEnrollment(ctx context.Context, hostUUID string, sc
 			return ctxerr.Wrap(ctx, notFound("Host").WithName(hostUUID), "resetting mdm enrollment: getting host info from UUID")
 		case len(hosts) > 1:
 			// >>> OPENFRAME(enroll-machine-identity): machines of one team sharing a hardware UUID get no MDM enrollment rather than each other's host — openframe/docs/enroll-machine-identity.md
-			if err := ds.openframeRefuseSharedHardwareUUID(ctx, tx, hostUUID); err != nil {
+			if err := ds.openframeRefuseSharedHardwareUUIDOfOneTeam(ctx, hostUUID, hosts); err != nil {
 				return err
 			}
 			// <<< OPENFRAME(enroll-machine-identity)

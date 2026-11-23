@@ -362,21 +362,46 @@ func (ds *Datastore) openframeOrbitTakeover(ctx context.Context, matched *enroll
 	return nil
 }
 
-// OPENFRAME(enroll-machine-identity): no MDM enrollment for a hardware UUID several hosts of one team share — openframe/docs/enroll-machine-identity.md
-func (ds *Datastore) openframeRefuseSharedHardwareUUID(ctx context.Context, q sqlx.QueryerContext, hardwareUUID string) error {
-	if !fleet.IsOpenframeModeContext(ctx) || hardwareUUID == "" {
+// OPENFRAME(enroll-machine-identity): no MDM enrollment for a host whose hardware UUID another host of its team shares — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error {
+	if hardwareUUID == "" {
 		return nil
 	}
 	var hostIDs []uint
-	if err := sqlx.SelectContext(ctx, q, &hostIDs, `
-		SELECT h.id FROM hosts h
-		JOIN (SELECT team_id FROM hosts WHERE uuid = ? GROUP BY team_id HAVING COUNT(*) > 1) shared
-			ON h.team_id <=> shared.team_id
-		WHERE h.uuid = ?
-		ORDER BY h.id`, hardwareUUID, hardwareUUID); err != nil {
-		return ctxerr.Wrap(ctx, err, "find hosts sharing a hardware uuid")
+	if err := sqlx.SelectContext(ctx, ds.writer(ctx), &hostIDs, `
+		SELECT other.id FROM hosts self
+		JOIN hosts other ON other.uuid = self.uuid AND other.team_id <=> self.team_id
+		WHERE self.id = ? AND self.uuid = ?
+		ORDER BY other.id`, hostID, hardwareUUID); err != nil {
+		return ctxerr.Wrap(ctx, err, "find hosts of the team sharing a hardware uuid")
 	}
-	if len(hostIDs) == 0 {
+	return ds.openframeRefuseHosts(ctx, hardwareUUID, hostIDs)
+}
+
+// OPENFRAME(enroll-machine-identity): Apple MDM finds a device's host by UDID across teams; refused only when every host with it is in one team — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeRefuseSharedHardwareUUIDOfOneTeam(ctx context.Context, hardwareUUID string, hosts []fleet.Host) error {
+	if !fleet.IsOpenframeModeContext(ctx) || len(hosts) < 2 {
+		return nil
+	}
+	hostIDs := make([]uint, 0, len(hosts))
+	for _, host := range hosts {
+		if !openframeSameTeam(host.TeamID, hosts[0].TeamID) {
+			return nil
+		}
+		hostIDs = append(hostIDs, host.ID)
+	}
+	return ds.openframeRefuseHosts(ctx, hardwareUUID, hostIDs)
+}
+
+func openframeSameTeam(a, b *uint) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func (ds *Datastore) openframeRefuseHosts(ctx context.Context, hardwareUUID string, hostIDs []uint) error {
+	if len(hostIDs) < 2 {
 		return nil
 	}
 	ds.logger.WarnContext(ctx, "openframe: MDM enrollment refused, several hosts of one team share the hardware UUID",

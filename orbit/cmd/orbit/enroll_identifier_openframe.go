@@ -13,8 +13,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const openframeHostIdentifier = "openframe"
-
 type openframeEnrollIdentity struct {
 	identifier            string
 	osqueryIdentifier     string
@@ -46,42 +44,46 @@ func previousEnrollIdentity(previous, hardwareUUID, instanceID string) openframe
 	}
 }
 
-func wantedEnrollIdentity(mode, machineID, instanceID, hardwareUUID string, previous openframeEnrollIdentity) openframeEnrollIdentity {
-	switch mode {
-	case openframeHostIdentifier:
-		if machineID == "" {
-			log.Warn().Msg("openframe machine id is not available, keeping the current enrollment identifier")
-			return previous
-		}
-		return specifiedEnrollIdentity(machineID)
-	case "instance":
-		if instanceID == "" {
-			return previous
-		}
-		return openframeEnrollIdentity{identifier: instanceID, osqueryIdentifier: instanceID, osqueryHostIdentifier: "instance"}
-	default:
+func flagEnrollIdentity(mode, instanceID, hardwareUUID string, previous openframeEnrollIdentity) openframeEnrollIdentity {
+	if mode != "instance" {
 		return uuidEnrollIdentity(hardwareUUID)
 	}
+	if instanceID == "" {
+		return previous
+	}
+	return openframeEnrollIdentity{identifier: instanceID, osqueryIdentifier: instanceID, osqueryHostIdentifier: "instance"}
 }
 
-type identifierMover interface {
-	SupportsIdentifierMove() (bool, error)
+func wantedEnrollIdentity(machineIdentity bool, mode, machineID, instanceID, hardwareUUID string, previous openframeEnrollIdentity) openframeEnrollIdentity {
+	if !machineIdentity {
+		return flagEnrollIdentity(mode, instanceID, hardwareUUID, previous)
+	}
+	if machineID == "" {
+		log.Warn().Msg("openframe machine id is not available, keeping the current enrollment identifier")
+		return previous
+	}
+	return specifiedEnrollIdentity(machineID)
+}
+
+type identityServer interface {
+	IdentityCapabilities() (moves bool, machineIdentity bool, err error)
 	MoveToIdentifier(osqueryIdentifier string) error
 }
 
-func chooseEnrollIdentity(wanted, previous openframeEnrollIdentity, enrolled bool, mover identifierMover) openframeEnrollIdentity {
-	if wanted.identifier == previous.identifier {
+func chooseEnrollIdentity(mode, machineID, instanceID, hardwareUUID string, previous openframeEnrollIdentity, enrolled bool, server identityServer) openframeEnrollIdentity {
+	moves, machineIdentity, err := server.IdentityCapabilities()
+	if err != nil || !moves {
+		log.Info().Err(err).Bool("moves", moves).Msg("fleet server does not move hosts between identifiers, keeping the current one")
+		if enrolled {
+			return previous
+		}
+		return flagEnrollIdentity(mode, instanceID, hardwareUUID, previous)
+	}
+	wanted := wantedEnrollIdentity(machineIdentity, mode, machineID, instanceID, hardwareUUID, previous)
+	if wanted.identifier == previous.identifier || !enrolled {
 		return wanted
 	}
-	supported, err := mover.SupportsIdentifierMove()
-	if err != nil || !supported {
-		log.Info().Err(err).Bool("supported", supported).Msg("fleet server cannot move the host to a new identifier yet, keeping the current one")
-		return previous
-	}
-	if !enrolled {
-		return wanted
-	}
-	if err := mover.MoveToIdentifier(wanted.osqueryIdentifier); err != nil {
+	if err := server.MoveToIdentifier(wanted.osqueryIdentifier); err != nil {
 		log.Warn().Err(err).Msg("move host to the new enrollment identifier failed, keeping the current one")
 		return previous
 	}
@@ -105,10 +107,9 @@ func hasOrbitNodeKey(rootDir string) bool {
 	return err == nil && len(bytes.TrimSpace(b)) > 0
 }
 
-func openframeEnrollIdentityFor(rootDir, mode, machineID, instanceID, hardwareUUID string, mover identifierMover) openframeEnrollIdentity {
+func openframeEnrollIdentityFor(rootDir, mode, machineID, instanceID, hardwareUUID string, server identityServer) openframeEnrollIdentity {
 	previous := previousEnrollIdentity(readEnrolledIdentifier(rootDir), hardwareUUID, instanceID)
-	wanted := wantedEnrollIdentity(mode, machineID, instanceID, hardwareUUID, previous)
-	chosen := chooseEnrollIdentity(wanted, previous, hasOrbitNodeKey(rootDir), mover)
+	chosen := chooseEnrollIdentity(mode, machineID, instanceID, hardwareUUID, previous, hasOrbitNodeKey(rootDir), server)
 	if err := writeOsqueryIdentifierFile(rootDir, chosen.identifier); err != nil {
 		log.Error().Err(err).Msg("write osquery identifier file")
 	}

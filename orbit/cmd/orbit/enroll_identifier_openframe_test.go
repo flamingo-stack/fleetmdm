@@ -12,22 +12,21 @@ import (
 
 // OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
 
-type fakeMover struct {
-	supported  bool
-	pingErr    error
-	moveErr    error
-	movedTo    []string
-	pingCalled bool
+type fakeServer struct {
+	moves           bool
+	machineIdentity bool
+	pingErr         error
+	moveErr         error
+	movedTo         []string
 }
 
-func (m *fakeMover) SupportsIdentifierMove() (bool, error) {
-	m.pingCalled = true
-	return m.supported, m.pingErr
+func (s *fakeServer) IdentityCapabilities() (bool, bool, error) {
+	return s.moves, s.machineIdentity, s.pingErr
 }
 
-func (m *fakeMover) MoveToIdentifier(osqueryIdentifier string) error {
-	m.movedTo = append(m.movedTo, osqueryIdentifier)
-	return m.moveErr
+func (s *fakeServer) MoveToIdentifier(osqueryIdentifier string) error {
+	s.movedTo = append(s.movedTo, osqueryIdentifier)
+	return s.moveErr
 }
 
 const (
@@ -53,84 +52,114 @@ func recordedIdentifier(t *testing.T, root string) string {
 	return string(b)
 }
 
-func TestOpenframeEnrollIdentityMovesEnrolledHostToMachineID(t *testing.T) {
-	root := enrolledRoot(t, testUUID, true)
-	mover := &fakeMover{supported: true}
+var machineIdentityServer = func() *fakeServer { return &fakeServer{moves: true, machineIdentity: true} }
 
-	identity := openframeEnrollIdentityFor(root, openframeHostIdentifier, testMachine, testInstance, testUUID, mover)
+func TestOpenframeEnrollIdentityServerSwitchedOnMovesTheEnrolledHost(t *testing.T) {
+	root := enrolledRoot(t, testUUID, true)
+	server := machineIdentityServer()
+
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
 
 	require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
-	require.Equal(t, []string{testMachine}, mover.movedTo)
+	require.Equal(t, []string{testMachine}, server.movedTo)
 	require.Equal(t, testMachine, recordedIdentifier(t, root))
 }
 
-func TestOpenframeEnrollIdentityKeepsCurrentWhenServerCannotMove(t *testing.T) {
-	for name, mover := range map[string]*fakeMover{
-		"old server":       {supported: false},
-		"server not found": {pingErr: errors.New("unreachable")},
+func TestOpenframeEnrollIdentityServerSwitchedOffKeepsTheHardwareUUID(t *testing.T) {
+	root := enrolledRoot(t, testUUID, true)
+	server := &fakeServer{moves: true}
+
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
+
+	require.Equal(t, uuidEnrollIdentity(testUUID), identity)
+	require.Empty(t, server.movedTo)
+}
+
+func TestOpenframeEnrollIdentityServerSwitchedOffMovesBackToTheHardwareUUID(t *testing.T) {
+	root := enrolledRoot(t, testMachine, true)
+	server := &fakeServer{moves: true}
+
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
+
+	require.Equal(t, uuidEnrollIdentity(testUUID), identity)
+	require.Equal(t, []string{""}, server.movedTo)
+	require.Equal(t, testUUID, recordedIdentifier(t, root))
+}
+
+func TestOpenframeEnrollIdentityServerWithoutMovesKeepsTheCurrentIdentifier(t *testing.T) {
+	for name, server := range map[string]*fakeServer{
+		"old server":         {},
+		"server unreachable": {pingErr: errors.New("unreachable")},
 	} {
 		t.Run(name, func(t *testing.T) {
-			root := enrolledRoot(t, testUUID, true)
+			root := enrolledRoot(t, testMachine, true)
 
-			identity := openframeEnrollIdentityFor(root, openframeHostIdentifier, testMachine, testInstance, testUUID, mover)
+			identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
 
-			require.Equal(t, uuidEnrollIdentity(testUUID), identity)
-			require.Empty(t, mover.movedTo)
-			require.Equal(t, testUUID, recordedIdentifier(t, root))
+			require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
+			require.Empty(t, server.movedTo)
+			require.Equal(t, testMachine, recordedIdentifier(t, root))
 		})
 	}
 }
 
-func TestOpenframeEnrollIdentityKeepsCurrentWhenMoveFails(t *testing.T) {
-	root := enrolledRoot(t, testUUID, true)
-	mover := &fakeMover{supported: true, moveErr: errors.New("enroll failed")}
-
-	identity := openframeEnrollIdentityFor(root, openframeHostIdentifier, testMachine, testInstance, testUUID, mover)
-
-	require.Equal(t, uuidEnrollIdentity(testUUID), identity)
-	require.Equal(t, testUUID, recordedIdentifier(t, root))
-}
-
-func TestOpenframeEnrollIdentityNewInstallEnrollsWithMachineIDDirectly(t *testing.T) {
+func TestOpenframeEnrollIdentityNewInstallOnAnOldServerFollowsTheFlag(t *testing.T) {
 	root := enrolledRoot(t, "", false)
-	mover := &fakeMover{supported: true}
 
-	identity := openframeEnrollIdentityFor(root, openframeHostIdentifier, testMachine, testInstance, testUUID, mover)
+	identity := openframeEnrollIdentityFor(root, "instance", testMachine, testInstance, testUUID, &fakeServer{})
 
-	require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
-	require.Empty(t, mover.movedTo)
-	require.Equal(t, testMachine, recordedIdentifier(t, root))
+	require.Equal(t, testInstance, identity.identifier)
+	require.Equal(t, "instance", identity.osqueryHostIdentifier)
 }
 
-func TestOpenframeEnrollIdentityUnchangedNeedsNoServer(t *testing.T) {
-	root := enrolledRoot(t, testMachine, true)
-	mover := &fakeMover{}
+func TestOpenframeEnrollIdentityFailedMoveKeepsTheCurrentIdentifier(t *testing.T) {
+	root := enrolledRoot(t, testUUID, true)
+	server := &fakeServer{moves: true, machineIdentity: true, moveErr: errors.New("enroll failed")}
 
-	identity := openframeEnrollIdentityFor(root, openframeHostIdentifier, testMachine, testInstance, testUUID, mover)
-
-	require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
-	require.False(t, mover.pingCalled)
-}
-
-func TestOpenframeEnrollIdentityMissingMachineIDKeepsCurrent(t *testing.T) {
-	root := enrolledRoot(t, testMachine, true)
-	mover := &fakeMover{supported: true}
-
-	identity := openframeEnrollIdentityFor(root, openframeHostIdentifier, "", testInstance, testUUID, mover)
-
-	require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
-	require.False(t, mover.pingCalled)
-}
-
-func TestOpenframeEnrollIdentityRollbackMovesBackToUUID(t *testing.T) {
-	root := enrolledRoot(t, testMachine, true)
-	mover := &fakeMover{supported: true}
-
-	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, mover)
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
 
 	require.Equal(t, uuidEnrollIdentity(testUUID), identity)
-	require.Equal(t, []string{""}, mover.movedTo)
 	require.Equal(t, testUUID, recordedIdentifier(t, root))
+}
+
+func TestOpenframeEnrollIdentityNewInstallEnrollsWithTheMachineIDDirectly(t *testing.T) {
+	root := enrolledRoot(t, "", false)
+	server := machineIdentityServer()
+
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
+
+	require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
+	require.Empty(t, server.movedTo)
+}
+
+func TestOpenframeEnrollIdentityReinstalledAgentWithoutNodeKeyEnrollsWithTheMachineID(t *testing.T) {
+	root := enrolledRoot(t, "", false)
+	server := machineIdentityServer()
+
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
+
+	require.Equal(t, testMachine, identity.identifier)
+	require.Empty(t, server.movedTo)
+}
+
+func TestOpenframeEnrollIdentityUnchangedNeedsNoMove(t *testing.T) {
+	root := enrolledRoot(t, testMachine, true)
+	server := machineIdentityServer()
+
+	identity := openframeEnrollIdentityFor(root, "uuid", testMachine, testInstance, testUUID, server)
+
+	require.Equal(t, specifiedEnrollIdentity(testMachine), identity)
+	require.Empty(t, server.movedTo)
+}
+
+func TestOpenframeEnrollIdentityMissingMachineIDKeepsTheCurrentIdentifier(t *testing.T) {
+	root := enrolledRoot(t, testUUID, true)
+	server := machineIdentityServer()
+
+	identity := openframeEnrollIdentityFor(root, "uuid", "", testInstance, testUUID, server)
+
+	require.Equal(t, uuidEnrollIdentity(testUUID), identity)
+	require.Empty(t, server.movedTo)
 }
 
 func TestPreviousEnrollIdentity(t *testing.T) {

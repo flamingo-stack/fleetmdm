@@ -1220,6 +1220,12 @@ type Datastore interface {
 	OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Context, hostID uint, detailsByChecksum map[string]SoftwareWindowsDetails) error
 	// <<< OPENFRAME(software-windows-details)
 
+	// >>> OPENFRAME(enroll-machine-identity)
+	// OpenframeRefuseSharedHardwareUUID refuses the MDM enrollment of a host whose hardware UUID another host of its team
+	// shares.
+	OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error
+	// <<< OPENFRAME(enroll-machine-identity)
+
 	// UpdateHost updates a host.
 	UpdateHost(ctx context.Context, host *Host) error
 

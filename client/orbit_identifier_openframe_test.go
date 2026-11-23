@@ -63,20 +63,28 @@ func TestMoveToIdentifierWithoutNodeKeyFails(t *testing.T) {
 	require.ErrorContains(t, err, "empty")
 }
 
-func TestSupportsIdentifierMoveReadsServerCapability(t *testing.T) {
-	for name, header := range map[string]string{"supported": string(fleet.CapabilityOpenframeIdentifierMove), "not supported": ""} {
+func TestIdentityCapabilitiesReadsTheServerCapabilities(t *testing.T) {
+	for name, tc := range map[string]struct {
+		header                 string
+		moves, machineIdentity bool
+	}{
+		"old server":          {header: "", moves: false, machineIdentity: false},
+		"switched off":        {header: string(fleet.CapabilityOpenframeIdentifierMove), moves: true},
+		"machine identity on": {header: string(fleet.CapabilityOpenframeIdentifierMove) + "," + string(fleet.CapabilityOpenframeMachineIdentity), moves: true, machineIdentity: true},
+	} {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set(fleet.CapabilitiesHeader, header)
+				w.Header().Set(fleet.CapabilitiesHeader, tc.header)
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer srv.Close()
 			oc := newReenrollTestClient(t, srv.URL, "")
 
-			supported, err := oc.SupportsIdentifierMove()
+			moves, machineIdentity, err := oc.IdentityCapabilities()
 
 			require.NoError(t, err)
-			require.Equal(t, header != "", supported)
+			require.Equal(t, tc.moves, moves)
+			require.Equal(t, tc.machineIdentity, machineIdentity)
 		})
 	}
 }

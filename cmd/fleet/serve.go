@@ -166,9 +166,9 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 	}
 	// <<< OPENFRAME(mysql-multitenancy)
 
-	// >>> OPENFRAME(enroll-machine-identity): an unparsable orbit enroll cooldown refuses to boot — openframe/docs/enroll-machine-identity.md
-	if err := fleet.ValidateOpenframeOrbitEnrollCooldown(); err != nil {
-		initFatal(err, "validating FLEET_OPENFRAME_ORBIT_ENROLL_COOLDOWN")
+	// >>> OPENFRAME(enroll-machine-identity): an unparsable machine identity switch or orbit enroll cooldown refuses to boot — openframe/docs/enroll-machine-identity.md
+	if err := fleet.ValidateOpenframeMachineIdentity(); err != nil {
+		initFatal(err, "validating the OpenFrame machine identity configuration")
 	}
 	// <<< OPENFRAME(enroll-machine-identity)
 

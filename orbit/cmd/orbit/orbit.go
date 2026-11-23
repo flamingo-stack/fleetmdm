@@ -460,8 +460,7 @@ func orbitAction(c *cli.Context) error {
 		}
 	}
 
-	if hostIdentifier := c.String("host-identifier"); hostIdentifier != "uuid" && hostIdentifier != "instance" &&
-		!(c.Bool("openframe-mode") && hostIdentifier == openframeHostIdentifier) { // OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+	if hostIdentifier := c.String("host-identifier"); hostIdentifier != "uuid" && hostIdentifier != "instance" {
 		return fmt.Errorf("--host-identifier=%s is not supported, currently supported values are 'uuid' and 'instance'", hostIdentifier)
 	}
 

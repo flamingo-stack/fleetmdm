@@ -334,10 +334,34 @@ func openframeTrimStoredAgentOptions(raw *json.RawMessage) *json.RawMessage {
 // OPENFRAME(enroll-machine-identity): minimum time between two orbit takeovers of a host — openframe/docs/enroll-machine-identity.md
 const openframeOrbitEnrollCooldownEnv = "FLEET_OPENFRAME_ORBIT_ENROLL_COOLDOWN"
 
-// OPENFRAME(enroll-machine-identity): ValidateOpenframeOrbitEnrollCooldown fails the boot on an unparsable cooldown.
-func ValidateOpenframeOrbitEnrollCooldown() error {
+// OPENFRAME(enroll-machine-identity): agents in OpenFrame mode enroll with the OpenFrame machine id — openframe/docs/enroll-machine-identity.md
+const openframeMachineIdentityEnv = "FLEET_OPENFRAME_MACHINE_IDENTITY"
+
+// OPENFRAME(enroll-machine-identity): ValidateOpenframeMachineIdentity fails the boot on an unparsable switch or cooldown.
+func ValidateOpenframeMachineIdentity() error {
+	if _, err := parseOpenframeMachineIdentity(os.Getenv(openframeMachineIdentityEnv)); err != nil {
+		return err
+	}
 	_, err := parseOpenframeOrbitEnrollCooldown(os.Getenv(openframeOrbitEnrollCooldownEnv))
 	return err
+}
+
+// OPENFRAME(enroll-machine-identity): IsOpenframeMachineIdentity is false when unset.
+func IsOpenframeMachineIdentity() bool {
+	enabled, _ := parseOpenframeMachineIdentity(os.Getenv(openframeMachineIdentityEnv))
+	return enabled
+}
+
+func parseOpenframeMachineIdentity(raw string) (bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s=%q: %w", openframeMachineIdentityEnv, raw, err)
+	}
+	return enabled, nil
 }
 
 // OPENFRAME(enroll-machine-identity): OpenframeOrbitEnrollCooldown is zero when unset, as upstream.
@@ -370,3 +394,6 @@ func WithEnrollOrbitCooldown(cooldown time.Duration) DatastoreEnrollOrbitOption 
 
 // OPENFRAME(enroll-machine-identity): the server moves a host to its agent's new identifier — openframe/docs/enroll-machine-identity.md
 const CapabilityOpenframeIdentifierMove Capability = "openframe_identifier_move"
+
+// OPENFRAME(enroll-machine-identity): agents enroll with the OpenFrame machine id — openframe/docs/enroll-machine-identity.md
+const CapabilityOpenframeMachineIdentity Capability = "openframe_machine_identity"

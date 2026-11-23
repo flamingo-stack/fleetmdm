@@ -179,36 +179,64 @@ func TestOpenframeMachineIdentity(t *testing.T) {
 		require.Equal(t, existing.ID, enrolled.ID)
 	})
 
-	t.Run("an MDM enrollment of a uuid two hosts of one team share is refused", func(t *testing.T) {
-		enrolledHost(t, "uuid-mdm-shared", "machine-mdm-a", "onk-mdm-a", nil, longAgo)
-		enrolledHost(t, "uuid-mdm-shared", "machine-mdm-b", "onk-mdm-b", nil, longAgo)
+	t.Run("Windows MDM: a host whose uuid another host of its team shares is refused", func(t *testing.T) {
+		first := enrolledHost(t, "uuid-mdm-shared", "machine-mdm-a", "onk-mdm-a", nil, longAgo)
+		second := enrolledHost(t, "uuid-mdm-shared", "machine-mdm-b", "onk-mdm-b", nil, longAgo)
 
-		_, windowsErr := ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, "uuid-mdm-shared", "mdm-device-shared")
-		appleErr := ds.MDMResetEnrollment(ctx, "uuid-mdm-shared", false)
-
-		require.ErrorContains(t, windowsErr, "MDM enrollment refused")
-		require.ErrorContains(t, appleErr, "MDM enrollment refused")
+		require.ErrorContains(t, ds.OpenframeRefuseSharedHardwareUUID(ctx, first.ID, "uuid-mdm-shared"), "MDM enrollment refused")
+		require.ErrorContains(t, ds.OpenframeRefuseSharedHardwareUUID(ctx, second.ID, "uuid-mdm-shared"), "MDM enrollment refused")
 	})
 
-	t.Run("hosts of different teams sharing a uuid do not block MDM", func(t *testing.T) {
-		teamA, err := ds.NewTeam(ctx, &fleet.Team{Name: "machine-identity-mdm-a"})
+	t.Run("Windows MDM: a tenant with one host is not refused for another tenant's pair", func(t *testing.T) {
+		teamX, err := ds.NewTeam(ctx, &fleet.Team{Name: "machine-identity-mdm-x"})
 		require.NoError(t, err)
-		teamB, err := ds.NewTeam(ctx, &fleet.Team{Name: "machine-identity-mdm-b"})
+		teamY, err := ds.NewTeam(ctx, &fleet.Team{Name: "machine-identity-mdm-y"})
 		require.NoError(t, err)
-		enrolledHost(t, "uuid-mdm-teams", "machine-mdm-teams-a", "onk-mdm-teams-a", &teamA.ID, longAgo)
-		enrolledHost(t, "uuid-mdm-teams", "machine-mdm-teams-b", "onk-mdm-teams-b", &teamB.ID, longAgo)
+		xFirst := enrolledHost(t, "uuid-mdm-vendor", "machine-mdm-x1", "onk-mdm-x1", &teamX.ID, longAgo)
+		enrolledHost(t, "uuid-mdm-vendor", "machine-mdm-x2", "onk-mdm-x2", &teamX.ID, longAgo)
+		y := enrolledHost(t, "uuid-mdm-vendor", "machine-mdm-y", "onk-mdm-y", &teamY.ID, longAgo)
 
-		_, err = ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, "uuid-mdm-teams", "mdm-device-teams")
-
-		require.NoError(t, err)
+		require.NoError(t, ds.OpenframeRefuseSharedHardwareUUID(ctx, y.ID, "uuid-mdm-vendor"))
+		require.ErrorContains(t, ds.OpenframeRefuseSharedHardwareUUID(ctx, xFirst.ID, "uuid-mdm-vendor"), "MDM enrollment refused")
 	})
 
-	t.Run("without OpenFrame mode a shared uuid does not block MDM, as upstream", func(t *testing.T) {
-		enrolledHost(t, "uuid-mdm-plain", "machine-mdm-plain-a", "onk-mdm-plain-a", nil, longAgo)
-		enrolledHost(t, "uuid-mdm-plain", "machine-mdm-plain-b", "onk-mdm-plain-b", nil, longAgo)
+	t.Run("Windows MDM: a host alone with its uuid is not refused", func(t *testing.T) {
+		alone := enrolledHost(t, "uuid-mdm-alone", "machine-mdm-alone", "onk-mdm-alone", nil, longAgo)
 
-		_, err := ds.UpdateMDMWindowsEnrollmentsHostUUID(plain, "uuid-mdm-plain", "mdm-device-plain")
+		require.NoError(t, ds.OpenframeRefuseSharedHardwareUUID(ctx, alone.ID, "uuid-mdm-alone"))
+	})
 
+	t.Run("Apple MDM: a uuid every host of which is in one team is refused", func(t *testing.T) {
+		enrolledHost(t, "uuid-apple-shared", "machine-apple-a", "onk-apple-a", nil, longAgo)
+		enrolledHost(t, "uuid-apple-shared", "machine-apple-b", "onk-apple-b", nil, longAgo)
+
+		require.ErrorContains(t, ds.MDMResetEnrollment(ctx, "uuid-apple-shared", false), "MDM enrollment refused")
+	})
+
+	t.Run("Apple MDM: a uuid shared across teams is left to upstream", func(t *testing.T) {
+		teamX, err := ds.NewTeam(ctx, &fleet.Team{Name: "machine-identity-apple-x"})
 		require.NoError(t, err)
+		teamY, err := ds.NewTeam(ctx, &fleet.Team{Name: "machine-identity-apple-y"})
+		require.NoError(t, err)
+		enrolledHost(t, "uuid-apple-teams", "machine-apple-x1", "onk-apple-x1", &teamX.ID, longAgo)
+		enrolledHost(t, "uuid-apple-teams", "machine-apple-x2", "onk-apple-x2", &teamX.ID, longAgo)
+		enrolledHost(t, "uuid-apple-teams", "machine-apple-y", "onk-apple-y", &teamY.ID, longAgo)
+
+		err = ds.MDMResetEnrollment(ctx, "uuid-apple-teams", false)
+
+		if err != nil {
+			require.NotContains(t, err.Error(), "MDM enrollment refused")
+		}
+	})
+
+	t.Run("Apple MDM: without OpenFrame mode a shared uuid is left to upstream", func(t *testing.T) {
+		enrolledHost(t, "uuid-apple-plain", "machine-apple-plain-a", "onk-apple-plain-a", nil, longAgo)
+		enrolledHost(t, "uuid-apple-plain", "machine-apple-plain-b", "onk-apple-plain-b", nil, longAgo)
+
+		err := ds.MDMResetEnrollment(plain, "uuid-apple-plain", false)
+
+		if err != nil {
+			require.NotContains(t, err.Error(), "MDM enrollment refused")
+		}
 	})
 }

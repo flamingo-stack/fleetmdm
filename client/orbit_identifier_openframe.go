@@ -10,11 +10,12 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
-func (oc *OrbitClient) SupportsIdentifierMove() (bool, error) {
+func (oc *OrbitClient) IdentityCapabilities() (moves bool, machineIdentity bool, err error) {
 	if err := oc.Ping(); err != nil {
-		return false, fmt.Errorf("ping fleet server: %w", err)
+		return false, false, fmt.Errorf("ping fleet server: %w", err)
 	}
-	return oc.GetServerCapabilities().Has(fleet.CapabilityOpenframeIdentifierMove), nil
+	capabilities := oc.GetServerCapabilities()
+	return capabilities.Has(fleet.CapabilityOpenframeIdentifierMove), capabilities.Has(fleet.CapabilityOpenframeMachineIdentity), nil
 }
 
 func (oc *OrbitClient) SetOsqueryIdentifier(osqueryIdentifier string) {
