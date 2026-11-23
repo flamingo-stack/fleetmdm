@@ -23,7 +23,7 @@ func TestParseOpenframeInstanceSettings(t *testing.T) {
 	}
 	for _, c := range valid {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := parseOpenframeInstanceSettings(c.url, c.org)
+			got, err := parseOpenframeInstanceSettings(c.url, c.org, "")
 			require.NoError(t, err)
 			require.Equal(t, c.want, got)
 		})
@@ -31,8 +31,30 @@ func TestParseOpenframeInstanceSettings(t *testing.T) {
 
 	for _, raw := range []string{"mdm.example.com", "ftp://mdm.example.com", "https://", "https://mdm.example.com?x=1", "https://mdm.example.com?", "https://mdm.example.com#a", "https://mdm.example.com#", "https://mdm.example.com/?", "https://mdm.example.com/a b", "https://mdm.example.com:99999", "https://mdm.example.com:0", "https://mdm.example.com:", "https://mdm.example.com,evil.com", "https://-mdm.example.com", "https://mdm..example.com", "https://[::ffff:10.0.0.1]", "https://u:p@mdm.example.com", "https://mdm example.com"} {
 		t.Run("rejects "+raw, func(t *testing.T) {
-			_, err := parseOpenframeInstanceSettings(raw, "")
+			_, err := parseOpenframeInstanceSettings(raw, "", "")
 			require.ErrorContains(t, err, "FLEET_OPENFRAME_INSTANCE_SERVER_URL")
+		})
+	}
+}
+
+func TestParseOpenframeInstanceWindowsMDMEnabled(t *testing.T) {
+	got, err := parseOpenframeInstanceSettings("", "", "")
+	require.NoError(t, err)
+	require.Nil(t, got.WindowsMDMEnabled, "unset leaves the instance flag alone")
+
+	for raw, want := range map[string]bool{"true": true, " TRUE ": true, "1": true, "false": false, "0": false} {
+		t.Run(raw, func(t *testing.T) {
+			got, err := parseOpenframeInstanceSettings("", "", raw)
+			require.NoError(t, err)
+			require.NotNil(t, got.WindowsMDMEnabled)
+			require.Equal(t, want, *got.WindowsMDMEnabled)
+		})
+	}
+
+	for _, raw := range []string{"yes", "on", "enabled"} {
+		t.Run("rejects "+raw, func(t *testing.T) {
+			_, err := parseOpenframeInstanceSettings("https://mdm.example.com", "", raw)
+			require.ErrorContains(t, err, "FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED")
 		})
 	}
 }
@@ -49,6 +71,16 @@ func TestOpenframeInstanceSettingsApplyTo(t *testing.T) {
 	OpenframeInstanceSettings{ServerURL: "https://mdm.example.com", OrgName: "Flamingo"}.ApplyTo(cfg)
 	require.Equal(t, "https://mdm.example.com", cfg.ServerSettings.ServerURL)
 	require.Equal(t, "Flamingo", cfg.OrgInfo.OrgName)
+	require.False(t, cfg.MDM.WindowsEnabledAndConfigured, "an unset Windows MDM setting leaves the flag alone")
+
+	OpenframeInstanceSettings{WindowsMDMEnabled: new(true)}.ApplyTo(cfg)
+	require.True(t, cfg.MDM.WindowsEnabledAndConfigured)
+
+	OpenframeInstanceSettings{}.ApplyTo(cfg)
+	require.True(t, cfg.MDM.WindowsEnabledAndConfigured, "an unset Windows MDM setting keeps the stored flag")
+
+	OpenframeInstanceSettings{WindowsMDMEnabled: new(false)}.ApplyTo(cfg)
+	require.False(t, cfg.MDM.WindowsEnabledAndConfigured)
 }
 
 func TestOpenframeAppConfigTeamID(t *testing.T) {

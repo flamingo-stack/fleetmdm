@@ -424,11 +424,14 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		}
 	}
 
-	// >>> OPENFRAME(mysql-multitenancy): shared mode takes the instance row's public MDM address and org name from the environment — openframe/docs/mysql-multitenancy-feature.md
+	// >>> OPENFRAME(mysql-multitenancy): shared mode takes the instance row's public MDM address, org name and Windows MDM flag from the environment — openframe/docs/mysql-multitenancy-feature.md
 	if fleet.IsOpenframeSharedMode() {
 		instanceSettings, err := fleet.OpenframeInstanceSettingsFromEnv()
 		if err != nil {
 			initFatal(err, "reading OpenFrame instance settings")
+		}
+		if instanceSettings.WindowsMDMEnabled != nil && *instanceSettings.WindowsMDMEnabled && !config.MDM.IsMicrosoftWSTEPSet() {
+			initFatal(errors.New("FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED is true but the WSTEP certificate and key are not configured"), "reading OpenFrame instance settings")
 		}
 		instanceSettings.ApplyTo(appCfg)
 	}

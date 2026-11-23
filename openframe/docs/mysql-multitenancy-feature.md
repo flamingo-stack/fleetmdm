@@ -220,13 +220,22 @@ without touching Fleet's API. Platform side of this pipeline: shared connector r
 `FLEET_OPENFRAME_MULTI_TENANCY_ENABLED` (+ optional `FLEET_OPENFRAME_TENANT_UUID` /
 `FLEET_OPENFRAME_TEAM_ID`); `job-migration.yaml` gets the flag too (so the `GET_LOCK` guard engages).
 
-Shared mode also reads two optional envs at boot (`cmd/fleet/serve.go`, set through the chart's
+Shared mode also reads three optional envs at boot (`cmd/fleet/serve.go`, set through the chart's
 `environments` map): `FLEET_OPENFRAME_INSTANCE_SERVER_URL`, the instance's public MDM address
 (an http(s) URL with a valid host and port and no query, fragment, credentials or whitespace; a
 trailing slash is dropped and the scheme and host are lowercased),
-and `FLEET_OPENFRAME_INSTANCE_ORG_NAME`. Each set value is written to the instance row
-(`server_settings.server_url`, `org_info.org_name`) in the same boot-time save that recomputes the
-Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot.
+`FLEET_OPENFRAME_INSTANCE_ORG_NAME`, and `FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED` (`true` or
+`false`). Each set value is written to the instance row
+(`server_settings.server_url`, `org_info.org_name`, `mdm.windows_enabled_and_configured`) in the
+same boot-time save that recomputes the Apple MDM flags; an unset value leaves the row as it is,
+and a malformed URL or flag stops the boot, as does `FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED=true`
+without the WSTEP certificate and key. Windows MDM has two switches in shared mode: the instance
+row's flag, read by the unpinned Windows device routes (`VerifyMDMWindowsConfigured`) and the
+Windows profile cron, which only this env sets; and each tenant row's flag, set by the tenant's own
+config update and read by its pinned orbit config, which tells that tenant's hosts to enroll or
+unenroll. A tenant that turns Windows MDM off clears only its own hosts' `host_mdm_windows_profiles`
+rows (`CleanupAllHostMDMProfilesForPlatform`, `server/datastore/mysql/mdm.go`); unpinned, the
+cleanup stays instance-wide as upstream.
 Every cluster on the shared database writes the same row at boot, so the values must be identical
 on all of them; different values would flip the row on each restart. Set the URL before the
 Android enterprise is created and do not change it afterwards: the proxy finds the enterprise by

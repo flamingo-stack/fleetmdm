@@ -931,6 +931,17 @@ func (ds *Datastore) CleanupAllHostMDMProfilesForPlatform(ctx context.Context, p
 				return ctxerr.Wrap(ctx, err, "deleting all rows from host_mdm_apple_declarations")
 			}
 		case "windows":
+			// >>> OPENFRAME(mysql-multitenancy): a pinned tenant turning Windows MDM off clears only its own hosts' rows
+			if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+				if _, err := tx.ExecContext(ctx, `
+					DELETE hmwp FROM host_mdm_windows_profiles hmwp
+					JOIN hosts h ON h.uuid = hmwp.host_uuid
+					WHERE h.team_id = ?`, teamID); err != nil {
+					return ctxerr.Wrap(ctx, err, "deleting the pinned team's rows from host_mdm_windows_profiles")
+				}
+				return nil
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 			if _, err := tx.ExecContext(ctx, `DELETE FROM host_mdm_windows_profiles`); err != nil {
 				return ctxerr.Wrap(ctx, err, "deleting all rows from host_mdm_windows_profiles")
 			}
