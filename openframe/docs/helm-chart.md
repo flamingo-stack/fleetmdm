@@ -217,6 +217,7 @@ intra-wave kind ordering.
 | Vuln feed persistence | `vulnProcessing.persistence.*`, `vulnProcessing.staggerSchedule`, `vulnProcessing.staggerKey` | See [below](#vulnerability-feed-persistence-vuln-persistence). |
 | Probe split | `fleet.probes.*` | See [below](#probes). |
 | ServiceAccount name | `serviceAccount.name` (default `fleet`) | The ServiceAccount the Deployment, the migration Job, the vuln CronJob and the bind Job run as, and the RoleBinding subject. A Workload Identity grant names it (Cloud KMS for `FLEET_SERVER_PRIVATE_KEY_KMS_KEY`), so the deployer passes one name to both. |
+| Service type | `serviceType` (default empty, ClusterIP) | The Fleet Service's `type`. `LoadBalancer` with the internal-LB `serviceAnnotations` makes the Service itself the internal LB that another cluster dials, so no second Service is needed. Ignored when `gke.ingress.useGKEIngress` makes it a NodePort. |
 
 ## Probes
 
@@ -377,12 +378,13 @@ helm upgrade --install fleet oci://ghcr.io/flamingo-stack/fleetmdm/helm-charts/f
 
 | File | Purpose |
 |------|---------|
-| `charts/fleet/values.yaml` | OpenFrame mode, externalized DB/cache/setup config, `cache.keyPrefixKey`, `cache.connectRetryAttempts`, `cache.tls`, `waitForMysql`, `probes`, `additionalCAs`, `vulnProcessing`, `deploymentAnnotations`, `serviceAccount.name` |
+| `charts/fleet/values.yaml` | OpenFrame mode, externalized DB/cache/setup config, `cache.keyPrefixKey`, `cache.connectRetryAttempts`, `cache.tls`, `waitForMysql`, `probes`, `additionalCAs`, `vulnProcessing`, `deploymentAnnotations`, `serviceAccount.name`, `serviceType` |
 | `charts/fleet/templates/configmap.yaml` | **New** — generated DB/cache ConfigMaps |
 | `charts/fleet/templates/secret.yaml` | **New** — generated DB password / admin-setup Secrets |
 | `charts/fleet/templates/deployment.yaml` | `FLEET_OPENFRAME_MODE`, `FLEET_OPENFRAME_MULTI_TENANCY_ENABLED` / `FLEET_OPENFRAME_TENANT_UUID` / `FLEET_OPENFRAME_TEAM_ID`, `FLEET_REDIS_KEY_PREFIX`, Redis TLS, ConfigMap/Secret refs, annotations, CA init container, probe split, `serviceAccount.name` |
 | `charts/fleet/templates/job-migration.yaml` | `waitForMysql` init container, hook removal, TTL removal, `serviceAccount.name` |
 | `charts/fleet/templates/sa.yaml` | `serviceAccount.name` |
+| `charts/fleet/templates/service.yaml` | `serviceType` |
 | `charts/fleet/templates/rbac.yaml` | `serviceAccount.name` as the RoleBinding subject |
 | `charts/fleet/templates/vulnprocessing/cronjob.yaml` | Dedicated vuln-processing cron + `FLEET_REDIS_KEY_PREFIX`, feed-cache PVC mount, fsGroup, schedule stagger (moved from `templates/cron-vulnprocessing.yaml`), `serviceAccount.name` |
 | `charts/fleet/templates/vulnprocessing/pvc.yaml` | **New** — PVC persisting the vulnerability feed cache across cron runs |

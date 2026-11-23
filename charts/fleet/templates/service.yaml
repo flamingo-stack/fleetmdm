@@ -19,6 +19,11 @@ spec:
   {{- if .Values.gke.ingress.useGKEIngress }}
   type: NodePort
   {{- end }}
+  # >>> OPENFRAME(helm): serviceType (openframe/docs/helm-chart.md)
+  {{- if and .Values.serviceType (not .Values.gke.ingress.useGKEIngress) }}
+  type: {{ .Values.serviceType }}
+  {{- end }}
+  # <<< OPENFRAME(helm)
   selector:
     app: fleet
     chart: fleet
