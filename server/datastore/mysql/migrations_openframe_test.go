@@ -19,6 +19,7 @@ import (
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/test"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
 )
 
@@ -393,4 +394,61 @@ func TestMigrateOpenframeSeedGlobalAppConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.Greater(t, team.ID, uint(1), "team id 1 is reserved for the instance config row")
 	})
+}
+
+// TestMigrateOpenframeWidenSoftwareCveId verifies 20261123000001: with software_cve.id at the INT UNSIGNED
+// ceiling, new CVE matches can't be stored (the prod failure of the vulnerability cron); after the migration the
+// column is BIGINT UNSIGNED and inserts continue past the old ceiling.
+func TestMigrateOpenframeWidenSoftwareCveId(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := t.Context()
+	db := ds.writer(ctx)
+
+	idType := func() string {
+		var s string
+		require.NoError(t, db.GetContext(ctx, &s,
+			"SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = 'software_cve' AND column_name = 'id'"))
+		return s
+	}
+	insert := func(cves ...string) error {
+		vulns := make([]fleet.SoftwareVulnerability, 0, len(cves))
+		for _, c := range cves {
+			vulns = append(vulns, fleet.SoftwareVulnerability{SoftwareID: 1, CVE: c})
+		}
+		_, err := ds.InsertSoftwareVulnerabilities(ctx, vulns, fleet.NVDSource)
+		return err
+	}
+
+	require.Equal(t, "int unsigned", idType())
+
+	count := func(cves ...string) int {
+		query, args, err := sqlx.In("SELECT COUNT(*) FROM software_cve WHERE cve IN (?)", cves)
+		require.NoError(t, err)
+		var n int
+		require.NoError(t, db.GetContext(ctx, &n, query, args...))
+		return n
+	}
+
+	// Put the counter at the INT UNSIGNED ceiling: the last id is handed out, after that new CVEs can't be stored.
+	// Cloud SQL 8.4 fails the insert with error 1467; MySQL 8.0 turns it into a primary-key duplicate that ON
+	// DUPLICATE KEY UPDATE silently applies to the existing row. Either way the new CVEs are missing.
+	_, err := db.ExecContext(ctx, "ALTER TABLE software_cve AUTO_INCREMENT = 4294967295")
+	require.NoError(t, err)
+	require.NoError(t, insert("CVE-2000-0001"))
+	_ = insert("CVE-2000-0002", "CVE-2000-0003")
+	require.Zero(t, count("CVE-2000-0002", "CVE-2000-0003"))
+
+	require.NoError(t, ds.MigrateOpenframe(ctx))
+	require.Equal(t, "bigint unsigned", idType())
+
+	// Existing rows are kept and inserts continue past the old ceiling.
+	require.NoError(t, insert("CVE-2000-0002", "CVE-2000-0003"))
+	var maxID uint64
+	require.NoError(t, db.GetContext(ctx, &maxID, "SELECT MAX(id) FROM software_cve"))
+	require.Greater(t, maxID, uint64(4294967295))
+	require.Equal(t, 3, count("CVE-2000-0001", "CVE-2000-0002", "CVE-2000-0003"))
+
+	// Idempotent re-run.
+	require.NoError(t, ds.MigrateOpenframe(ctx))
+	require.Equal(t, "bigint unsigned", idType())
 }
