@@ -363,6 +363,12 @@ func orbitAction(c *cli.Context) error {
 		log.Debug().Msgf("fallback settings: %+v", fallbackServerOverridesCfg)
 	}
 
+	// >>> OPENFRAME(agent-verify-server-tls): drop a stored --insecure in openframe mode before anything reads it — openframe/docs/agent-verify-server-tls.md
+	if err := dropOpenframeInsecure(c); err != nil {
+		return fmt.Errorf("drop insecure: %w", err)
+	}
+	// <<< OPENFRAME(agent-verify-server-tls)
+
 	if c.Bool("insecure") && c.String("fleet-certificate") != "" {
 		return errors.New("insecure and fleet-certificate may not be specified together")
 	}
@@ -968,6 +974,13 @@ func orbitAction(c *cli.Context) error {
 		options = append(options,
 			osquery.WithFlags(osquery.FleetFlags(osqueryVersion, parsedURL)),
 		)
+		// >>> OPENFRAME(agent-verify-server-tls): give osqueryd a CA bundle to verify the server with — openframe/docs/agent-verify-server-tls.md
+		certPath, err = openframeOsqueryCertPath(c.String("root-dir"), c.String("fleet-certificate"))
+		if err != nil {
+			return err
+		}
+		options = append(options, osquery.WithFlags([]string{"--tls_server_certs", certPath}))
+		// <<< OPENFRAME(agent-verify-server-tls)
 	} else
 	// <<< OPENFRAME(agent-openframe-mode)
 	// Both options --fleet-managed-host-identity-certificate and --insecure make use of a local HTTPS proxy.

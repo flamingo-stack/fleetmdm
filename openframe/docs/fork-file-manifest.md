@@ -90,6 +90,9 @@ server/datastore/mysql/android_openframe_test.go
 server/datastore/mysql/apple_ota_openframe.go       # shared mode: refuse an Apple OTA enrollment while another tenant holds the device
 server/datastore/mysql/apple_ota_openframe_test.go
 orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-file tests
+orbit/cmd/orbit/tls_openframe.go                    # openframe mode: drop a stored --insecure, CA bundle for osqueryd
+orbit/cmd/orbit/tls_openframe_test.go
+orbit/cmd/orbit/openframe_certs.pem                 # copy of orbit/pkg/packaging/certs.pem (a test keeps them equal)
 orbit/pkg/osquery/openframe_command.go              # osqueryd command without --openframe-secret, for logging
 orbit/pkg/osquery/openframe_command_test.go
 ```
@@ -156,6 +159,7 @@ and the heaviest standing rebase cost.
 | Orbit 401 streak across restarts | `client/orbit_client.go`, `client/orbit_reenroll_openframe.go`; tests: `client/orbit_reenroll_openframe_test.go` — see [node-key-management.md](node-key-management.md) |
 | Agent skip setup experience | `orbit/cmd/orbit/orbit.go`, `orbit/pkg/setup_experience/setup_experience.go`, `orbit/cmd/orbit/setup_experience_openframe_test.go`, `orbit/pkg/setup_experience/setup_experience_openframe_test.go` |
 | Agent host-info diagnostics | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/host_info_openframe.go`, `orbit/cmd/orbit/host_info_openframe_test.go` |
+| Agent verifies server TLS | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/tls_openframe.go`, `orbit/cmd/orbit/openframe_certs.pem`; tests: `orbit/cmd/orbit/tls_openframe_test.go` — see [agent-verify-server-tls.md](agent-verify-server-tls.md) |
 | Build / meta | `go.mod`, `go.sum`, `.gitignore`, `README.md`, `.github/pull_request_template.md`, `server/archtest/*` |
 
 ### Helm chart (~9 files)
