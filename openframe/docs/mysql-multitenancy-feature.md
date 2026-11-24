@@ -228,8 +228,19 @@ trailing slash is dropped and the scheme and host are lowercased),
 `false`). Each set value is written to the instance row
 (`server_settings.server_url`, `org_info.org_name`, `mdm.windows_enabled_and_configured`) in the
 same boot-time save that recomputes the Apple MDM flags; an unset value leaves the row as it is,
-and a malformed URL or flag stops the boot, as does `FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED=true`
-without the WSTEP certificate and key. Windows MDM has two switches in shared mode: the instance
+and a malformed URL or flag stops the boot. With `FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED=true`
+Fleet keeps the Windows MDM WSTEP pair (the CA that signs Windows device certificates and encrypts
+escrowed BitLocker keys) in `mdm_config_assets` as `openframe_windows_wstep_cert` /
+`openframe_windows_wstep_key`, encrypted with the server private key, and puts it into
+`mdm.windows_wstep_identity_cert_bytes` / `_key_bytes` before anything reads them
+(`cmd/fleet/openframe_windows_wstep.go`, `server/datastore/mysql/openframe_windows_wstep.go`). The
+first boot generates a self-signed RSA 4096 CA valid for ten years and stores it with an insert that
+loses to a concurrent one, then every boot reads the stored pair, so all clusters on one database use
+the same pair and the plaintext key exists only in the Fleet process. Boot stops instead when the
+server private key is missing, when a WSTEP pair is also configured through the usual settings, when
+only half of the pair is stored, or when no pair is stored but `mdm_windows_enrollments` or a Windows
+host's `host_disk_encryption_keys` already has rows: a new pair would break those devices and leave
+the escrowed keys unreadable. Windows MDM has two switches in shared mode: the instance
 row's flag, read by the unpinned Windows device routes (`VerifyMDMWindowsConfigured`) and the
 Windows profile cron, which only this env sets; and each tenant row's flag, set by the tenant's own
 config update and read by its pinned orbit config, which tells that tenant's hosts to enroll or
