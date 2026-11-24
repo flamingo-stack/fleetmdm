@@ -561,7 +561,13 @@ func (svc *Service) GetOrbitConfig(ctx context.Context) (fleet.OrbitConfig, erro
 	// set the host's orbit notifications for Windows MDM
 	if appConfig.MDM.WindowsEnabledAndConfigured && !appConfig.MDM.EnableTurnOnWindowsMDMManually {
 		if isEligibleForWindowsMDMEnrollment(host, mdmInfo) {
-			discoURL, err := microsoft_mdm.ResolveWindowsMDMDiscovery(appConfig.ServerSettings.ServerURL)
+			// >>> OPENFRAME(mysql-multitenancy): shared mode resolves discovery against the instance row, like the device routes
+			serverURL, err := openframeWindowsMDMServerURL(ctx, svc.ds, appConfig, fleet.IsOpenframeSharedMode())
+			if err != nil {
+				return fleet.OrbitConfig{}, err
+			}
+			discoURL, err := microsoft_mdm.ResolveWindowsMDMDiscovery(serverURL)
+			// <<< OPENFRAME(mysql-multitenancy)
 			if err != nil {
 				return fleet.OrbitConfig{}, err
 			}

@@ -307,7 +307,9 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
   `apple_bm_enabled_and_configured` stays on each tenant row: only the tenant that added the token
   ever sees it, and the instance row (read by unpinned work such as the DEP sync) gets it only when
   a Fleet restart recomputes it. The OTA enrollment profile, the SCEP URL, the
-  Android signup callback and Pub/Sub push URLs and the APNs CSR all take the server URL or org
+  Android signup callback and Pub/Sub push URLs, the APNs CSR and the Windows MDM discovery URL
+  that orbit gets in its config (`server/service/orbit_openframe_windows_mdm.go`; the Windows
+  policy, enroll and management URLs come from unpinned device routes) all take the server URL or org
   name from the instance row; set them with `FLEET_OPENFRAME_INSTANCE_SERVER_URL` and
   `FLEET_OPENFRAME_INSTANCE_ORG_NAME` (see "Helm / config wiring"). A non-empty
   `mdm.apple_server_url` on the instance row still takes precedence for Apple MDM.
