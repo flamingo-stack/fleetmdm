@@ -2,6 +2,9 @@
 package main
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"testing"
@@ -109,13 +112,98 @@ func TestOpenframeOsqueryCertPath(t *testing.T) {
 		require.Equal(t, openframeOsqueryCerts, written)
 	})
 
-	t.Run("missing root dir is an error", func(t *testing.T) {
+	t.Run("failed write returns the error and still the bundle path", func(t *testing.T) {
 		rootDir := filepath.Join(t.TempDir(), "missing")
 
-		_, err := openframeOsqueryCertPath(rootDir, "")
+		certPath, err := openframeOsqueryCertPath(rootDir, "")
 
 		require.ErrorContains(t, err, "write osquery certs")
+		require.Equal(t, filepath.Join(rootDir, "certs.pem"), certPath)
 	})
+}
+
+func TestOrbitActionUsesOpenframeTLSHelpers(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "orbit.go", nil, 0)
+	require.NoError(t, err)
+	action := findFuncDecl(file, "orbitAction")
+	require.NotNil(t, action, "orbitAction not found in orbit.go")
+
+	drop := firstCallPos(action.Body, func(call *ast.CallExpr) bool { return isCallTo(call, "dropOpenframeInsecure") })
+	insecureRead := firstCallPos(action.Body, isInsecureRead)
+	require.True(t, drop.IsValid(), "orbitAction must call dropOpenframeInsecure")
+	require.True(t, insecureRead.IsValid(), "orbitAction no longer reads --insecure")
+	require.Less(t, int(drop), int(insecureRead), "dropOpenframeInsecure must run before orbitAction first reads --insecure")
+
+	certBlock := blockAssigningFrom(action.Body, "openframeOsqueryCertPath")
+	require.NotNil(t, certBlock, "orbitAction must call openframeOsqueryCertPath")
+	require.True(t, containsStringLit(certBlock, `"--tls_server_certs"`), "the openframeOsqueryCertPath result must reach --tls_server_certs")
+}
+
+func findFuncDecl(file *ast.File, name string) *ast.FuncDecl {
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == name {
+			return fn
+		}
+	}
+	return nil
+}
+
+func firstCallPos(root ast.Node, match func(*ast.CallExpr) bool) token.Pos {
+	first := token.NoPos
+	ast.Inspect(root, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if ok && match(call) && (!first.IsValid() || call.Pos() < first) {
+			first = call.Pos()
+		}
+		return true
+	})
+	return first
+}
+
+func isCallTo(call *ast.CallExpr, name string) bool {
+	ident, ok := call.Fun.(*ast.Ident)
+	return ok && ident.Name == name
+}
+
+func isInsecureRead(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Bool" || len(call.Args) != 1 {
+		return false
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	return ok && lit.Value == `"insecure"`
+}
+
+func blockAssigningFrom(root ast.Node, funcName string) *ast.BlockStmt {
+	var found *ast.BlockStmt
+	ast.Inspect(root, func(n ast.Node) bool {
+		block, ok := n.(*ast.BlockStmt)
+		if !ok {
+			return true
+		}
+		for _, stmt := range block.List {
+			assign, ok := stmt.(*ast.AssignStmt)
+			if !ok || len(assign.Rhs) != 1 {
+				continue
+			}
+			if call, ok := assign.Rhs[0].(*ast.CallExpr); ok && isCallTo(call, funcName) {
+				found = block
+			}
+		}
+		return true
+	})
+	return found
+}
+
+func containsStringLit(root ast.Node, value string) bool {
+	found := false
+	ast.Inspect(root, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Value == value {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 func TestOpenframeOsqueryCertsMatchPackaging(t *testing.T) {

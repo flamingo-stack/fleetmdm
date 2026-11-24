@@ -35,7 +35,7 @@ func openframeOsqueryCertPath(rootDir, fleetCertificate string) (string, error) 
 	}
 	certPath := filepath.Join(rootDir, "certs.pem")
 	if err := os.WriteFile(certPath, openframeOsqueryCerts, 0o644); err != nil {
-		return "", fmt.Errorf("write osquery certs: %w", err)
+		return certPath, fmt.Errorf("write osquery certs: %w", err)
 	}
 	return certPath, nil
 }
