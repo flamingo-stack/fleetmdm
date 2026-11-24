@@ -977,7 +977,7 @@ func orbitAction(c *cli.Context) error {
 		// >>> OPENFRAME(agent-verify-server-tls): give osqueryd a CA bundle to verify the server with — openframe/docs/agent-verify-server-tls.md
 		certPath, err = openframeOsqueryCertPath(c.String("root-dir"), c.String("fleet-certificate"))
 		if err != nil {
-			return err
+			return fmt.Errorf("osquery cert path: %w", err)
 		}
 		options = append(options, osquery.WithFlags([]string{"--tls_server_certs", certPath}))
 		// <<< OPENFRAME(agent-verify-server-tls)
