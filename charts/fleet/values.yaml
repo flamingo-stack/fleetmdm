@@ -12,6 +12,9 @@ imageTag: v4.81.2 # Version of Fleet to deploy
 deploymentAnnotations: {} # Additional annotations to add to the Fleet Deployment  # OPENFRAME(helm): fork-added Deployment annotations — openframe/docs/helm-chart.md
 podAnnotations: {} # Additional annotations to add to the Fleet pod
 serviceAnnotations: {} # Additional annotations to add to the Fleet service
+# >>> OPENFRAME(helm): fork-added Service type (openframe/docs/helm-chart.md)
+serviceType: "" # Type of the Fleet service, e.g. LoadBalancer with internal-LB serviceAnnotations; empty keeps ClusterIP
+# <<< OPENFRAME(helm)
 serviceAccountAnnotations: {} # Additional annotations to add to the Fleet service account
 # >>> OPENFRAME(helm): fork-added ServiceAccount name (openframe/docs/helm-chart.md)
 serviceAccount:
