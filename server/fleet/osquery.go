@@ -85,6 +85,10 @@ type DatastoreEnrollOsqueryConfig struct {
 	TeamID         *uint
 	Cooldown       time.Duration
 	IdentityCert   *types.HostIdentityCertificate
+	// >>> OPENFRAME(enroll-machine-identity): a host its osquery reported to within this window keeps its owner — openframe/docs/enroll-machine-identity.md
+	LiveOwnerWindow time.Duration
+	InstanceID      string
+	// <<< OPENFRAME(enroll-machine-identity)
 }
 
 // DatastoreEnrollOsqueryOption is a functional option for configuring datastore Host enrollment

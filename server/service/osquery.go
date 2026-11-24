@@ -180,6 +180,10 @@ func (svc *Service) EnrollOsquery(ctx context.Context, enrollSecret, hostIdentif
 		fleet.WithEnrollOsqueryTeamID(secret.TeamID),
 		fleet.WithEnrollOsqueryCooldown(svc.config.Osquery.EnrollCooldown),
 		fleet.WithEnrollOsqueryIdentityCert(identityCert),
+		// >>> OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+		fleet.WithEnrollOsqueryLiveOwnerWindow(fleet.OpenframeEnrollLiveOwnerWindow()),
+		fleet.WithEnrollOsqueryInstanceID(hostDetails["osquery_info"]["instance_id"]),
+		// <<< OPENFRAME(enroll-machine-identity)
 	)
 	if err != nil {
 		return "", newOsqueryErrorWithInvalidNode("save enroll failed: " + err.Error())

@@ -852,6 +852,8 @@ type UpdateHostSoftwareInstalledPathsFunc func(ctx context.Context, hostID uint,
 
 type OpenframeReplaceHostSoftwareWindowsDetailsFunc func(ctx context.Context, hostID uint, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error
 
+type OpenframeRefuseSharedHardwareUUIDFunc func(ctx context.Context, hostID uint, hardwareUUID string) error
+
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
 
 type ListScheduledQueriesInPackFunc func(ctx context.Context, packID uint) (fleet.ScheduledQueryList, error)
@@ -3374,6 +3376,9 @@ type DataStore struct {
 
 	OpenframeReplaceHostSoftwareWindowsDetailsFunc        OpenframeReplaceHostSoftwareWindowsDetailsFunc
 	OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked bool
+
+	OpenframeRefuseSharedHardwareUUIDFunc        OpenframeRefuseSharedHardwareUUIDFunc
+	OpenframeRefuseSharedHardwareUUIDFuncInvoked bool
 
 	UpdateHostFunc        UpdateHostFunc
 	UpdateHostFuncInvoked bool
@@ -8194,6 +8199,13 @@ func (s *DataStore) OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Conte
 	s.OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked = true
 	s.mu.Unlock()
 	return s.OpenframeReplaceHostSoftwareWindowsDetailsFunc(ctx, hostID, detailsByChecksum)
+}
+
+func (s *DataStore) OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error {
+	s.mu.Lock()
+	s.OpenframeRefuseSharedHardwareUUIDFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeRefuseSharedHardwareUUIDFunc(ctx, hostID, hardwareUUID)
 }
 
 func (s *DataStore) UpdateHost(ctx context.Context, host *fleet.Host) error {

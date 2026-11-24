@@ -607,6 +607,9 @@ func (oc *OrbitClient) enroll() (string, error) {
 		// >>> OPENFRAME(agent-openframe-mode): carry osquery's instance id — openframe/docs/agent-openframe-mode.md
 		InstanceID: oc.hostInfo.InstanceID,
 		// <<< OPENFRAME(agent-openframe-mode)
+		// >>> OPENFRAME(enroll-machine-identity): proof that this agent held the host before it changed its identifier — openframe/docs/enroll-machine-identity.md
+		PreviousOrbitNodeKey: oc.hostInfo.PreviousOrbitNodeKey,
+		// <<< OPENFRAME(enroll-machine-identity)
 	}
 	var resp fleet.EnrollOrbitResponse
 	err := oc.request(verb, path, params, &resp)

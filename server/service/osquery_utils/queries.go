@@ -3095,6 +3095,13 @@ func directIngestMDMDeviceIDWindows(ctx context.Context, logger *slog.Logger, ho
 // the enrollment was deleted concurrently). Callers that depend on linkage being applied should re-read the enrollment
 // rather than infer it from the boolean alone.
 func LinkWindowsHostMDMEnrollment(ctx context.Context, logger *slog.Logger, ds fleet.Datastore, hostID uint, hostUUID, mdmDeviceID string) (bool, error) {
+	// >>> OPENFRAME(enroll-machine-identity): no MDM link for a host whose hardware UUID another host of its team shares — openframe/docs/enroll-machine-identity.md
+	if fleet.IsOpenframeModeContext(ctx) {
+		if err := ds.OpenframeRefuseSharedHardwareUUID(ctx, hostID, hostUUID); err != nil {
+			return false, err
+		}
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
 	updated, err := ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, hostUUID, mdmDeviceID)
 	if err != nil {
 		return false, ctxerr.Wrap(ctx, err, "updating windows mdm device id")
