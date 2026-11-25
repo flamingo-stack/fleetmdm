@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/fleetdm/fleet/v4/server"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -278,4 +281,160 @@ func openframeDeleteTenantChangeIdPLinks(ctx context.Context, tx sqlx.ExtContext
 		return ctxerr.Wrap(ctx, err, "deleting previous tenant idp links")
 	}
 	return nil
+}
+
+// OPENFRAME(enroll-machine-identity): the host whose orbit node key the agent held takes its new identifier — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeMoveHostToIdentifier(ctx context.Context, tx sqlx.ExtContext, hostInfo fleet.OrbitHostInfo) (bool, error) {
+	if !fleet.IsOpenframeModeContext(ctx) || hostInfo.PreviousOrbitNodeKey == "" {
+		return false, nil
+	}
+	identifier := hostInfo.OsqueryIdentifier
+	if identifier == "" {
+		identifier = hostInfo.HardwareUUID
+	}
+
+	query := `SELECT id, uuid, COALESCE(osquery_host_id, '') AS osquery_host_id FROM hosts WHERE orbit_node_key = ?`
+	args := []any{hostInfo.PreviousOrbitNodeKey}
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+		query += ` AND team_id = ?`
+		args = append(args, teamID)
+	}
+	query += ` FOR UPDATE`
+	var held struct {
+		ID            uint   `db:"id"`
+		UUID          string `db:"uuid"`
+		OsqueryHostID string `db:"osquery_host_id"`
+	}
+	if err := sqlx.GetContext(ctx, tx, &held, query, args...); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, ctxerr.Wrap(ctx, err, "find host by previous orbit node key")
+	}
+	if !strings.EqualFold(held.UUID, hostInfo.HardwareUUID) {
+		return false, nil
+	}
+	if held.OsqueryHostID == identifier {
+		return true, nil
+	}
+
+	var taken uint
+	err := sqlx.GetContext(ctx, tx, &taken, `SELECT id FROM hosts WHERE osquery_host_id = ? LIMIT 1`, identifier)
+	switch {
+	case err == nil:
+		return false, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, ctxerr.Wrap(ctx, err, "check new host identifier")
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET osquery_host_id = ? WHERE id = ?`, identifier, held.ID); err != nil {
+		return false, ctxerr.Wrap(ctx, err, "move host to new identifier")
+	}
+	ds.logger.InfoContext(ctx, "openframe: host moved to the identifier its agent now enrolls with",
+		"host_id", held.ID,
+		"previous_identifier", held.OsqueryHostID,
+		"identifier", identifier,
+	)
+	return true, nil
+}
+
+// OPENFRAME(enroll-machine-identity): a takeover is logged, and refused when another instance enrolls into a host that answers to its hardware UUID while its owner is live — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeTakeover(ctx context.Context, tx sqlx.QueryerContext, agent string, hostID uint, identifier, hardwareUUID, hostname, instanceID string, window time.Duration) error {
+	if !fleet.IsOpenframeModeContext(ctx) {
+		return nil
+	}
+	if identifier == "" {
+		identifier = hardwareUUID
+	}
+	var owner struct {
+		ByUUID     bool   `db:"by_uuid"`
+		Live       bool   `db:"live"`
+		InstanceID string `db:"instance_id"`
+	}
+	if err := sqlx.GetContext(ctx, tx, &owner, `
+		SELECT COALESCE(h.osquery_host_id, '') = h.uuid AS by_uuid,
+			COALESCE(hst.seen_time >= ?, FALSE) AS live,
+			COALESCE(o.instance_id, '') AS instance_id
+		FROM hosts h
+		LEFT JOIN host_seen_times hst ON hst.host_id = h.id
+		LEFT JOIN openframe_host_enroll_owners o ON o.host_id = h.id
+		WHERE h.id = ?`, time.Now().Add(-window), hostID); err != nil {
+		return ctxerr.Wrap(ctx, err, "read the host's owner")
+	}
+	otherInstance := instanceID != "" && owner.InstanceID != "" && instanceID != owner.InstanceID
+	refused := window > 0 && owner.ByUUID && owner.Live && otherInstance
+	ds.logger.WarnContext(ctx, "openframe: "+agent+" enrollment takes over a host enrolled by another agent",
+		"host_id", hostID,
+		"identifier", identifier,
+		"hardware_uuid", hardwareUUID,
+		"hostname", hostname,
+		"instance_id", instanceID,
+		"owner_instance_id", owner.InstanceID,
+		"refused_live_owner", refused,
+	)
+	if refused {
+		return backoff.Permanent(ctxerr.Errorf(ctx, "host identified by %s is enrolled by another live agent", identifier))
+	}
+	return nil
+}
+
+// OPENFRAME(enroll-machine-identity): the instance that enrolled last owns the host — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeRecordEnrollOwner(ctx context.Context, tx sqlx.ExecerContext, hostID uint, instanceID string) error {
+	if !fleet.IsOpenframeModeContext(ctx) || instanceID == "" || hostID == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO openframe_host_enroll_owners (host_id, instance_id) VALUES (?, ?)
+		ON DUPLICATE KEY UPDATE instance_id = VALUES(instance_id)`, hostID, instanceID); err != nil {
+		return ctxerr.Wrap(ctx, err, "record the host's owner")
+	}
+	return nil
+}
+
+// OPENFRAME(enroll-machine-identity): no MDM enrollment for a host whose hardware UUID another host of its team shares — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error {
+	if hardwareUUID == "" {
+		return nil
+	}
+	var hostIDs []uint
+	if err := sqlx.SelectContext(ctx, ds.writer(ctx), &hostIDs, `
+		SELECT other.id FROM hosts self
+		JOIN hosts other ON other.uuid = self.uuid AND other.team_id <=> self.team_id
+		WHERE self.id = ? AND self.uuid = ?
+		ORDER BY other.id`, hostID, hardwareUUID); err != nil {
+		return ctxerr.Wrap(ctx, err, "find hosts of the team sharing a hardware uuid")
+	}
+	return ds.openframeRefuseHosts(ctx, hardwareUUID, hostIDs)
+}
+
+// OPENFRAME(enroll-machine-identity): Apple MDM finds a device's host by UDID across teams; refused only when every host with it is in one team — openframe/docs/enroll-machine-identity.md
+func (ds *Datastore) openframeRefuseSharedHardwareUUIDOfOneTeam(ctx context.Context, hardwareUUID string, hosts []fleet.Host) error {
+	if !fleet.IsOpenframeModeContext(ctx) || len(hosts) < 2 {
+		return nil
+	}
+	hostIDs := make([]uint, 0, len(hosts))
+	for _, host := range hosts {
+		if !openframeSameTeam(host.TeamID, hosts[0].TeamID) {
+			return nil
+		}
+		hostIDs = append(hostIDs, host.ID)
+	}
+	return ds.openframeRefuseHosts(ctx, hardwareUUID, hostIDs)
+}
+
+func openframeSameTeam(a, b *uint) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func (ds *Datastore) openframeRefuseHosts(ctx context.Context, hardwareUUID string, hostIDs []uint) error {
+	if len(hostIDs) < 2 {
+		return nil
+	}
+	ds.logger.WarnContext(ctx, "openframe: MDM enrollment refused, several hosts of one team share the hardware UUID",
+		"hardware_uuid", hardwareUUID,
+		"host_ids", fmt.Sprint(hostIDs),
+	)
+	return ctxerr.Errorf(ctx, "MDM enrollment refused: hosts %v share hardware UUID %s", hostIDs, hardwareUUID)
 }

@@ -59,6 +59,9 @@ func enrollOrbitEndpoint(ctx context.Context, request interface{}, svc fleet.Ser
 		// >>> OPENFRAME(agent-openframe-mode): carry osquery's instance id — openframe/docs/agent-openframe-mode.md
 		InstanceID: req.InstanceID,
 		// <<< OPENFRAME(agent-openframe-mode)
+		// >>> OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+		PreviousOrbitNodeKey: req.PreviousOrbitNodeKey,
+		// <<< OPENFRAME(enroll-machine-identity)
 	}, req.EnrollSecret, req.EUAToken)
 	if err != nil {
 		return enrollOrbitResponse{fleet.EnrollOrbitResponse{Err: err}}, nil
@@ -302,6 +305,9 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		fleet.WithEnrollOrbitNodeKey(orbitNodeKey),
 		fleet.WithEnrollOrbitTeamID(secret.TeamID),
 		fleet.WithEnrollOrbitIdentityCert(identityCert),
+		// >>> OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+		fleet.WithEnrollOrbitLiveOwnerWindow(fleet.OpenframeEnrollLiveOwnerWindow()),
+		// <<< OPENFRAME(enroll-machine-identity)
 	)
 	if err != nil {
 		return "", fleet.OrbitError{Message: "failed to enroll " + err.Error()}
@@ -338,6 +344,15 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 		}
 	}
 
+	// >>> OPENFRAME(enroll-machine-identity): no MDM link for a host whose hardware UUID another host of its team shares — openframe/docs/enroll-machine-identity.md
+	if euaDeviceID != "" && fleet.IsOpenframeModeContext(ctx) {
+		if err := svc.ds.OpenframeRefuseSharedHardwareUUID(ctx, host.ID, host.UUID); err != nil {
+			svc.logger.ErrorContext(ctx, "windows mdm enrollment not linked to orbit host",
+				"err", err, "host_uuid", host.UUID, "device_id", euaDeviceID)
+			euaDeviceID = ""
+		}
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
 	if euaDeviceID != "" {
 		updated, err := svc.ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, host.UUID, euaDeviceID)
 		if err != nil {

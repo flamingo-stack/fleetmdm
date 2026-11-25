@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -79,6 +80,24 @@ type openframeTeamIDCtxKey struct{}
 // since the MySQL test harness runs in parallel and mutating process env there is unsafe.
 func NewOpenframeTeamContext(ctx context.Context, teamID uint) context.Context {
 	return context.WithValue(ctx, openframeTeamIDCtxKey{}, teamID)
+}
+
+type openframeModeCtxKey struct{}
+
+// NewOpenframeModeContext turns OpenFrame mode on for one call chain. Production reads
+// FLEET_OPENFRAME_MODE; tests use this, since the MySQL test harness runs in parallel and the env
+// var is process-wide.
+func NewOpenframeModeContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, openframeModeCtxKey{}, true)
+}
+
+// IsOpenframeModeContext reports OpenFrame mode from FLEET_OPENFRAME_MODE or the context.
+func IsOpenframeModeContext(ctx context.Context) bool {
+	if IsOpenframeMode() {
+		return true
+	}
+	on, _ := ctx.Value(openframeModeCtxKey{}).(bool)
+	return on
 }
 
 type OpenframeInstanceMDMFlag string
@@ -311,3 +330,84 @@ func openframeTrimStoredAgentOptions(raw *json.RawMessage) *json.RawMessage {
 	trimmed := json.RawMessage(out)
 	return &trimmed
 }
+
+// OPENFRAME(enroll-machine-identity): a host its osquery reported to within this window keeps its owner — openframe/docs/enroll-machine-identity.md
+const openframeEnrollLiveOwnerWindowEnv = "FLEET_OPENFRAME_ENROLL_LIVE_OWNER_WINDOW"
+
+// OPENFRAME(enroll-machine-identity): agents in OpenFrame mode enroll with the OpenFrame machine id — openframe/docs/enroll-machine-identity.md
+const openframeMachineIdentityEnv = "FLEET_OPENFRAME_MACHINE_IDENTITY"
+
+// OPENFRAME(enroll-machine-identity): ValidateOpenframeMachineIdentity fails the boot on an unparsable switch or window.
+func ValidateOpenframeMachineIdentity() error {
+	if _, err := parseOpenframeMachineIdentity(os.Getenv(openframeMachineIdentityEnv)); err != nil {
+		return err
+	}
+	_, err := parseOpenframeEnrollLiveOwnerWindow(os.Getenv(openframeEnrollLiveOwnerWindowEnv))
+	return err
+}
+
+// OPENFRAME(enroll-machine-identity): IsOpenframeMachineIdentity is false when unset.
+func IsOpenframeMachineIdentity() bool {
+	enabled, _ := parseOpenframeMachineIdentity(os.Getenv(openframeMachineIdentityEnv))
+	return enabled
+}
+
+func parseOpenframeMachineIdentity(raw string) (bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s=%q: %w", openframeMachineIdentityEnv, raw, err)
+	}
+	return enabled, nil
+}
+
+// OPENFRAME(enroll-machine-identity): OpenframeEnrollLiveOwnerWindow is zero when unset: no host keeps its owner, as upstream.
+func OpenframeEnrollLiveOwnerWindow() time.Duration {
+	window, _ := parseOpenframeEnrollLiveOwnerWindow(os.Getenv(openframeEnrollLiveOwnerWindowEnv))
+	return window
+}
+
+func parseOpenframeEnrollLiveOwnerWindow(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	window, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s=%q: %w", openframeEnrollLiveOwnerWindowEnv, raw, err)
+	}
+	if window < 0 {
+		return 0, fmt.Errorf("%s=%q: must not be negative", openframeEnrollLiveOwnerWindowEnv, raw)
+	}
+	return window, nil
+}
+
+// OPENFRAME(enroll-machine-identity): WithEnrollOrbitLiveOwnerWindow sets the live owner window.
+func WithEnrollOrbitLiveOwnerWindow(window time.Duration) DatastoreEnrollOrbitOption {
+	return func(c *DatastoreEnrollOrbitConfig) {
+		c.LiveOwnerWindow = window
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): WithEnrollOsqueryInstanceID sets the enrolling osquery's instance id.
+func WithEnrollOsqueryInstanceID(instanceID string) DatastoreEnrollOsqueryOption {
+	return func(c *DatastoreEnrollOsqueryConfig) {
+		c.InstanceID = instanceID
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): WithEnrollOsqueryLiveOwnerWindow sets the live owner window.
+func WithEnrollOsqueryLiveOwnerWindow(window time.Duration) DatastoreEnrollOsqueryOption {
+	return func(c *DatastoreEnrollOsqueryConfig) {
+		c.LiveOwnerWindow = window
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): the server moves a host to its agent's new identifier — openframe/docs/enroll-machine-identity.md
+const CapabilityOpenframeIdentifierMove Capability = "openframe_identifier_move"
+
+// OPENFRAME(enroll-machine-identity): agents enroll with the OpenFrame machine id — openframe/docs/enroll-machine-identity.md
+const CapabilityOpenframeMachineIdentity Capability = "openframe_machine_identity"
