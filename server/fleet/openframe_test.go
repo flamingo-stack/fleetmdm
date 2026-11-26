@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseOpenframeTeamID(t *testing.T) {
@@ -257,4 +260,51 @@ func TestOpenframeTrimAgentOptions(t *testing.T) {
 			t.Fatalf("payload without trimmable options must pass through unchanged: %q -> %q", raw, got)
 		}
 	}
+}
+
+// OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+func TestParseOpenframeEnrollLiveOwnerWindow(t *testing.T) {
+	for raw, want := range map[string]time.Duration{
+		"":      0,
+		"  ":    0,
+		"10m":   10 * time.Minute,
+		" 30s ": 30 * time.Second,
+		"0s":    0,
+	} {
+		got, err := parseOpenframeEnrollLiveOwnerWindow(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"ten minutes", "10", "-1m"} {
+		_, err := parseOpenframeEnrollLiveOwnerWindow(raw)
+		require.ErrorContains(t, err, openframeEnrollLiveOwnerWindowEnv, raw)
+	}
+}
+
+// OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+func TestServerOrbitCapabilitiesMachineIdentity(t *testing.T) {
+	t.Setenv("FLEET_OPENFRAME_MODE", "")
+	t.Setenv(openframeMachineIdentityEnv, "true")
+	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeMachineIdentity))
+
+	t.Setenv("FLEET_OPENFRAME_MODE", "1")
+	t.Setenv(openframeMachineIdentityEnv, "")
+	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+	require.False(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeMachineIdentity))
+
+	t.Setenv(openframeMachineIdentityEnv, "true")
+	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeIdentifierMove))
+	require.True(t, GetServerOrbitCapabilities().Has(CapabilityOpenframeMachineIdentity))
+}
+
+// OPENFRAME(enroll-machine-identity): openframe/docs/enroll-machine-identity.md
+func TestParseOpenframeMachineIdentity(t *testing.T) {
+	for raw, want := range map[string]bool{"": false, " ": false, "true": true, "1": true, "false": false, "0": false} {
+		got, err := parseOpenframeMachineIdentity(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	_, err := parseOpenframeMachineIdentity("yes please")
+	require.ErrorContains(t, err, openframeMachineIdentityEnv)
 }

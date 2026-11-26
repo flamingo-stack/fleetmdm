@@ -363,6 +363,12 @@ func orbitAction(c *cli.Context) error {
 		log.Debug().Msgf("fallback settings: %+v", fallbackServerOverridesCfg)
 	}
 
+	// >>> OPENFRAME(agent-verify-server-tls): drop a stored --insecure in openframe mode before anything reads it — openframe/docs/agent-verify-server-tls.md
+	if err := dropOpenframeInsecure(c); err != nil {
+		return fmt.Errorf("drop insecure: %w", err)
+	}
+	// <<< OPENFRAME(agent-verify-server-tls)
+
 	if c.Bool("insecure") && c.String("fleet-certificate") != "" {
 		return errors.New("insecure and fleet-certificate may not be specified together")
 	}
@@ -906,20 +912,6 @@ func orbitAction(c *cli.Context) error {
 	}
 	// <<< OPENFRAME(agent-openframe-mode)
 
-	// >>> OPENFRAME(agent-openframe-mode): persist the enrolled identifier for `orbit uuid` — openframe/docs/agent-openframe-mode.md
-	if c.Bool("openframe-mode") {
-		enrolledIdentifier := orbitHostInfo.OsqueryIdentifier
-		if enrolledIdentifier == "" {
-			enrolledIdentifier = orbitHostInfo.HardwareUUID
-		}
-		if enrolledIdentifier != "" {
-			if err := writeOsqueryIdentifierFile(c.String("root-dir"), enrolledIdentifier); err != nil {
-				log.Error().Err(err).Msg("write osquery identifier file")
-			}
-		}
-	}
-	// <<< OPENFRAME(agent-openframe-mode)
-
 	var (
 		options []osquery.Option
 		// optionsAfterFlagfile is populated with options that will be set after the '--flagfile' argument
@@ -968,6 +960,13 @@ func orbitAction(c *cli.Context) error {
 		options = append(options,
 			osquery.WithFlags(osquery.FleetFlags(osqueryVersion, parsedURL)),
 		)
+		// >>> OPENFRAME(agent-verify-server-tls): give osqueryd a CA bundle to verify the server with — openframe/docs/agent-verify-server-tls.md
+		certPath, err = openframeOsqueryCertPath(c.String("root-dir"), c.String("fleet-certificate"))
+		if err != nil {
+			log.Warn().Err(err).Msg("openframe mode: could not write the osquery CA bundle")
+		}
+		options = append(options, osquery.WithFlags([]string{"--tls_server_certs", certPath}))
+		// <<< OPENFRAME(agent-verify-server-tls)
 	} else
 	// <<< OPENFRAME(agent-openframe-mode)
 	// Both options --fleet-managed-host-identity-certificate and --insecure make use of a local HTTPS proxy.
@@ -1268,6 +1267,17 @@ func orbitAction(c *cli.Context) error {
 		return fmt.Errorf("error new orbit client: %w", err)
 	}
 
+	// >>> OPENFRAME(enroll-machine-identity): choose the enrollment identifier, moving the host when it changes; recorded for `orbit uuid` — openframe/docs/enroll-machine-identity.md
+	var enrollIdentity openframeEnrollIdentity
+	if c.Bool("openframe-mode") {
+		machineID := openframe.NewOpenFrameMachineIdProvider().GetMachineId()
+		enrollIdentity = openframeEnrollIdentityFor(c.String("root-dir"), c.String("host-identifier"), machineID,
+			osqueryHostInfo.InstanceID, orbitHostInfo.HardwareUUID, orbitClient)
+		orbitHostInfo.OsqueryIdentifier = enrollIdentity.osqueryIdentifier
+		orbitClient.SetOsqueryIdentifier(enrollIdentity.osqueryIdentifier)
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
+
 	// Set the function that will be called to open the SSO window if an enroll
 	// request returns an "end user authentication required" error.
 	orbitClient.SetOpenSSOWindowFunc(func() error {
@@ -1510,6 +1520,12 @@ func orbitAction(c *cli.Context) error {
 	// These options must go after '--flagfile' to not allow users to change their values
 	// on their flagfiles.
 	hostIdentifier := c.String("host-identifier")
+	// >>> OPENFRAME(enroll-machine-identity): osquery enrolls with the identifier orbit chose — openframe/docs/enroll-machine-identity.md
+	if c.Bool("openframe-mode") {
+		hostIdentifier = enrollIdentity.osqueryHostIdentifier
+		optionsAfterFlagfile = append(optionsAfterFlagfile, osquery.WithFlags(enrollIdentity.osqueryFlags))
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
 	options = append(options, osquery.WithFlags([]string{"--host-identifier", hostIdentifier}))
 	options = append(options, optionsAfterFlagfile...)
 

@@ -1228,6 +1228,12 @@ type Datastore interface {
 	OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (certPEM, keyPEM []byte, err error)
 	// <<< OPENFRAME(windows-wstep)
 
+	// >>> OPENFRAME(enroll-machine-identity)
+	// OpenframeRefuseSharedHardwareUUID refuses the MDM enrollment of a host whose hardware UUID another host of its team
+	// shares.
+	OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error
+	// <<< OPENFRAME(enroll-machine-identity)
+
 	// UpdateHost updates a host.
 	UpdateHost(ctx context.Context, host *Host) error
 

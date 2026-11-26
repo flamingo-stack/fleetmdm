@@ -31,6 +31,9 @@ type EnrollOrbitRequest struct {
 	// >>> OPENFRAME(agent-openframe-mode): osquery instance id, diagnostics only — openframe/docs/agent-openframe-mode.md
 	InstanceID string `json:"instance_id,omitempty"`
 	// <<< OPENFRAME(agent-openframe-mode)
+	// >>> OPENFRAME(enroll-machine-identity): the node key the agent held before it changed its identifier — openframe/docs/enroll-machine-identity.md
+	PreviousOrbitNodeKey string `json:"previous_orbit_node_key,omitempty"`
+	// <<< OPENFRAME(enroll-machine-identity)
 	// ComputerName is the device's friendly name (optional).
 	ComputerName string `json:"computer_name"`
 	// HardwareModel is the device's hardware model.

@@ -105,7 +105,7 @@ const (
 )
 
 func GetServerOrbitCapabilities() CapabilityMap {
-	return CapabilityMap{
+	capabilities := CapabilityMap{
 		CapabilityOrbitEndpoints:            {},
 		CapabilityTokenRotation:             {},
 		CapabilityEndUserEmail:              {},
@@ -115,6 +115,15 @@ func GetServerOrbitCapabilities() CapabilityMap {
 		CapabilityWebSetupExperience:        {},
 		CapabilityMacOSWebSetupExperience:   {},
 	}
+	// >>> OPENFRAME(enroll-machine-identity): only an OpenFrame-mode server moves a host to a new identifier — openframe/docs/enroll-machine-identity.md
+	if IsOpenframeMode() {
+		capabilities[CapabilityOpenframeIdentifierMove] = struct{}{}
+		if IsOpenframeMachineIdentity() {
+			capabilities[CapabilityOpenframeMachineIdentity] = struct{}{}
+		}
+	}
+	// <<< OPENFRAME(enroll-machine-identity)
+	return capabilities
 }
 
 func GetServerDeviceCapabilities() CapabilityMap {
