@@ -1228,6 +1228,12 @@ type Datastore interface {
 	OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (certPEM, keyPEM []byte, err error)
 	// <<< OPENFRAME(windows-wstep)
 
+	// >>> OPENFRAME(windows-mdm-tenant)
+	// OpenframeHostTeamIDsByUUID returns the distinct team ids of the hosts with this exact UUID, 0 for a host without a
+	// team.
+	OpenframeHostTeamIDsByUUID(ctx context.Context, hostUUID string) ([]uint, error)
+	// <<< OPENFRAME(windows-mdm-tenant)
+
 	// >>> OPENFRAME(enroll-machine-identity)
 	// OpenframeRefuseSharedHardwareUUID refuses the MDM enrollment of a host whose hardware UUID another host of its team
 	// shares.

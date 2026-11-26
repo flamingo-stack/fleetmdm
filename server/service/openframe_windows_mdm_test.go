@@ -109,14 +109,16 @@ func TestOpenframeWindowsMDMBaseURLPerTenant(t *testing.T) {
 func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 	ds := openframeWindowsTenantStore()
 	teamA, teamB := openframeTestTeamA, openframeTestTeamB
-	ds.HostByUUIDFunc = func(_ context.Context, uuid string) (*fleet.Host, error) {
+	ds.OpenframeHostTeamIDsByUUIDFunc = func(_ context.Context, uuid string) ([]uint, error) {
 		switch uuid {
 		case "uuid-a":
-			return &fleet.Host{UUID: uuid, TeamID: &teamA}, nil
+			return []uint{teamA}, nil
 		case "uuid-none":
-			return &fleet.Host{UUID: uuid}, nil
+			return []uint{0}, nil
+		case "uuid-shared":
+			return []uint{teamA, teamB}, nil
 		}
-		return nil, newNotFoundError()
+		return nil, nil
 	}
 	ds.LoadHostByOrbitNodeKeyFunc = func(_ context.Context, nodeKey string) (*fleet.Host, error) {
 		if nodeKey == "node-b" {
@@ -136,6 +138,12 @@ func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 	require.Error(t, err, "an unlinked enrollment has no tenant")
 	_, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-none", true)
 	require.Error(t, err, "a host without a team has no tenant")
+	_, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-gone", true)
+	require.Error(t, err, "a deleted host has no tenant")
+	ctx, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-shared", true)
+	require.ErrorContains(t, err, "hosts of 2 tenants")
+	_, ok = openframeWindowsMDMTeam(ctx)
+	require.False(t, ok, "a uuid two tenants share names no tenant")
 
 	ctx, err = svc.openframeWindowsMDMEnrollContext(t.Context(), "node-b", fleet.WindowsMDMEnrollTypeProgrammatic, true)
 	require.NoError(t, err)
@@ -146,14 +154,14 @@ func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 	_, err = svc.openframeWindowsMDMEnrollContext(t.Context(), "", fleet.WindowsMDMEnrollTypeAutomatic, true)
 	require.Error(t, err, "shared mode enrolls only through the agent")
 
-	ds.HostByUUIDFuncInvoked, ds.LoadHostByOrbitNodeKeyFuncInvoked = false, false
+	ds.OpenframeHostTeamIDsByUUIDFuncInvoked, ds.LoadHostByOrbitNodeKeyFuncInvoked = false, false
 	ctx, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-a", false)
 	require.NoError(t, err)
 	_, err = svc.openframeWindowsMDMEnrollContext(ctx, "x", fleet.WindowsMDMEnrollTypeAutomatic, false)
 	require.NoError(t, err)
 	_, ok = openframeWindowsMDMTeam(ctx)
 	require.False(t, ok, "outside shared mode nothing is looked up")
-	require.False(t, ds.HostByUUIDFuncInvoked)
+	require.False(t, ds.OpenframeHostTeamIDsByUUIDFuncInvoked)
 	require.False(t, ds.LoadHostByOrbitNodeKeyFuncInvoked)
 }
 

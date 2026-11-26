@@ -239,7 +239,9 @@ and enroll URLs of discovery, which the middleware pins by the gateway's `X-Tena
 device route under `/api/mdm/` that is pinned: it carries no credential and is reached only on the
 tenant's address; `openframeTenantPinnedDevicePath`); the management URL given at enrollment and in
 every management response, and the discovery URL recorded in `host_mdm`, both taken from the tenant
-of the device's host (the orbit node key at enrollment, the enrollment's host afterwards). Those
+of the device's host (the orbit node key at enrollment, the enrollment's host afterwards: one
+light query for the teams of the hosts with that UUID per management message, refused when hosts of
+several tenants share the UUID; `server/datastore/mysql/openframe_windows_mdm.go`). Those
 requests are not pinned: only the URLs and the WSTEP pair come from that tenant. Shared mode never
 falls back to the server URL, which on a tenant row is the internal address: a tenant without the
 address isn't told to enroll, and turning Windows MDM on, or clearing the address while it is on, is

@@ -856,6 +856,8 @@ type OpenframeLoadWindowsWSTEPFunc func(ctx context.Context, teamID uint, newPai
 
 type OpenframeGetWindowsWSTEPFunc func(ctx context.Context, teamID uint) (certPEM []byte, keyPEM []byte, err error)
 
+type OpenframeHostTeamIDsByUUIDFunc func(ctx context.Context, hostUUID string) ([]uint, error)
+
 type OpenframeRefuseSharedHardwareUUIDFunc func(ctx context.Context, hostID uint, hardwareUUID string) error
 
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
@@ -3386,6 +3388,9 @@ type DataStore struct {
 
 	OpenframeGetWindowsWSTEPFunc        OpenframeGetWindowsWSTEPFunc
 	OpenframeGetWindowsWSTEPFuncInvoked bool
+
+	OpenframeHostTeamIDsByUUIDFunc        OpenframeHostTeamIDsByUUIDFunc
+	OpenframeHostTeamIDsByUUIDFuncInvoked bool
 
 	OpenframeRefuseSharedHardwareUUIDFunc        OpenframeRefuseSharedHardwareUUIDFunc
 	OpenframeRefuseSharedHardwareUUIDFuncInvoked bool
@@ -8223,6 +8228,13 @@ func (s *DataStore) OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (
 	s.OpenframeGetWindowsWSTEPFuncInvoked = true
 	s.mu.Unlock()
 	return s.OpenframeGetWindowsWSTEPFunc(ctx, teamID)
+}
+
+func (s *DataStore) OpenframeHostTeamIDsByUUID(ctx context.Context, hostUUID string) ([]uint, error) {
+	s.mu.Lock()
+	s.OpenframeHostTeamIDsByUUIDFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeHostTeamIDsByUUIDFunc(ctx, hostUUID)
 }
 
 func (s *DataStore) OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error {

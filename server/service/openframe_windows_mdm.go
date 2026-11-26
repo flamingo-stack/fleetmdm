@@ -70,7 +70,8 @@ func (svc *Service) openframeWindowsMDMBaseURL(ctx context.Context, shared bool)
 }
 
 // openframeWindowsMDMHostContext names the tenant of the host with this UUID for the rest of a
-// Windows device request. Outside shared mode it returns ctx unchanged.
+// Windows device request: one light query per management message, failing closed when hosts of
+// several tenants share the UUID. Outside shared mode it returns ctx unchanged.
 func (svc *Service) openframeWindowsMDMHostContext(ctx context.Context, hostUUID string, shared bool) (context.Context, error) {
 	if !shared {
 		return ctx, nil
@@ -78,14 +79,18 @@ func (svc *Service) openframeWindowsMDMHostContext(ctx context.Context, hostUUID
 	if hostUUID == "" {
 		return ctx, ctxerr.New(ctx, "Windows MDM device is not linked to a host, so its tenant is unknown")
 	}
-	host, err := svc.ds.HostByUUID(ctx, hostUUID)
+	teamIDs, err := svc.ds.OpenframeHostTeamIDsByUUID(ctx, hostUUID)
 	if err != nil {
-		return ctx, ctxerr.Wrap(ctx, err, "loading the host of a Windows MDM device")
+		return ctx, ctxerr.Wrap(ctx, err, "loading the tenant of a Windows MDM device")
 	}
-	if host == nil {
+	switch len(teamIDs) {
+	case 0:
 		return ctx, ctxerr.New(ctx, "no host for the Windows MDM device")
+	case 1:
+		return openframeWindowsMDMTeamOfHost(ctx, &teamIDs[0])
+	default:
+		return ctx, ctxerr.Errorf(ctx, "hosts of %d tenants share the Windows MDM device's host uuid, so its tenant is unknown", len(teamIDs))
 	}
-	return openframeWindowsMDMTeamOfHost(ctx, host.TeamID)
 }
 
 // openframeWindowsMDMEnrollContext names the tenant of the host enrolling with this orbit node key.
