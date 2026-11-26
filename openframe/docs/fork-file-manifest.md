@@ -89,6 +89,9 @@ server/mdm/android/service/pubsub_openframe_test.go
 server/datastore/mysql/android_openframe_test.go
 server/datastore/mysql/apple_ota_openframe.go       # shared mode: refuse an Apple OTA enrollment while another tenant holds the device
 server/datastore/mysql/apple_ota_openframe_test.go
+server/datastore/mysql/mdm_openframe_test.go       # MDM command list and host identifier fences
+server/service/openframe_mdm_commands.go           # MDM command run and results scoped to the pinned team
+server/service/mdm_openframe_test.go
 orbit/cmd/orbit/openframe_identifier_test.go        # `orbit uuid` identifier-file tests
 orbit/cmd/orbit/tls_openframe.go                    # openframe mode: drop a stored --insecure, CA bundle for osqueryd
 orbit/cmd/orbit/tls_openframe_test.go
@@ -155,6 +158,7 @@ and the heaviest standing rebase cost.
 | Wider `software_cve.id` (shared database burns INT ids: one vulnerability cron per tenant cluster) | `migrations/openframe/20261123000001_WidenSoftwareCveId.go`; tests: `server/datastore/mysql/migrations_openframe_test.go`, `migrations/openframe/migration_test.go` |
 | Agent OpenFrame mode | `orbit/cmd/orbit/orbit.go`, `orbit/cmd/orbit/openframe_identifier_test.go`, `orbit/pkg/constant/constant.go`, `orbit/pkg/osquery/osquery.go`, `orbit/pkg/osquery/openframe_command.go`, `orbit/pkg/osquery/openframe_command_test.go`, `client/orbit_client.go`, `server/fleet/api_orbit.go`, `server/fleet/orbit.go`, `server/service/orbit.go`, `server/service/orbit_client.go`, `server/service/base_client.go` |
 | Shared-mode MDM | instance-wide MDM flags: `server/fleet/openframe.go`, `server/datastore/mysql/app_configs.go`, `server/service/mdm.go`; instance settings and instance-config reads: `cmd/fleet/serve.go`, `server/datastore/cached_mysql/cached_mysql.go`, `server/mdm/android/service/service.go`; enrollment routes: `server/service/openframe_middleware.go`; Android enrollment: `server/mdm/android/service/pubsub.go`; tenant change: `server/datastore/mysql/{hosts,openframe}.go`; Apple OTA: `server/datastore/mysql/apple_mdm.go`; tests: `server/datastore/mysql/{app_configs,android,apple_ota}_openframe_test.go`, `server/service/openframe_middleware_test.go`, `server/mdm/android/service/pubsub_openframe_test.go` — see [mysql-multitenancy-feature.md](mysql-multitenancy-feature.md) |
+| MDM command fences | `server/service/{mdm,apple_mdm,openframe_mdm_commands}.go`, `server/datastore/mysql/mdm.go`; tests: `server/service/mdm_openframe_test.go`, `server/datastore/mysql/mdm_openframe_test.go` — see [mysql-multitenancy-feature.md](mysql-multitenancy-feature.md) |
 | Agent options kept | `cmd/fleet/serve.go` (starter-library skip under multitenancy), `server/fleet/openframe.go` (trimmed seed/fallback defaults), `server/datastore/mysql/teams_openframe_test.go`, `server/fleet/openframe_test.go` |
 | Agent JSON content-type | `client/orbit_client.go`, `client/device_client.go`, `orbit/cmd/fetch_cert/main.go`, `client/orbit_client_content_type_test.go` |
 | Orbit 401 streak across restarts | `client/orbit_client.go`, `client/orbit_reenroll_openframe.go`; tests: `client/orbit_reenroll_openframe_test.go` — see [node-key-management.md](node-key-management.md) |

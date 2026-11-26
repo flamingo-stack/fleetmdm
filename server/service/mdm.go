@@ -520,6 +520,9 @@ func (svc *Service) RunMDMCommand(ctx context.Context, rawBase64Cmd string, host
 		err := fleet.NewInvalidArgumentError("host_uuids", "No hosts targeted. Make sure you provide a valid UUID.").WithStatus(http.StatusNotFound)
 		return nil, ctxerr.Wrap(ctx, err, "no host received")
 	}
+	// >>> OPENFRAME(mysql-multitenancy): enqueue for the pinned team's hosts only, not every uuid the request named
+	hostUUIDs = openframePinnedHostUUIDs(ctx, hostUUIDs, hosts)
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	connectedMap, err := svc.ds.AreHostsConnectedToFleetMDM(ctx, hosts)
 	if err != nil {
@@ -810,6 +813,12 @@ func (svc *Service) GetMDMCommandResults(ctx context.Context, commandUUID string
 	if err != nil {
 		return nil, err
 	}
+	// >>> OPENFRAME(mysql-multitenancy): only the pinned team's results; a command sent only to another tenant is not found
+	hosts = openframeKeepPinnedTeamHosts(ctx, hosts)
+	if results, err = openframeKeepPinnedTeamCommandResults(ctx, results, hosts); err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "get mdm command results")
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
 	if len(hosts) == 0 {
 		// do not return 404 here, as it's possible for a command to not have
 		// results yet
@@ -1309,6 +1318,9 @@ func (svc *Service) authorizeAllHostsTeams(ctx context.Context, hostUUIDs []stri
 	if err != nil {
 		return nil, err
 	}
+	// >>> OPENFRAME(mysql-multitenancy): another tenant's hosts are dropped, as if they did not exist
+	hosts = openframeKeepPinnedTeamHosts(ctx, hosts)
+	// <<< OPENFRAME(mysql-multitenancy)
 
 	// collect the team IDs and verify that the user has access to run commands
 	// on all affected teams.

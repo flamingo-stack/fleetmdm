@@ -126,6 +126,16 @@ role-authz grouping upstream; here it is a hard boundary regardless of token rol
   `software_id` / `software_title_id`, a pinned request resolves the `software` / `software_title`
   block within its team and skips the unscoped name lookups (`SoftwareLiteByID`,
   `SoftwareTitleNameForHostFilter`), so another tenant's software is never described.
+- **MDM commands** — `POST /commands/run` and the deprecated `POST /mdm/apple/enqueue` drop
+  another tenant's hosts in `authorizeAllHostsTeams` and enqueue for the remaining hosts only, not
+  every UUID the request named; with none left the request is a 404, as for an unknown UUID.
+  `GET /commands/results` and `GET /mdm/apple/commandresults` return only the pinned team's rows; a
+  command with rows for other tenants only is a 404. `GET /commands` (`ListMDMCommands`, also behind
+  `host_identifier`) lists only commands queued for the pinned team's hosts, and
+  `GetHostMDMIdentifiers` finds only the pinned team's hosts. The run and results fences sit in the
+  service because `ListHostsLiteByUUIDs` and `GetMDMAppleCommandResults` also serve the software
+  and Apple MDM workers, which run unpinned. A command with no rows at all still answers an empty
+  list, so its UUID is not proven to belong to the tenant; command UUIDs are random v4.
 
 ## Per-request pinning
 
@@ -255,7 +265,8 @@ fence, host-assignment fence, live-query target fence, teams read fence, app-con
 `EnsureOpenframeTeamID` (incl. secret seeding), delete-global-policies pin, migration pipeline,
 software-title / vulnerability / CVE-detail fences, instance-wide MDM flags through `AppConfig` and
 `SaveAppConfig` in shared mode, Android re-enrollment after a host deletion and the IdP link on a
-tenant change, Apple OTA refused while another tenant holds the device. Shared mode is switched
+tenant change, Apple OTA refused while another tenant holds the device, MDM command list and host
+identifier fences. Shared mode is switched
 on per test through an unexported context key (`openframeSharedModeCtxKey`, in the datastore and the
 Android service packages), because `fleet.IsOpenframeSharedMode` is read once per process and the
 MySQL tests run in parallel. Android service tests with the mock datastore cover the cross-tenant
