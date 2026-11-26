@@ -1,52 +1,26 @@
-// >>> OPENFRAME(windows-wstep): Windows MDM WSTEP pair generated once and kept in mdm_config_assets — openframe/docs/mysql-multitenancy-feature.md
+// >>> OPENFRAME(windows-wstep): the WSTEP CA a tenant gets with its first Windows enrollment — openframe/docs/mysql-multitenancy-feature.md
 
-package main
+package microsoft_mdm
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
-	"log/slog"
 	"math/big"
 	"time"
-
-	"github.com/fleetdm/fleet/v4/server/config"
-	"github.com/fleetdm/fleet/v4/server/datastore/mysql"
 )
 
 const (
-	openframeWindowsWSTEPKeyBits  = 4096
-	openframeWindowsWSTEPValidity = 10 * 365 * 24 * time.Hour
+	OpenframeWSTEPKeyBits  = 4096
+	OpenframeWSTEPValidity = 10 * 365 * 24 * time.Hour
 )
 
-func openframeLoadWindowsWSTEP(
-	ctx context.Context,
-	cfg *config.FleetConfig,
-	ds *mysql.Datastore,
-	logger *slog.Logger,
-	initFatal func(err error, msg string),
-) {
-	if cfg.MDM.IsMicrosoftWSTEPSet() {
-		initFatal(errors.New("FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED keeps the WSTEP pair in the database; unset the configured WSTEP certificate and key"),
-			"loading the Windows MDM WSTEP pair")
-		return
-	}
-	certPEM, keyPEM, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeNewWindowsWSTEPPair)
-	if err != nil {
-		initFatal(err, "loading the Windows MDM WSTEP pair")
-		return
-	}
-	cfg.MDM.WindowsWSTEPIdentityCertBytes = string(certPEM)
-	cfg.MDM.WindowsWSTEPIdentityKeyBytes = string(keyPEM)
-	logger.InfoContext(ctx, "Windows MDM WSTEP pair loaded from the database")
-}
-
-func openframeNewWindowsWSTEPPair() (certPEM, keyPEM []byte, err error) {
-	key, err := rsa.GenerateKey(rand.Reader, openframeWindowsWSTEPKeyBits)
+// OpenframeNewWSTEPPair generates a self-signed WSTEP CA: the certificate PEM and its PKCS#1
+// private key PEM, the form NewCertManager and the BitLocker key decryption read.
+func OpenframeNewWSTEPPair() (certPEM, keyPEM []byte, err error) {
+	key, err := rsa.GenerateKey(rand.Reader, OpenframeWSTEPKeyBits)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -59,7 +33,7 @@ func openframeNewWindowsWSTEPPair() (certPEM, keyPEM []byte, err error) {
 		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: "OpenFrame Windows MDM WSTEP CA", Organization: []string{"OpenFrame"}},
 		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(openframeWindowsWSTEPValidity),
+		NotAfter:              now.Add(OpenframeWSTEPValidity),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		BasicConstraintsValid: true,
 		IsCA:                  true,

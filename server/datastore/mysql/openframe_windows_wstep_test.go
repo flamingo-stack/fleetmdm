@@ -24,40 +24,79 @@ func openframeFakeWSTEPPair(calls *atomic.Int32) func() ([]byte, []byte, error) 
 
 func TestOpenframeLoadWindowsWSTEP(t *testing.T) {
 	ds := CreateMySQLDS(t)
+	ctx := t.Context()
+	teamA, err := ds.NewTeam(ctx, &fleet.Team{Name: "openframe-wstep-a"})
+	require.NoError(t, err)
+	teamB, err := ds.NewTeam(ctx, &fleet.Team{Name: "openframe-wstep-b"})
+	require.NoError(t, err)
 
-	t.Run("generates once and reloads the stored pair", func(t *testing.T) {
-		TruncateTables(t, ds, "mdm_config_assets")
-		ctx := t.Context()
+	windowsHost := func(t *testing.T, teamID uint, name string) *fleet.Host {
+		h := test.NewHost(t, ds, name, "", name+"-key", name+"-uuid", time.Now())
+		ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
+			_, err := q.ExecContext(ctx, `UPDATE hosts SET platform = 'windows', team_id = ? WHERE id = ?`, teamID, h.ID)
+			return err
+		})
+		return h
+	}
+	enroll := func(t *testing.T, h *fleet.Host) {
+		ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
+			_, err := q.ExecContext(ctx, `
+				INSERT INTO mdm_windows_enrollments (mdm_device_id, mdm_hardware_id, device_state, device_type, device_name,
+					enroll_type, enroll_user_id, enroll_proto_version, enroll_client_version, host_uuid)
+				VALUES (?, ?, 'enrolled', 'CIMClient_Windows', 'pc', 'ProgrammaticEnrollment', '', '5.0', '10.0', ?)`,
+				h.UUID+"-dev", h.UUID+"-hw", h.UUID)
+			return err
+		})
+	}
+	reset := func(t *testing.T) {
+		TruncateTables(t, ds, "mdm_config_assets", "mdm_windows_enrollments", "host_disk_encryption_keys")
+	}
+
+	t.Run("each tenant generates once and reloads its own pair", func(t *testing.T) {
+		reset(t)
 		var calls atomic.Int32
 
-		cert, key, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeFakeWSTEPPair(&calls))
+		certA, keyA, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamA.ID, openframeFakeWSTEPPair(&calls))
 		require.NoError(t, err)
-		require.Equal(t, "cert-1", string(cert))
-		require.Equal(t, "key-1", string(key))
+		certB, keyB, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamB.ID, openframeFakeWSTEPPair(&calls))
+		require.NoError(t, err)
+		require.NotEqual(t, certA, certB)
+		require.NotEqual(t, keyA, keyB)
+
+		again, keyAgain, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamA.ID, openframeFakeWSTEPPair(&calls))
+		require.NoError(t, err)
+		require.Equal(t, certA, again)
+		require.Equal(t, keyA, keyAgain)
+		require.EqualValues(t, 2, calls.Load(), "a stored pair is never regenerated")
+
+		got, gotKey, err := ds.OpenframeGetWindowsWSTEP(ctx, teamB.ID)
+		require.NoError(t, err)
+		require.Equal(t, certB, got)
+		require.Equal(t, keyB, gotKey)
 
 		var stored []byte
 		ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
-			return sqlx.GetContext(ctx, q, &stored, `SELECT value FROM mdm_config_assets WHERE name = ?`, OpenframeMDMAssetWindowsWSTEPKey)
+			return sqlx.GetContext(ctx, q, &stored, `SELECT value FROM mdm_config_assets WHERE name = ?`,
+				fmt.Sprintf("openframe_windows_wstep_key/%d", teamA.ID))
 		})
-		require.False(t, bytes.Contains(stored, []byte("key-1")), "the key is stored encrypted")
-
-		cert2, key2, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeFakeWSTEPPair(&calls))
-		require.NoError(t, err)
-		require.Equal(t, cert, cert2)
-		require.Equal(t, key, key2)
-		require.EqualValues(t, 1, calls.Load(), "a stored pair is never regenerated")
+		require.False(t, bytes.Contains(stored, keyA), "the key is stored encrypted")
 	})
 
-	t.Run("concurrent starts agree on one pair", func(t *testing.T) {
-		TruncateTables(t, ds, "mdm_config_assets")
-		ctx := t.Context()
+	t.Run("get never generates", func(t *testing.T) {
+		reset(t)
+		_, _, err := ds.OpenframeGetWindowsWSTEP(ctx, teamA.ID)
+		require.True(t, fleet.IsNotFound(err))
+	})
+
+	t.Run("concurrent first enrollments of a tenant agree on one pair", func(t *testing.T) {
+		reset(t)
 		var calls atomic.Int32
 		const starts = 7
 		certs := make([]string, starts)
 		var wg sync.WaitGroup
 		for i := range starts {
 			wg.Go(func() {
-				cert, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeFakeWSTEPPair(&calls))
+				cert, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamA.ID, openframeFakeWSTEPPair(&calls))
 				require.NoError(t, err)
 				certs[i] = string(cert)
 			})
@@ -68,50 +107,53 @@ func TestOpenframeLoadWindowsWSTEP(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a new pair over enrolled Windows devices", func(t *testing.T) {
-		TruncateTables(t, ds, "mdm_config_assets", "mdm_windows_enrollments")
-		ctx := t.Context()
-		ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
-			_, err := q.ExecContext(ctx, `
-				INSERT INTO mdm_windows_enrollments (mdm_device_id, mdm_hardware_id, device_state, device_type, device_name,
-					enroll_type, enroll_user_id, enroll_proto_version, enroll_client_version, host_uuid)
-				VALUES ('dev-1', 'hw-1', 'enrolled', 'CIMClient_Windows', 'pc', 'ProgrammaticEnrollment', '', '5.0', '10.0', 'uuid-1')`)
-			return err
-		})
+	t.Run("refuses a new pair over the tenant's enrolled devices, not another tenant's", func(t *testing.T) {
+		reset(t)
+		enroll(t, windowsHost(t, teamA.ID, "openframe-wstep-enrolled-a"))
 		var calls atomic.Int32
-		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeFakeWSTEPPair(&calls))
+
+		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamA.ID, openframeFakeWSTEPPair(&calls))
 		require.ErrorContains(t, err, "already enrolled")
 		require.Zero(t, calls.Load())
-		_, err = ds.GetAllMDMConfigAssetsByName(ctx, []fleet.MDMAssetName{OpenframeMDMAssetWindowsWSTEPCert}, nil)
+		_, _, err = ds.OpenframeGetWindowsWSTEP(ctx, teamA.ID)
 		require.True(t, fleet.IsNotFound(err), "nothing is stored")
+
+		_, _, err = ds.OpenframeLoadWindowsWSTEP(ctx, teamB.ID, openframeFakeWSTEPPair(&calls))
+		require.NoError(t, err, "tenant B's first enrollment is not blocked by tenant A's devices")
 	})
 
-	t.Run("refuses a new pair over escrowed Windows BitLocker keys", func(t *testing.T) {
-		TruncateTables(t, ds, "mdm_config_assets", "mdm_windows_enrollments")
-		ctx := t.Context()
-		h := test.NewHost(t, ds, "openframe-wstep-win", "", "openframe-wstep-key", "openframe-wstep-uuid", time.Now())
+	t.Run("refuses a new pair over the tenant's escrowed BitLocker keys", func(t *testing.T) {
+		reset(t)
+		h := windowsHost(t, teamB.ID, "openframe-wstep-key-b")
 		ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
-			if _, err := q.ExecContext(ctx, `UPDATE hosts SET platform = 'windows' WHERE id = ?`, h.ID); err != nil {
-				return err
-			}
 			_, err := q.ExecContext(ctx, `INSERT INTO host_disk_encryption_keys (host_id, base64_encrypted) VALUES (?, 'x')`, h.ID)
 			return err
 		})
 		var calls atomic.Int32
-		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeFakeWSTEPPair(&calls))
+		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamB.ID, openframeFakeWSTEPPair(&calls))
 		require.ErrorContains(t, err, "escrowed BitLocker keys")
 		require.Zero(t, calls.Load())
+
+		_, _, err = ds.OpenframeLoadWindowsWSTEP(ctx, teamA.ID, openframeFakeWSTEPPair(&calls))
+		require.NoError(t, err)
 	})
 
 	t.Run("refuses half a pair", func(t *testing.T) {
-		TruncateTables(t, ds, "mdm_config_assets", "mdm_windows_enrollments", "host_disk_encryption_keys")
-		ctx := t.Context()
+		reset(t)
 		require.NoError(t, ds.InsertMDMConfigAssets(ctx, []fleet.MDMConfigAsset{
-			{Name: OpenframeMDMAssetWindowsWSTEPCert, Value: []byte("cert-only")},
+			{Name: fleet.MDMAssetName(fmt.Sprintf("openframe_windows_wstep_cert/%d", teamA.ID)), Value: []byte("cert-only")},
 		}, nil))
 		var calls atomic.Int32
-		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, openframeFakeWSTEPPair(&calls))
+		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, teamA.ID, openframeFakeWSTEPPair(&calls))
 		require.ErrorContains(t, err, "only one half")
+		require.Zero(t, calls.Load())
+	})
+
+	t.Run("refuses no team", func(t *testing.T) {
+		reset(t)
+		var calls atomic.Int32
+		_, _, err := ds.OpenframeLoadWindowsWSTEP(ctx, 0, openframeFakeWSTEPPair(&calls))
+		require.Error(t, err)
 		require.Zero(t, calls.Load())
 	})
 }

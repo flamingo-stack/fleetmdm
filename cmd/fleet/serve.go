@@ -414,7 +414,9 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 			initFatal(err, "reading OpenFrame instance settings")
 		}
 		if instanceSettings.WindowsMDMEnabled != nil && *instanceSettings.WindowsMDMEnabled {
-			openframeLoadWindowsWSTEP(cmd.Context(), &config, mds, logger, initFatal)
+			if err := openframeCheckWindowsWSTEP(&config); err != nil {
+				initFatal(err, "checking the Windows MDM WSTEP settings")
+			}
 		}
 		instanceSettings.ApplyTo(appCfg)
 	}

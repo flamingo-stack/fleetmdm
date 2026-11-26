@@ -189,6 +189,13 @@ type MDM struct {
 	// If not set, the server will use Fleet server URL (recommended).
 	AppleServerURL string `json:"apple_server_url"`
 
+	// >>> OPENFRAME(windows-mdm-tenant): the tenant's public Windows MDM address — openframe/docs/mysql-multitenancy-feature.md
+	// WindowsServerURL is the public base URL the tenant's Windows devices reach Fleet's MDM on
+	// (https://<tenant domain>/mdm). OpenFrame writes it on the tenant row; in shared mode every
+	// Windows MDM URL is built from it.
+	WindowsServerURL string `json:"windows_server_url"`
+	// <<< OPENFRAME(windows-mdm-tenant)
+
 	// Deprecated: use AppleBusinessManager instead
 	DeprecatedAppleBMDefaultTeam string `json:"apple_bm_default_team,omitempty"` //nolint:apiparamcheck // not renaming already-deprecated field
 

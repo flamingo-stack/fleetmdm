@@ -66,6 +66,10 @@ type Service struct {
 	scepConfigService fleet.SCEPConfigService
 	digiCertService   fleet.DigiCertService
 
+	// >>> OPENFRAME(windows-wstep): each tenant's WSTEP cert manager, by team id — openframe/docs/mysql-multitenancy-feature.md
+	openframeWSTEPManagers *sync.Map
+	// <<< OPENFRAME(windows-wstep)
+
 	conditionalAccessMicrosoftProxy ConditionalAccessMicrosoftProxy
 
 	keyValueStore fleet.KeyValueStore
@@ -196,6 +200,9 @@ func NewService(
 		androidSvc:                      androidSvc,
 		orgLogoStore:                    orgLogoStore,
 	}
+	// >>> OPENFRAME(windows-wstep)
+	svc.openframeWSTEPManagers = new(sync.Map)
+	// <<< OPENFRAME(windows-wstep)
 	return validationMiddleware{svc, ds, sso}, nil
 }
 

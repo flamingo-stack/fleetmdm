@@ -852,6 +852,10 @@ type UpdateHostSoftwareInstalledPathsFunc func(ctx context.Context, hostID uint,
 
 type OpenframeReplaceHostSoftwareWindowsDetailsFunc func(ctx context.Context, hostID uint, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error
 
+type OpenframeLoadWindowsWSTEPFunc func(ctx context.Context, teamID uint, newPair func() (certPEM, keyPEM []byte, err error)) (certPEM []byte, keyPEM []byte, err error)
+
+type OpenframeGetWindowsWSTEPFunc func(ctx context.Context, teamID uint) (certPEM []byte, keyPEM []byte, err error)
+
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
 
 type ListScheduledQueriesInPackFunc func(ctx context.Context, packID uint) (fleet.ScheduledQueryList, error)
@@ -3374,6 +3378,12 @@ type DataStore struct {
 
 	OpenframeReplaceHostSoftwareWindowsDetailsFunc        OpenframeReplaceHostSoftwareWindowsDetailsFunc
 	OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked bool
+
+	OpenframeLoadWindowsWSTEPFunc        OpenframeLoadWindowsWSTEPFunc
+	OpenframeLoadWindowsWSTEPFuncInvoked bool
+
+	OpenframeGetWindowsWSTEPFunc        OpenframeGetWindowsWSTEPFunc
+	OpenframeGetWindowsWSTEPFuncInvoked bool
 
 	UpdateHostFunc        UpdateHostFunc
 	UpdateHostFuncInvoked bool
@@ -8194,6 +8204,20 @@ func (s *DataStore) OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Conte
 	s.OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked = true
 	s.mu.Unlock()
 	return s.OpenframeReplaceHostSoftwareWindowsDetailsFunc(ctx, hostID, detailsByChecksum)
+}
+
+func (s *DataStore) OpenframeLoadWindowsWSTEP(ctx context.Context, teamID uint, newPair func() (certPEM, keyPEM []byte, err error)) (certPEM []byte, keyPEM []byte, err error) {
+	s.mu.Lock()
+	s.OpenframeLoadWindowsWSTEPFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeLoadWindowsWSTEPFunc(ctx, teamID, newPair)
+}
+
+func (s *DataStore) OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (certPEM []byte, keyPEM []byte, err error) {
+	s.mu.Lock()
+	s.OpenframeGetWindowsWSTEPFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeGetWindowsWSTEPFunc(ctx, teamID)
 }
 
 func (s *DataStore) UpdateHost(ctx context.Context, host *fleet.Host) error {

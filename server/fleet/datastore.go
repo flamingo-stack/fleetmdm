@@ -1220,6 +1220,14 @@ type Datastore interface {
 	OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Context, hostID uint, detailsByChecksum map[string]SoftwareWindowsDetails) error
 	// <<< OPENFRAME(software-windows-details)
 
+	// >>> OPENFRAME(windows-wstep)
+	// OpenframeLoadWindowsWSTEP returns the tenant team's Windows MDM WSTEP pair, generating it with newPair and
+	// storing it when the team has none yet.
+	OpenframeLoadWindowsWSTEP(ctx context.Context, teamID uint, newPair func() (certPEM, keyPEM []byte, err error)) (certPEM, keyPEM []byte, err error)
+	// OpenframeGetWindowsWSTEP returns the tenant team's stored Windows MDM WSTEP pair, or a NotFound error.
+	OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (certPEM, keyPEM []byte, err error)
+	// <<< OPENFRAME(windows-wstep)
+
 	// UpdateHost updates a host.
 	UpdateHost(ctx context.Context, host *Host) error
 

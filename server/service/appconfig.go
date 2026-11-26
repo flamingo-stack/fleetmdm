@@ -1877,7 +1877,11 @@ func (svc *Service) validateMDM(
 	}
 
 	// Windows validation
-	if !svc.config.MDM.IsMicrosoftWSTEPSet() {
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode each tenant gets its own WSTEP pair when its first device enrolls, and needs its Windows MDM address
+	shared := fleet.IsOpenframeSharedMode()
+	openframeValidateWindowsMDM(oldMdm, mdm, shared, invalid)
+	if !shared && !svc.config.MDM.IsMicrosoftWSTEPSet() {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		if mdm.WindowsEnabledAndConfigured {
 			invalid.Append("mdm.windows_enabled_and_configured", "Couldn't turn on Windows MDM. Please configure Fleet with a certificate and key pair first.")
 			return nil

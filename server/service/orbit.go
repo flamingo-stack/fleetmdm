@@ -561,18 +561,19 @@ func (svc *Service) GetOrbitConfig(ctx context.Context) (fleet.OrbitConfig, erro
 	// set the host's orbit notifications for Windows MDM
 	if appConfig.MDM.WindowsEnabledAndConfigured && !appConfig.MDM.EnableTurnOnWindowsMDMManually {
 		if isEligibleForWindowsMDMEnrollment(host, mdmInfo) {
-			// >>> OPENFRAME(mysql-multitenancy): shared mode resolves discovery against the instance row, like the device routes
-			serverURL, err := openframeWindowsMDMServerURL(ctx, svc.ds, appConfig, fleet.IsOpenframeSharedMode())
+			// >>> OPENFRAME(windows-mdm-tenant): in shared mode discovery is on the tenant's own address; without one the host isn't told to enroll
+			serverURL, err := openframeWindowsMDMServerURL(appConfig, fleet.IsOpenframeSharedMode())
 			if err != nil {
-				return fleet.OrbitConfig{}, err
+				svc.logger.WarnContext(ctx, "Windows MDM is on for the tenant but its mdm.windows_server_url can't be used; not enrolling", "host_id", host.ID, "err", err)
+			} else {
+				discoURL, err := microsoft_mdm.ResolveWindowsMDMDiscovery(serverURL)
+				if err != nil {
+					return fleet.OrbitConfig{}, err
+				}
+				notifs.WindowsMDMDiscoveryEndpoint = discoURL
+				notifs.NeedsProgrammaticWindowsMDMEnrollment = true
 			}
-			discoURL, err := microsoft_mdm.ResolveWindowsMDMDiscovery(serverURL)
-			// <<< OPENFRAME(mysql-multitenancy)
-			if err != nil {
-				return fleet.OrbitConfig{}, err
-			}
-			notifs.WindowsMDMDiscoveryEndpoint = discoURL
-			notifs.NeedsProgrammaticWindowsMDMEnrollment = true
+			// <<< OPENFRAME(windows-mdm-tenant)
 		} else if appConfig.MDM.WindowsMigrationEnabled && isEligibleForWindowsMDMMigration(host, mdmInfo) {
 			notifs.NeedsMDMMigration = true
 
@@ -1369,7 +1370,9 @@ func (svc *Service) SetOrUpdateDiskEncryptionKey(ctx context.Context, encryption
 
 	// only set the encryption key if there was no client error
 	if clientError == "" && encryptionKey != "" {
-		wstepCert, _, _, err := svc.config.MDM.MicrosoftWSTEP()
+		// >>> OPENFRAME(windows-wstep): in shared mode the key is encrypted with the host's tenant's WSTEP certificate
+		wstepCert, err := svc.openframeWindowsWSTEPCertificate(ctx, host.TeamID, fleet.IsOpenframeSharedMode())
+		// <<< OPENFRAME(windows-wstep)
 		if err != nil {
 			// should never return an error because the WSTEP is first parsed and
 			// cached at the start of the fleet serve process.
