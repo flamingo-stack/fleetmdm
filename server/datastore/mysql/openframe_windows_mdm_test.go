@@ -113,8 +113,8 @@ func TestOpenframeMDMWindowsEnrollmentRecordsTenant(t *testing.T) {
 func TestOpenframeMDMWindowsReenrollmentStaysInTenant(t *testing.T) {
 	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
 	ctx := t.Context()
-	hostA := f.host(t, "reenroll-a", "uuid-shared", f.teamA.ID)
-	hostB := f.host(t, "reenroll-b", "uuid-shared", f.teamB.ID)
+	hostA := f.host(t, "reenroll-a", "uuid-reenroll-a", f.teamA.ID)
+	hostB := f.host(t, "reenroll-b", "uuid-reenroll-b", f.teamB.ID)
 	f.hostState(t, hostA)
 	f.hostState(t, hostB)
 	f.enroll(t, "hw-1", "dev-1", hostA.UUID, &f.teamA.ID)
@@ -129,40 +129,80 @@ func TestOpenframeMDMWindowsReenrollmentStaysInTenant(t *testing.T) {
 		return f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-1'`)
 	}
 
-	err := f.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, "hw-1", f.teamB.ID)
+	err := f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostB.UUID, "hw-1", "dev-b", f.teamB.ID)
 	var conflict *fleet.ConflictError
 	require.ErrorAs(t, err, &conflict, "another tenant's hardware id is refused, not treated as new")
-	require.False(t, fleet.IsNotFound(err))
 	require.Equal(t, 1, enrollments(), "tenant A's enrollment stays")
 	require.Equal(t, 1, actions(hostA))
 	require.Equal(t, 1, upcoming(hostA))
 
-	require.NoError(t, f.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, "hw-1", f.teamA.ID))
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostA.UUID, "hw-1", "dev-1", f.teamA.ID))
 	require.Zero(t, enrollments())
 	require.Zero(t, actions(hostA))
 	require.Zero(t, upcoming(hostA))
-	require.Equal(t, 1, actions(hostB), "the same uuid in tenant B keeps its lock state")
-	require.Equal(t, 1, upcoming(hostB), "the same uuid in tenant B keeps its activities")
+	require.Equal(t, 1, actions(hostB), "tenant B's host keeps its lock state")
+	require.Equal(t, 1, upcoming(hostB), "tenant B's host keeps its activities")
 
-	err = f.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, "hw-1", f.teamA.ID)
-	require.True(t, fleet.IsNotFound(err), "nothing left to delete")
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostA.UUID, "hw-1", "dev-1", f.teamA.ID),
+		"a first enrollment has nothing to remove")
+}
+
+// A device moved to another MSP: once the old tenant deletes its host, the new tenant's enrollment
+// releases the old enrollment instead of being refused forever.
+func TestOpenframeMDMWindowsReenrollmentAfterOldTenantDeletesHost(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "moved-a", "uuid-moved", f.teamA.ID)
+	f.enroll(t, "hw-moved", "dev-moved", hostA.UUID, &f.teamA.ID)
+	var conflict *fleet.ConflictError
+
+	hostB := f.host(t, "moved-b", "uuid-moved-b", f.teamB.ID)
+	require.ErrorAs(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostB.UUID, "hw-moved", "dev-moved-b", f.teamB.ID), &conflict,
+		"while tenant A has the host, the device stays A's")
+
+	require.NoError(t, f.ds.DeleteHost(ctx, hostA.ID))
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostB.UUID, "hw-moved", "dev-moved-b", f.teamB.ID),
+		"once tenant A deleted the host, its enrollment is released")
+	require.Zero(t, f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-moved'`))
+
+	f.enroll(t, "hw-moved-2", "dev-moved-2", "uuid-moved-2", &f.teamA.ID)
+	hostB2 := f.host(t, "moved-b2", "uuid-moved-2", f.teamB.ID)
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostB2.UUID, "hw-new", "dev-new", f.teamB.ID),
+		"tenant A's released enrollment with the hardware uuid does not block tenant B")
+}
+
+// A refused re-enrollment leaves the device's working enrollment as it is.
+func TestOpenframeMDMWindowsRefusedReenrollmentKeepsEnrollment(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "keep-a", "uuid-keep", f.teamA.ID)
+	f.hostState(t, hostA)
+	f.enroll(t, "hw-keep", "dev-keep", hostA.UUID, &f.teamA.ID)
+	f.host(t, "keep-b", hostA.UUID, f.teamB.ID)
+
+	var conflict *fleet.ConflictError
+	require.ErrorAs(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostA.UUID, "hw-keep", "dev-keep", f.teamA.ID), &conflict)
+	require.Equal(t, 1, f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-keep'`),
+		"the enrollment survives the refusal")
+	require.Equal(t, 1, f.count(t, `SELECT COUNT(*) FROM host_mdm_actions WHERE host_id = ?`, hostA.ID))
 }
 
 func TestOpenframeMDMWindowsReenrollmentOfEnrollmentWithoutTenant(t *testing.T) {
 	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
 	ctx := t.Context()
 	hostA := f.host(t, "legacy-a", "uuid-legacy", f.teamA.ID)
+	hostB := f.host(t, "legacy-b", "uuid-legacy-b", f.teamB.ID)
 	f.enroll(t, "hw-legacy", "dev-legacy", hostA.UUID, nil)
 	f.enroll(t, "hw-unlinked", "dev-unlinked", "", nil)
 
 	var conflict *fleet.ConflictError
-	require.ErrorAs(t, f.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, "hw-legacy", f.teamB.ID), &conflict,
+	require.ErrorAs(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostB.UUID, "hw-legacy", "dev-b", f.teamB.ID), &conflict,
 		"an enrollment without a tenant belongs to the tenant of its host, not to tenant B")
-	require.ErrorAs(t, f.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, "hw-unlinked", f.teamA.ID), &conflict,
-		"an enrollment without a tenant or a host belongs to no tenant")
-	require.NoError(t, f.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, "hw-legacy", f.teamA.ID),
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostA.UUID, "hw-unlinked", "dev-a2", f.teamA.ID),
+		"an enrollment without a tenant or a host is released")
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostA.UUID, "hw-legacy", "dev-legacy", f.teamA.ID),
 		"the tenant of its host re-enrolls the device")
-	require.Zero(t, f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-legacy'`))
+	require.Zero(t, f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id IN ('hw-legacy', 'hw-unlinked')`))
 }
 
 func TestOpenframeMDMWindowsLinkStaysInTenant(t *testing.T) {
@@ -294,20 +334,19 @@ func TestOpenframeMDMWindowsEnrollConflict(t *testing.T) {
 	f.enroll(t, "hw-conf-a", "dev-conf-a", hostA.UUID, &f.teamA.ID)
 	var conflict *fleet.ConflictError
 
-	require.NoError(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, "dev-new", f.teamB.ID))
+	prepare := func(hostUUID, deviceID string) error {
+		return f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostUUID, "hw-new", deviceID, f.teamB.ID)
+	}
+	require.NoError(t, prepare(hostB.UUID, "dev-new"))
 
-	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, "dev-conf-a", f.teamB.ID), &conflict,
-		"another device's device id is refused")
-	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, hostA.UUID, f.teamB.ID), &conflict,
-		"a device id that is another host's uuid is refused")
-	require.NoError(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, hostB.UUID, f.teamB.ID),
-		"a device id equal to the host's own uuid is not another host's")
-	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostA.UUID, "dev-new", f.teamB.ID), &conflict,
-		"a hardware uuid another tenant's enrollment holds is refused")
+	require.ErrorAs(t, prepare(hostB.UUID, "dev-conf-a"), &conflict, "another device's device id is refused")
+	require.ErrorAs(t, prepare(hostB.UUID, hostA.UUID), &conflict, "a device id that is another host's uuid is refused")
+	require.NoError(t, prepare(hostB.UUID, hostB.UUID), "a device id equal to the host's own uuid is not another host's")
+	require.ErrorAs(t, prepare(hostA.UUID, "dev-new"), &conflict, "a hardware uuid another tenant's enrollment holds is refused")
+	require.ErrorContains(t, prepare("", "dev-new"), "no host")
 
 	f.host(t, "conf-b-twin", hostB.UUID, f.teamA.ID)
-	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, "dev-new", f.teamB.ID), &conflict,
-		"a hardware uuid another host has, in any tenant, is refused")
+	require.ErrorAs(t, prepare(hostB.UUID, "dev-new"), &conflict, "a hardware uuid another host has, in any tenant, is refused")
 }
 
 func TestOpenframeMDMWindowsResetStaysInTenant(t *testing.T) {
@@ -380,4 +419,27 @@ func TestOpenframeMDMWindowsHostReadsStayInTenant(t *testing.T) {
 	connected, err = f.ds.IsHostConnectedToFleetMDM(ctx, hostB)
 	require.NoError(t, err)
 	require.True(t, connected, "outside shared mode as upstream")
+
+	cmd := &fleet.MDMWindowsCommand{CommandUUID: uuid.NewString(), RawCommand: []byte("<Exec></Exec>"), TargetLocURI: "./test/uri"}
+	require.NoError(t, f.ds.MDMWindowsInsertCommandForHosts(openframePinnedSharedCtx(ctx, f.teamA.ID), []string{hostA.UUID}, cmd))
+	admin := fleet.TeamFilter{User: &fleet.User{GlobalRole: new(fleet.RoleAdmin)}}
+	commands := func(teamID uint, hostIdentifier string) []*fleet.MDMCommand {
+		got, _, _, err := f.ds.ListMDMCommands(openframePinnedSharedCtx(ctx, teamID), admin, &fleet.MDMCommandListOptions{
+			ListOptions: fleet.ListOptions{PerPage: 10},
+			Filters:     fleet.MDMCommandFilters{HostIdentifier: hostIdentifier},
+		})
+		require.NoError(t, err)
+		return got
+	}
+	require.Len(t, commands(f.teamA.ID, ""), 1, "tenant A lists its device's command")
+	require.Len(t, commands(f.teamA.ID, hostA.UUID), 1)
+	for _, identifier := range []string{"", hostB.UUID} {
+		for _, c := range commands(f.teamB.ID, identifier) {
+			require.NotEqual(t, cmd.CommandUUID, c.CommandUUID, "tenant B does not list A's device's command on its host with A's uuid")
+		}
+	}
+	_, err = f.ds.getMDMCommand(openframePinnedSharedCtx(ctx, f.teamA.ID), f.ds.reader(ctx), cmd.CommandUUID)
+	require.NoError(t, err)
+	_, err = f.ds.getMDMCommand(openframePinnedSharedCtx(ctx, f.teamB.ID), f.ds.reader(ctx), cmd.CommandUUID)
+	require.True(t, fleet.IsNotFound(err), "tenant B can't read A's device's command by its uuid")
 }

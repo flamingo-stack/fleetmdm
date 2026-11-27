@@ -248,20 +248,22 @@ come from the device and are not unique across tenants: an agent reports its own
 the device chooses its device id. Upstream sends commands, keeps profile statuses and resets an
 enrollment by those keys, so in shared mode each of these paths is held to the tenant:
 
-- re-enrollment removes the enrollment its hardware id names only when it belongs to the enrolling
-  tenant (its `team_id`, or for a row without one, a host of that tenant with the row's host uuid);
-  an enrollment of another tenant refuses the enrollment and stays as it is. The host state cleared
-  with it (lock and wipe actions, setup experience results, upcoming activities) is that tenant's
-  host's only, and `host_mdm_windows_profiles`, keyed by uuid alone, is cleared only when no host of
-  another tenant has the uuid (`OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment`);
+- enrollment is readied in one transaction (`OpenframeMDMWindowsPrepareEnrollment`). It is first
+  refused, with nothing changed, when another host of any tenant has the device's hardware uuid,
+  another tenant's enrollment still held by its host has it, or the device id is another host's uuid
+  or another device's. Then the enrollment the device's hardware id names is removed when it is the
+  enrolling tenant's or released, and refused when another tenant's host still holds it. An
+  enrollment is released once no host of its tenant has its host uuid any more (for one without a
+  tenant: no host of another tenant), so a device moved to another tenant enrolls there once the old
+  tenant deletes its host; Fleet has no turning MDM off for a Windows host. The host state cleared
+  with the removal (lock and wipe actions, setup experience results, upcoming activities) is the
+  enrolling tenant's host's only, and `host_mdm_windows_profiles`, keyed by uuid alone, is cleared
+  only when no host of another tenant has the uuid;
 - the link of an enrollment to a host (orbit's EUA token, osquery's MDM device id, the DevDetail
   serial of the management session) is made only when both have the same team, the host named by id
   (`OpenframeUpdateMDMWindowsEnrollmentHost`, `server/service/osquery_utils/queries_openframe_windows_mdm.go`);
 - an enrollment without a recorded tenant (enrolled before the migration) gets no management session
   until it re-enrolls, and is linked to no host.
-- enrollment is refused when another host, of any tenant, has the device's hardware uuid, when
-  another tenant's enrollment holds that uuid, or when the device id is another host's uuid or
-  already enrolled (`OpenframeWindowsMDMEnrollConflict`);
 - a command (wipe, custom command, profile, TPM, setup experience) is resolved to an enrollment of the
   request's tenant when the request is pinned; an unpinned one (the profile cron, a device request)
   reaches only an enrollment whose host uuid no host of another tenant has, and an enrollment of the
@@ -272,9 +274,11 @@ enrollment by those keys, so in shared mode each of these paths is held to the t
   uuid alone;
 - the enrollment reset at turn-on (`MDMResetEnrollment`: BitLocker key, certificates, profile
   statuses) and the host looked up for a wipe result are the device's tenant's;
-- a host's profile statuses list only its tenant's profiles, and a host counts as connected to MDM
-  only through an enrollment of its tenant (`GetHostMDMWindowsProfiles`, `IsHostConnectedToFleetMDM`,
-  `AreHostsConnectedToFleetMDM`);
+- a host's profile statuses list only its tenant's profiles, a host counts as connected to MDM only
+  through an enrollment of its tenant, and the MDM command listings (per host, all hosts, one command)
+  show a Windows command only on a host of its enrollment's tenant and of the pinned tenant
+  (`GetHostMDMWindowsProfiles`, `IsHostConnectedToFleetMDM`, `AreHostsConnectedToFleetMDM`,
+  `listMDMCommandsByHostIdentifier`, `ListMDMCommands`, `getMDMCommand`);
 - the WSTEP pair check and a tenant's Windows profile cleanup read the enrollment's `team_id` and skip
   uuids another tenant shares.
 
@@ -284,8 +288,7 @@ and needing such a shared uuid: the host list's `connected_to_fleet` filter and 
 (`hostMDMSelect`, `labels.go`), the profile summary counts, the orbit config's ESP flags
 (`GetMDMWindowsHostConfigState`) and setup experience lookups by uuid.
 
-A device moved to another tenant enrolls there only after the old tenant releases it (deletes the
-host or turns its MDM off). Outside shared mode `team_id` stays NULL and every query is upstream's. Shared mode never
+A device moved to another tenant enrolls there once the old tenant deletes its host. Outside shared mode `team_id` stays NULL and every query is upstream's. Shared mode never
 falls back to the server URL, which on a tenant row is the internal address: a tenant without the
 address isn't told to enroll, and turning Windows MDM on, or clearing the address while it is on, is
 refused. Shared mode enrolls only through the agent (programmatic enrollment); automatic (Entra)
@@ -367,6 +370,9 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
   uuid with a global-admin filter and no tenant fence (`ListHostsLiteByUUIDs`). OpenFrame has no
   caller (neither the gateway allowlist nor the SDK carries it); fence it before adding one. The
   Windows command it enqueues is held to the pinned tenant's enrollments either way.
+- **`GET /commands` without a host (`ListMDMCommands`)** — its team filter (`whereFilterHostsByTeams`)
+  does not fence a pinned request, so the Apple rows of every tenant are listed; the Windows rows are
+  held to the pinned tenant. OpenFrame has no caller.
 - **Windows MDM challenge state** — upstream stores the SyncML message of a device that has not yet
   authenticated (`saveResponse` in the Challenge state) and resets its nonce; results keyed by a
   command uuid it cannot guess.

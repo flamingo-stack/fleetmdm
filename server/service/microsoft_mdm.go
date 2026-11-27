@@ -1289,11 +1289,6 @@ func (svc *Service) GetMDMWindowsEnrollResponse(ctx context.Context, secTokenMsg
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "device enroll check")
 	}
-	// >>> OPENFRAME(windows-mdm-tenant): no enrollment whose hardware uuid or device id another device could be confused with — openframe/docs/mysql-multitenancy-feature.md
-	if err := svc.openframeRefuseWindowsEnrollConflict(ctx, hostUUID, secTokenMsg); err != nil {
-		return nil, ctxerr.Wrap(ctx, err, "Windows MDM enrollment identifiers")
-	}
-	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// Getting the device provisioning information in the form of a WapProvisioningDoc
 	deviceProvisioning, credentialsHash, err := svc.getDeviceProvisioningInformation(ctx, secTokenMsg)
@@ -2917,8 +2912,8 @@ func (svc *Service) removeWindowsDeviceIfAlreadyMDMEnrolled(ctx context.Context,
 	}
 
 	// Device is already enrolled, let's remove it
-	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the device's tenant — openframe/docs/mysql-multitenancy-feature.md
-	err = svc.openframeDeleteWindowsDeviceOnReenrollment(ctx, reqHWDeviceID)
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode identifiers are checked first, and only an enrollment of the device's tenant or a released one is removed — openframe/docs/mysql-multitenancy-feature.md
+	err = svc.openframeDeleteWindowsDeviceOnReenrollment(ctx, secTokenMsg, reqHWDeviceID)
 	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		if fleet.IsNotFound(err) {

@@ -1232,16 +1232,13 @@ type Datastore interface {
 	// OpenframeMDMWindowsEnrollmentTeamID returns the tenant team a Windows MDM enrollment enrolled into, or nil when
 	// it has none recorded.
 	OpenframeMDMWindowsEnrollmentTeamID(ctx context.Context, enrollmentID uint) (*uint, error)
-	// OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment is MDMWindowsDeleteEnrolledDeviceOnReenrollment for a
-	// device re-enrolling into teamID: an enrollment of another tenant is left as it is (ConflictError).
-	OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx context.Context, mdmDeviceHWID string, teamID uint) error
+	// OpenframeMDMWindowsPrepareEnrollment readies, in one transaction, a Windows MDM enrollment into teamID: it refuses
+	// (ConflictError, nothing changed) identifiers another device could be confused with, then removes the device's
+	// previous enrollment when it is teamID's or released.
+	OpenframeMDMWindowsPrepareEnrollment(ctx context.Context, hostUUID, mdmDeviceHWID, mdmDeviceID string, teamID uint) error
 	// OpenframeUpdateMDMWindowsEnrollmentHost is UpdateMDMWindowsEnrollmentsHostUUID that links the enrollment to the
 	// host only when both belong to the same tenant.
 	OpenframeUpdateMDMWindowsEnrollmentHost(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error)
-	// OpenframeWindowsMDMEnrollConflict refuses (ConflictError) a Windows MDM enrollment into teamID whose hardware uuid
-	// another host has or another tenant's enrollment holds, or whose device id is another host's uuid or already
-	// enrolled.
-	OpenframeWindowsMDMEnrollConflict(ctx context.Context, hostUUID, mdmDeviceID string, teamID uint) error
 	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// >>> OPENFRAME(enroll-machine-identity)

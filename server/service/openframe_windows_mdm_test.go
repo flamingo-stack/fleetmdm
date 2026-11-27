@@ -149,6 +149,7 @@ func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, teamB, got)
 	require.Equal(t, &teamB, openframeWindowsMDMEnrollTeamID(ctx), "the enrollment records the enrolling host's tenant")
+	require.Equal(t, "uuid-b", ctx.Value(openframeWindowsMDMEnrollHostCtxKey{}), "the enrolling host's uuid is kept for the identifier checks")
 
 	_, err = svc.openframeWindowsMDMEnrollContext(t.Context(), "", fleet.WindowsMDMEnrollTypeAutomatic, true)
 	require.Error(t, err, "shared mode enrolls only through the agent")
@@ -169,47 +170,30 @@ func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 
 func TestOpenframeWindowsReenrollmentDeletesOnlyOwnTenant(t *testing.T) {
 	ds := openframeWindowsTenantStore()
-	var deletedFor []uint
-	ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc = func(_ context.Context, hwID string, teamID uint) error {
-		require.Equal(t, "hw-1", hwID)
-		deletedFor = append(deletedFor, teamID)
+	var prepared []string
+	ds.OpenframeMDMWindowsPrepareEnrollmentFunc = func(_ context.Context, hostUUID, hwID, deviceID string, teamID uint) error {
+		prepared = append(prepared, fmt.Sprintf("%s/%s/%s/%d", hostUUID, hwID, deviceID, teamID))
 		return nil
 	}
 	ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc = func(context.Context, string) error { return nil }
-	svc := &Service{ds: ds}
-
-	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(openframeWithWindowsMDMTeam(t.Context(), openframeTestTeamB), "hw-1"))
-	require.Equal(t, []uint{openframeTestTeamB}, deletedFor, "shared mode deletes within the enrolling tenant")
-	require.False(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked)
-
-	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(t.Context(), "hw-1"))
-	require.True(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked, "outside shared mode as upstream")
-	require.Len(t, deletedFor, 1)
-}
-
-func TestOpenframeWindowsEnrollConflictAndPin(t *testing.T) {
-	ds := openframeWindowsTenantStore()
-	var checked []string
-	ds.OpenframeWindowsMDMEnrollConflictFunc = func(_ context.Context, hostUUID, deviceID string, teamID uint) error {
-		checked = append(checked, fmt.Sprintf("%s/%s/%d", hostUUID, deviceID, teamID))
-		return &fleet.ConflictError{Message: "conflict"}
-	}
 	svc := &Service{ds: ds}
 	msg := &fleet.RequestSecurityToken{AdditionalContext: fleet.AdditionalContext{ContextItems: []fleet.ContextItem{
 		{Name: syncml.ReqSecTokenContextItemDeviceID, Value: "dev-1"},
 	}}}
 
+	ctx := context.WithValue(openframeWithWindowsMDMTeam(t.Context(), openframeTestTeamB), openframeWindowsMDMEnrollHostCtxKey{}, "uuid-b")
+	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(ctx, msg, "hw-1"))
+	require.Equal(t, []string{fmt.Sprintf("uuid-b/hw-1/dev-1/%d", openframeTestTeamB)}, prepared,
+		"shared mode checks the identifiers and removes within the enrolling tenant, in one call")
+	require.False(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked)
+
+	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(t.Context(), msg, "hw-1"))
+	require.True(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked, "outside shared mode as upstream")
+	require.Len(t, prepared, 1)
+}
+
+func TestOpenframeWindowsMDMPinnedContext(t *testing.T) {
 	ctxB := openframeWithWindowsMDMTeam(t.Context(), openframeTestTeamB)
-	var conflict *fleet.ConflictError
-	require.ErrorAs(t, svc.openframeRefuseWindowsEnrollConflict(ctxB, "uuid-1", msg), &conflict)
-	require.Equal(t, []string{fmt.Sprintf("uuid-1/dev-1/%d", openframeTestTeamB)}, checked, "shared mode checks the device's identifiers in its tenant")
-
-	require.ErrorContains(t, svc.openframeRefuseWindowsEnrollConflict(ctxB, "", msg), "no host")
-	require.Len(t, checked, 1, "an enrollment without a host is refused before any lookup")
-
-	require.NoError(t, svc.openframeRefuseWindowsEnrollConflict(t.Context(), "uuid-1", msg))
-	require.Len(t, checked, 1, "outside shared mode nothing is checked")
-
 	pinned, ok := fleet.OpenframeTeamID(openframeWindowsMDMPinnedContext(ctxB))
 	require.True(t, ok)
 	require.Equal(t, openframeTestTeamB, pinned, "lookups by host uuid are pinned to the device's tenant")

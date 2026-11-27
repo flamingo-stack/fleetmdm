@@ -181,6 +181,12 @@ func (ds *Datastore) ListMDMCommands(
 	}
 
 	appleStmt, windowsStmt := getMDMCommandsSubqueries()
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a Windows command is listed only on a host of its enrollment's tenant — openframe/docs/mysql-multitenancy-feature.md
+	windowsStmt, fenceErr := openframeWindowsCommandsStmt(ctx, windowsStmt)
+	if fenceErr != nil {
+		return nil, nil, nil, fenceErr
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// Per-branch pagination: without this, the UNION ALL would materialize every command on
 	// both sides before pagination, which times out at scale (#44170).
@@ -451,6 +457,9 @@ WHERE
 		} else {
 			winParams = append(winParams, winUUIDs)
 		}
+		// >>> OPENFRAME(windows-mdm-tenant): in shared mode a host lists only its tenant's enrollment's commands — openframe/docs/mysql-multitenancy-feature.md
+		filterSQL += openframeWindowsEnrollmentOfHostTeam(ctx)
+		// <<< OPENFRAME(windows-mdm-tenant)
 
 		winStmt = fmt.Sprintf(winStmt, filterSQL)
 
@@ -577,6 +586,12 @@ func addAppleCommandStatusFilter(stmt string, filter *fleet.MDMCommandFilters, p
 
 func (ds *Datastore) getMDMCommand(ctx context.Context, q sqlx.QueryerContext, cmdUUID string) (*fleet.MDMCommand, error) {
 	stmt := getCombinedMDMCommandsQuery() + "command_uuid = ?"
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a Windows command is listed only on a host of its enrollment's tenant — openframe/docs/mysql-multitenancy-feature.md
+	stmt, err := openframeWindowsCommandsStmt(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	var cmd fleet.MDMCommand
 	if err := sqlx.GetContext(ctx, q, &cmd, stmt, cmdUUID); err != nil {

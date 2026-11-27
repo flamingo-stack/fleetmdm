@@ -107,31 +107,21 @@ func openframeWindowsMDMPinnedContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-// openframeRefuseWindowsEnrollConflict refuses, in shared mode, an enrollment whose hardware uuid or
-// device id another device could be confused with (OpenframeWindowsMDMEnrollConflict).
-func (svc *Service) openframeRefuseWindowsEnrollConflict(ctx context.Context, hostUUID string, secTokenMsg *fleet.RequestSecurityToken) error {
+// openframeDeleteWindowsDeviceOnReenrollment removes the enrollment the re-enrolling device's hardware id
+// names. In shared mode it first refuses identifiers another device could be confused with, and removes
+// only an enrollment of the device's tenant or a released one, in one transaction
+// (OpenframeMDMWindowsPrepareEnrollment).
+func (svc *Service) openframeDeleteWindowsDeviceOnReenrollment(ctx context.Context, secTokenMsg *fleet.RequestSecurityToken, mdmDeviceHWID string) error {
 	teamID := openframeWindowsMDMEnrollTeamID(ctx)
 	if teamID == nil {
-		return nil
+		return svc.ds.MDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, mdmDeviceHWID)
 	}
-	if hostUUID == "" {
-		return ctxerr.New(ctx, "Windows MDM enrollment has no host")
-	}
+	hostUUID, _ := ctx.Value(openframeWindowsMDMEnrollHostCtxKey{}).(string)
 	deviceID, err := GetContextItem(secTokenMsg, syncml.ReqSecTokenContextItemDeviceID)
 	if err != nil {
 		return err
 	}
-	return svc.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostUUID, deviceID, *teamID)
-}
-
-// openframeDeleteWindowsDeviceOnReenrollment removes the enrollment the re-enrolling device's hardware id
-// names. In shared mode only an enrollment of the device's tenant is removed; one of another tenant
-// refuses the enrollment.
-func (svc *Service) openframeDeleteWindowsDeviceOnReenrollment(ctx context.Context, mdmDeviceHWID string) error {
-	if teamID := openframeWindowsMDMEnrollTeamID(ctx); teamID != nil {
-		return svc.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, mdmDeviceHWID, *teamID)
-	}
-	return svc.ds.MDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, mdmDeviceHWID)
+	return svc.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostUUID, mdmDeviceHWID, deviceID, *teamID)
 }
 
 // openframeWindowsMDMEnrollContext names the tenant of the host enrolling with this orbit node key.
@@ -151,8 +141,14 @@ func (svc *Service) openframeWindowsMDMEnrollContext(ctx context.Context, orbitN
 	if host == nil {
 		return ctx, ctxerr.New(ctx, "no host for the enrolling orbit node key")
 	}
-	return openframeWindowsMDMTeamOfHost(ctx, host.TeamID)
+	ctx, err = openframeWindowsMDMTeamOfHost(ctx, host.TeamID)
+	if err != nil {
+		return ctx, err
+	}
+	return context.WithValue(ctx, openframeWindowsMDMEnrollHostCtxKey{}, host.UUID), nil
 }
+
+type openframeWindowsMDMEnrollHostCtxKey struct{}
 
 func openframeWindowsMDMTeamOfHost(ctx context.Context, teamID *uint) (context.Context, error) {
 	if teamID == nil || *teamID == 0 {
