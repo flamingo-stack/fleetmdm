@@ -452,3 +452,29 @@ func TestMigrateOpenframeWidenSoftwareCveId(t *testing.T) {
 	require.NoError(t, ds.MigrateOpenframe(ctx))
 	require.Equal(t, "bigint unsigned", idType())
 }
+
+// TestMigrateOpenframeWindowsEnrollmentsTeamID verifies 20261127000001: mdm_windows_enrollments gains a
+// nullable team_id, rows from before keep NULL, and a second run changes nothing.
+func TestMigrateOpenframeWindowsEnrollmentsTeamID(t *testing.T) {
+	ds := CreateMySQLDS(t)
+	ctx := t.Context()
+	ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
+		_, err := q.ExecContext(ctx, `INSERT INTO mdm_windows_enrollments (mdm_device_id, mdm_hardware_id, device_state, device_type,
+			device_name, enroll_type, enroll_user_id, enroll_proto_version, enroll_client_version)
+			VALUES ('dev-before', 'hw-before', 'enrolled', 'CIMClient_Windows', 'pc', 'ProgrammaticEnrollment', '', '5.0', '10.0')`)
+		return err
+	})
+
+	require.NoError(t, ds.MigrateOpenframe(ctx))
+	var nullable string
+	require.NoError(t, ds.writer(ctx).GetContext(ctx, &nullable,
+		`SELECT IS_NULLABLE FROM information_schema.COLUMNS
+		WHERE table_schema = DATABASE() AND table_name = 'mdm_windows_enrollments' AND column_name = 'team_id'`))
+	require.Equal(t, "YES", nullable)
+	var teamID sql.NullInt64
+	require.NoError(t, ds.writer(ctx).GetContext(ctx, &teamID,
+		`SELECT team_id FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-before'`))
+	require.False(t, teamID.Valid, "a row from before the migration keeps no tenant")
+
+	require.NoError(t, ds.MigrateOpenframe(ctx))
+}

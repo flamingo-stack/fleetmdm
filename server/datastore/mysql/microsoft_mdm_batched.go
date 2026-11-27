@@ -48,9 +48,9 @@ func (ds *Datastore) listWindowsMDMHostsForReconcileBatchTransaction(
 	if err != nil {
 		return nil, err
 	}
-	// <<< OPENFRAME(windows-mdm-tenant)
 	var hosts []*fleet.WindowsHostReconcileInfo
 	if err := sqlx.SelectContext(ctx, tx, &hosts, query, afterHostUUID, batchSize); err != nil {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		return nil, ctxerr.Wrap(ctx, err, "list windows mdm hosts for reconcile batch")
 	}
 	return hosts, nil
@@ -84,9 +84,9 @@ func (ds *Datastore) GetWindowsMDMHostForReconcile(ctx context.Context, hostUUID
 	if err != nil {
 		return nil, err
 	}
-	// <<< OPENFRAME(windows-mdm-tenant)
 	var host fleet.WindowsHostReconcileInfo
 	if err := sqlx.GetContext(ctx, ds.reader(ctx), &host, query, hostUUID); err != nil {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
