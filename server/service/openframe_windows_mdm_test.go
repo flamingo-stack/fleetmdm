@@ -10,13 +10,16 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm"
 	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
 	"github.com/fleetdm/fleet/v4/server/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -109,16 +112,14 @@ func TestOpenframeWindowsMDMBaseURLPerTenant(t *testing.T) {
 func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 	ds := openframeWindowsTenantStore()
 	teamA, teamB := openframeTestTeamA, openframeTestTeamB
-	ds.OpenframeHostTeamIDsByUUIDFunc = func(_ context.Context, uuid string) ([]uint, error) {
-		switch uuid {
-		case "uuid-a":
-			return []uint{teamA}, nil
-		case "uuid-none":
-			return []uint{0}, nil
-		case "uuid-shared":
-			return []uint{teamA, teamB}, nil
+	ds.OpenframeMDMWindowsEnrollmentTeamIDFunc = func(_ context.Context, enrollmentID uint) (*uint, error) {
+		switch enrollmentID {
+		case 1:
+			return &teamA, nil
+		case 2:
+			return nil, nil
 		}
-		return nil, nil
+		return nil, newNotFoundError()
 	}
 	ds.LoadHostByOrbitNodeKeyFunc = func(_ context.Context, nodeKey string) (*fleet.Host, error) {
 		if nodeKey == "node-b" {
@@ -128,41 +129,61 @@ func TestOpenframeWindowsMDMDeviceTenant(t *testing.T) {
 	}
 	svc := &Service{ds: ds}
 
-	ctx, err := svc.openframeWindowsMDMHostContext(t.Context(), "uuid-a", true)
+	ctx, err := svc.openframeWindowsMDMDeviceContext(t.Context(), 1, true)
 	require.NoError(t, err)
 	got, ok := openframeWindowsMDMTeam(ctx)
 	require.True(t, ok)
-	require.Equal(t, teamA, got)
+	require.Equal(t, teamA, got, "the management session uses the tenant recorded on the enrollment")
 
-	_, err = svc.openframeWindowsMDMHostContext(t.Context(), "", true)
-	require.Error(t, err, "an unlinked enrollment has no tenant")
-	_, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-none", true)
-	require.Error(t, err, "a host without a team has no tenant")
-	_, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-gone", true)
-	require.Error(t, err, "a deleted host has no tenant")
-	ctx, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-shared", true)
-	require.ErrorContains(t, err, "hosts of 2 tenants")
+	ctx, err = svc.openframeWindowsMDMDeviceContext(t.Context(), 2, true)
+	require.ErrorContains(t, err, "must re-enroll", "an enrollment without a recorded tenant is refused")
 	_, ok = openframeWindowsMDMTeam(ctx)
-	require.False(t, ok, "a uuid two tenants share names no tenant")
+	require.False(t, ok)
+	_, err = svc.openframeWindowsMDMDeviceContext(t.Context(), 3, true)
+	require.Error(t, err, "a deleted enrollment has no tenant")
 
 	ctx, err = svc.openframeWindowsMDMEnrollContext(t.Context(), "node-b", fleet.WindowsMDMEnrollTypeProgrammatic, true)
 	require.NoError(t, err)
 	got, ok = openframeWindowsMDMTeam(ctx)
 	require.True(t, ok)
 	require.Equal(t, teamB, got)
+	require.Equal(t, &teamB, openframeWindowsMDMEnrollTeamID(ctx), "the enrollment records the enrolling host's tenant")
 
 	_, err = svc.openframeWindowsMDMEnrollContext(t.Context(), "", fleet.WindowsMDMEnrollTypeAutomatic, true)
 	require.Error(t, err, "shared mode enrolls only through the agent")
 
-	ds.OpenframeHostTeamIDsByUUIDFuncInvoked, ds.LoadHostByOrbitNodeKeyFuncInvoked = false, false
-	ctx, err = svc.openframeWindowsMDMHostContext(t.Context(), "uuid-a", false)
+	ds.OpenframeMDMWindowsEnrollmentTeamIDFuncInvoked, ds.LoadHostByOrbitNodeKeyFuncInvoked = false, false
+	ctx, err = svc.openframeWindowsMDMDeviceContext(t.Context(), 1, false)
 	require.NoError(t, err)
 	_, err = svc.openframeWindowsMDMEnrollContext(ctx, "x", fleet.WindowsMDMEnrollTypeAutomatic, false)
 	require.NoError(t, err)
 	_, ok = openframeWindowsMDMTeam(ctx)
 	require.False(t, ok, "outside shared mode nothing is looked up")
-	require.False(t, ds.OpenframeHostTeamIDsByUUIDFuncInvoked)
+	require.Nil(t, openframeWindowsMDMEnrollTeamID(ctx), "outside shared mode no tenant is recorded")
+	require.Nil(t, openframeWindowsMDMEnrollTeamID(fleet.NewOpenframeTeamContext(t.Context(), teamA)),
+		"a pinned request alone records no tenant on the enrollment")
+	require.False(t, ds.OpenframeMDMWindowsEnrollmentTeamIDFuncInvoked)
 	require.False(t, ds.LoadHostByOrbitNodeKeyFuncInvoked)
+}
+
+func TestOpenframeWindowsReenrollmentDeletesOnlyOwnTenant(t *testing.T) {
+	ds := openframeWindowsTenantStore()
+	var deletedFor []uint
+	ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc = func(_ context.Context, hwID string, teamID uint) error {
+		require.Equal(t, "hw-1", hwID)
+		deletedFor = append(deletedFor, teamID)
+		return nil
+	}
+	ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc = func(context.Context, string) error { return nil }
+	svc := &Service{ds: ds}
+
+	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(openframeWithWindowsMDMTeam(t.Context(), openframeTestTeamB), "hw-1"))
+	require.Equal(t, []uint{openframeTestTeamB}, deletedFor, "shared mode deletes within the enrolling tenant")
+	require.False(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked)
+
+	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(t.Context(), "hw-1"))
+	require.True(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked, "outside shared mode as upstream")
+	require.Len(t, deletedFor, 1)
 }
 
 func TestOpenframeWindowsWSTEPPerTenant(t *testing.T) {
@@ -173,7 +194,7 @@ func TestOpenframeWindowsWSTEPPerTenant(t *testing.T) {
 		loads = append(loads, teamID)
 		return load(ctx, teamID, newPair)
 	}
-	svc := &Service{ds: ds, openframeWSTEPManagers: new(sync.Map)}
+	svc := &Service{ds: ds, openframeWSTEPManagers: new(sync.Map), openframeWSTEPGroup: new(singleflight.Group)}
 
 	_, err := svc.openframeWindowsWSTEPManager(t.Context(), true)
 	require.Error(t, err, "a request without a tenant has no WSTEP pair")
@@ -209,6 +230,54 @@ func TestOpenframeWindowsWSTEPPerTenant(t *testing.T) {
 	svc.wstepCertManager = nil
 	_, err = svc.openframeWindowsWSTEPManager(ctxA, false)
 	require.Error(t, err, "outside shared mode only the configured pair is used")
+}
+
+func TestOpenframeWindowsWSTEPFirstEnrollmentsShareOneGeneration(t *testing.T) {
+	ds := openframeWindowsTenantStore()
+	release := make(chan struct{})
+	var generated atomic.Int32
+	load := ds.OpenframeLoadWindowsWSTEPFunc
+	ds.OpenframeLoadWindowsWSTEPFunc = func(ctx context.Context, teamID uint, newPair func() ([]byte, []byte, error)) ([]byte, []byte, error) {
+		generated.Add(1)
+		<-release
+		return load(ctx, teamID, newPair)
+	}
+	svc := &Service{ds: ds, openframeWSTEPManagers: new(sync.Map), openframeWSTEPGroup: new(singleflight.Group)}
+	ctx := openframeWithWindowsMDMTeam(t.Context(), openframeTestTeamA)
+
+	const enrollments = 8
+	managers := make(chan microsoft_mdm.CertManager, enrollments)
+	var started, done sync.WaitGroup
+	for range enrollments {
+		started.Add(1)
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			started.Done()
+			m, err := svc.openframeWindowsWSTEPManager(ctx, true)
+			if err == nil {
+				managers <- m
+			}
+		}()
+	}
+	started.Wait()
+	require.Eventually(t, func() bool { return generated.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	done.Wait()
+	close(managers)
+
+	require.EqualValues(t, 1, generated.Load(), "concurrent first enrollments of a tenant generate its pair once")
+	var first microsoft_mdm.CertManager
+	n := 0
+	for m := range managers {
+		if first == nil {
+			first = m
+		}
+		require.Same(t, first, m)
+		n++
+	}
+	require.Equal(t, enrollments, n)
 }
 
 func TestOpenframeWindowsBitLockerKeyPerTenant(t *testing.T) {

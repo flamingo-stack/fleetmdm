@@ -238,11 +238,28 @@ written by OpenFrame. Every Windows MDM URL is built from it
 and enroll URLs of discovery, which the middleware pins by the gateway's `X-Tenant-Id` (the only
 device route under `/api/mdm/` that is pinned: it carries no credential and is reached only on the
 tenant's address; `openframeTenantPinnedDevicePath`); the management URL given at enrollment and in
-every management response, and the discovery URL recorded in `host_mdm`, both taken from the tenant
-of the device's host (the orbit node key at enrollment, the enrollment's host afterwards: one
-light query for the teams of the hosts with that UUID per management message, refused when hosts of
-several tenants share the UUID; `server/datastore/mysql/openframe_windows_mdm.go`). Those
-requests are not pinned: only the URLs and the WSTEP pair come from that tenant. Shared mode never
+every management response, and the discovery URL recorded in `host_mdm`, both taken from the
+device's tenant. That tenant is the team of the host of the orbit node key at enrollment, recorded on
+the enrollment as `mdm_windows_enrollments.team_id` (fork migration `20261127000001`); every
+management message reads it back with one primary-key query
+(`server/datastore/mysql/openframe_windows_mdm.go`). Those requests are not pinned: only the URLs and
+the WSTEP pair come from that tenant. The enrollment's other keys (hardware id, device id, host uuid)
+come from the device, so in shared mode they never reach across tenants:
+
+- re-enrollment removes the enrollment its hardware id names only when it belongs to the enrolling
+  tenant (its `team_id`, or for a row without one, a host of that tenant with the row's host uuid);
+  an enrollment of another tenant refuses the enrollment and stays as it is. The host state cleared
+  with it (lock and wipe actions, setup experience results, upcoming activities) is that tenant's
+  host's only, and `host_mdm_windows_profiles`, keyed by uuid alone, is cleared only when no host of
+  another tenant has the uuid (`OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment`);
+- the link of an enrollment to a host (orbit's EUA token, osquery's MDM device id, the DevDetail
+  serial of the management session) is made only when both have the same team, the host named by id
+  (`OpenframeUpdateMDMWindowsEnrollmentHost`, `server/service/osquery_utils/queries_openframe_windows_mdm.go`);
+- an enrollment without a recorded tenant (enrolled before the migration) gets no management session
+  until it re-enrolls, and is linked to no host.
+
+A device moved to another tenant enrolls there only after the old tenant releases it (deletes the
+host or turns its MDM off). Outside shared mode `team_id` stays NULL and every query is upstream's. Shared mode never
 falls back to the server URL, which on a tenant row is the internal address: a tenant without the
 address isn't told to enroll, and turning Windows MDM on, or clearing the address while it is on, is
 refused. Shared mode enrolls only through the agent (programmatic enrollment); automatic (Entra)
@@ -254,8 +271,10 @@ encrypts its escrowed BitLocker keys), kept in `mdm_config_assets` as
 the server private key (`server/datastore/mysql/openframe_windows_wstep.go`). The tenant's first
 enrollment generates a self-signed RSA 4096 CA valid for ten years
 (`server/mdm/microsoft/openframe_wstep.go`) and stores it with an insert that loses to a concurrent
-one, so every server of every cluster reads back the same pair; each server keeps the tenant's cert
-manager in memory after the first read. The pair is refused instead when only half of it is stored, or
+one, so every server of every cluster reads back the same pair; within a server, concurrent first
+enrollments of a tenant share one load (single-flight), so the RSA 4096 key is generated once per
+server, not once per request. Each server keeps the tenant's cert manager in memory after the first
+read. The pair is refused instead when only half of it is stored, or
 when none is stored but the tenant's hosts already have `mdm_windows_enrollments` rows or Windows
 `host_disk_encryption_keys`: a new pair would break those devices and leave the escrowed keys
 unreadable. Escrowing and decrypting a BitLocker key use the host's tenant's pair and never generate

@@ -1334,8 +1334,8 @@ func (svc *Service) GetMDMWindowsManagementResponse(ctx context.Context, reqSync
 		return nil, ctxerr.Wrap(ctx, err, "management request is not trusted")
 	}
 
-	// >>> OPENFRAME(windows-mdm-tenant): the device's host gives the tenant whose address the responses carry
-	ctx, err = svc.openframeWindowsMDMHostContext(ctx, enrolledDevice.HostUUID, fleet.IsOpenframeSharedMode())
+	// >>> OPENFRAME(windows-mdm-tenant): the tenant the device enrolled into gives the address the responses carry
+	ctx, err = svc.openframeWindowsMDMDeviceContext(ctx, enrolledDevice.ID, fleet.IsOpenframeSharedMode())
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "Windows MDM device tenant")
 	}
@@ -2908,7 +2908,9 @@ func (svc *Service) removeWindowsDeviceIfAlreadyMDMEnrolled(ctx context.Context,
 	}
 
 	// Device is already enrolled, let's remove it
-	err = svc.ds.MDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, reqHWDeviceID)
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the device's tenant — openframe/docs/mysql-multitenancy-feature.md
+	err = svc.openframeDeleteWindowsDeviceOnReenrollment(ctx, reqHWDeviceID)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		if fleet.IsNotFound(err) {
 			return nil
@@ -3103,6 +3105,9 @@ func (svc *Service) storeWindowsMDMEnrolledDevice(ctx context.Context, userID st
 		CredentialsHash:         &credentialsHash,
 		CredentialsAcknowledged: true,
 	}
+	// >>> OPENFRAME(windows-mdm-tenant): the enrollment records the tenant it enrolled into — openframe/docs/mysql-multitenancy-feature.md
+	enrolledDevice.OpenframeTeamID = openframeWindowsMDMEnrollTeamID(ctx)
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	if err := svc.ds.MDMWindowsInsertEnrolledDevice(ctx, enrolledDevice); err != nil {
 		return err

@@ -1229,9 +1229,15 @@ type Datastore interface {
 	// <<< OPENFRAME(windows-wstep)
 
 	// >>> OPENFRAME(windows-mdm-tenant)
-	// OpenframeHostTeamIDsByUUID returns the distinct team ids of the hosts with this exact UUID, 0 for a host without a
-	// team.
-	OpenframeHostTeamIDsByUUID(ctx context.Context, hostUUID string) ([]uint, error)
+	// OpenframeMDMWindowsEnrollmentTeamID returns the tenant team a Windows MDM enrollment enrolled into, or nil when
+	// it has none recorded.
+	OpenframeMDMWindowsEnrollmentTeamID(ctx context.Context, enrollmentID uint) (*uint, error)
+	// OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment is MDMWindowsDeleteEnrolledDeviceOnReenrollment for a
+	// device re-enrolling into teamID: an enrollment of another tenant is left as it is (ConflictError).
+	OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx context.Context, mdmDeviceHWID string, teamID uint) error
+	// OpenframeUpdateMDMWindowsEnrollmentHost is UpdateMDMWindowsEnrollmentsHostUUID that links the enrollment to the
+	// host only when both belong to the same tenant.
+	OpenframeUpdateMDMWindowsEnrollmentHost(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error)
 	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// >>> OPENFRAME(enroll-machine-identity)

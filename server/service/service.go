@@ -23,6 +23,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/service/async"
 	"github.com/fleetdm/fleet/v4/server/service/conditional_access_microsoft_proxy"
 	"github.com/fleetdm/fleet/v4/server/sso"
+	"golang.org/x/sync/singleflight"
 )
 
 var _ fleet.Service = (*Service)(nil)
@@ -68,6 +69,7 @@ type Service struct {
 
 	// >>> OPENFRAME(windows-wstep): each tenant's WSTEP cert manager, by team id — openframe/docs/mysql-multitenancy-feature.md
 	openframeWSTEPManagers *sync.Map
+	openframeWSTEPGroup    *singleflight.Group
 	// <<< OPENFRAME(windows-wstep)
 
 	conditionalAccessMicrosoftProxy ConditionalAccessMicrosoftProxy
@@ -202,6 +204,7 @@ func NewService(
 	}
 	// >>> OPENFRAME(windows-wstep)
 	svc.openframeWSTEPManagers = new(sync.Map)
+	svc.openframeWSTEPGroup = new(singleflight.Group)
 	// <<< OPENFRAME(windows-wstep)
 	return validationMiddleware{svc, ds, sso}, nil
 }

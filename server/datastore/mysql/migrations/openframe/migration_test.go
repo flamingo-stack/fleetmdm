@@ -34,6 +34,7 @@ func TestAllOpenframeMigrationsRegistered(t *testing.T) {
 		20261116000001, // AddServerPrivateKeyTable
 		20261123000001, // WidenSoftwareCveId
 		20261123000002, // AddHostEnrollOwnersTable
+		20261127000001, // AddTeamIdToMdmWindowsEnrollments
 	}
 
 	var got []int64

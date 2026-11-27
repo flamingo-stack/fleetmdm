@@ -887,6 +887,9 @@ type MDMWindowsEnrolledDevice struct {
 	HasPendingCommands bool      `db:"has_pending_commands"`
 	CreatedAt          time.Time `db:"created_at"`
 	UpdatedAt          time.Time `db:"updated_at"`
+	// >>> OPENFRAME(windows-mdm-tenant): the tenant team the device enrolls into, recorded on insert — openframe/docs/mysql-multitenancy-feature.md
+	OpenframeTeamID *uint `db:"-"`
+	// <<< OPENFRAME(windows-mdm-tenant)
 }
 
 func (e MDMWindowsEnrolledDevice) AuthzType() string {

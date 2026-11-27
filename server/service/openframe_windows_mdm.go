@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"strconv"
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -69,28 +70,41 @@ func (svc *Service) openframeWindowsMDMBaseURL(ctx context.Context, shared bool)
 	return serverURL, nil
 }
 
-// openframeWindowsMDMHostContext names the tenant of the host with this UUID for the rest of a
-// Windows device request: one light query per management message, failing closed when hosts of
-// several tenants share the UUID. Outside shared mode it returns ctx unchanged.
-func (svc *Service) openframeWindowsMDMHostContext(ctx context.Context, hostUUID string, shared bool) (context.Context, error) {
+// openframeWindowsMDMDeviceContext names the tenant the enrolled device enrolled into for the rest of a
+// management request. The tenant is recorded on the enrollment, not derived from identifiers the device
+// sends: an enrollment without one (enrolled before it was recorded) is refused until it re-enrolls.
+// Outside shared mode it returns ctx unchanged.
+func (svc *Service) openframeWindowsMDMDeviceContext(ctx context.Context, enrollmentID uint, shared bool) (context.Context, error) {
 	if !shared {
 		return ctx, nil
 	}
-	if hostUUID == "" {
-		return ctx, ctxerr.New(ctx, "Windows MDM device is not linked to a host, so its tenant is unknown")
-	}
-	teamIDs, err := svc.ds.OpenframeHostTeamIDsByUUID(ctx, hostUUID)
+	teamID, err := svc.ds.OpenframeMDMWindowsEnrollmentTeamID(ctx, enrollmentID)
 	if err != nil {
-		return ctx, ctxerr.Wrap(ctx, err, "loading the tenant of a Windows MDM device")
+		return ctx, ctxerr.Wrap(ctx, err, "loading the tenant of a Windows MDM enrollment")
 	}
-	switch len(teamIDs) {
-	case 0:
-		return ctx, ctxerr.New(ctx, "no host for the Windows MDM device")
-	case 1:
-		return openframeWindowsMDMTeamOfHost(ctx, &teamIDs[0])
-	default:
-		return ctx, ctxerr.Errorf(ctx, "hosts of %d tenants share the Windows MDM device's host uuid, so its tenant is unknown", len(teamIDs))
+	if teamID == nil {
+		return ctx, ctxerr.New(ctx, "Windows MDM enrollment has no tenant recorded; the device must re-enroll")
 	}
+	return openframeWithWindowsMDMTeam(ctx, *teamID), nil
+}
+
+// openframeWindowsMDMEnrollTeamID is the tenant openframeWindowsMDMEnrollContext named for this enrollment,
+// recorded on the enrollment row; nil outside shared mode.
+func openframeWindowsMDMEnrollTeamID(ctx context.Context) *uint {
+	if teamID, ok := ctx.Value(openframeWindowsMDMTeamCtxKey{}).(uint); ok && teamID != 0 {
+		return &teamID
+	}
+	return nil
+}
+
+// openframeDeleteWindowsDeviceOnReenrollment removes the enrollment the re-enrolling device's hardware id
+// names. In shared mode only an enrollment of the device's tenant is removed; one of another tenant
+// refuses the enrollment.
+func (svc *Service) openframeDeleteWindowsDeviceOnReenrollment(ctx context.Context, mdmDeviceHWID string) error {
+	if teamID := openframeWindowsMDMEnrollTeamID(ctx); teamID != nil {
+		return svc.ds.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, mdmDeviceHWID, *teamID)
+	}
+	return svc.ds.MDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, mdmDeviceHWID)
 }
 
 // openframeWindowsMDMEnrollContext names the tenant of the host enrolling with this orbit node key.
@@ -136,7 +150,27 @@ func (svc *Service) openframeWindowsWSTEPManager(ctx context.Context, shared boo
 	return svc.openframeTenantWSTEPManager(ctx, teamID)
 }
 
+// openframeTenantWSTEPManager returns the tenant's cert manager. Concurrent first enrollments of a
+// tenant share one load: the pair is generated (RSA 4096) once per process, not once per request.
 func (svc *Service) openframeTenantWSTEPManager(ctx context.Context, teamID uint) (microsoft_mdm.CertManager, error) {
+	if svc.openframeWSTEPManagers != nil {
+		if m, ok := svc.openframeWSTEPManagers.Load(teamID); ok {
+			return m.(microsoft_mdm.CertManager), nil
+		}
+	}
+	if svc.openframeWSTEPGroup == nil {
+		return svc.openframeLoadTenantWSTEPManager(ctx, teamID)
+	}
+	m, err, _ := svc.openframeWSTEPGroup.Do(strconv.FormatUint(uint64(teamID), 10), func() (any, error) {
+		return svc.openframeLoadTenantWSTEPManager(context.WithoutCancel(ctx), teamID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return m.(microsoft_mdm.CertManager), nil
+}
+
+func (svc *Service) openframeLoadTenantWSTEPManager(ctx context.Context, teamID uint) (microsoft_mdm.CertManager, error) {
 	if svc.openframeWSTEPManagers != nil {
 		if m, ok := svc.openframeWSTEPManagers.Load(teamID); ok {
 			return m.(microsoft_mdm.CertManager), nil

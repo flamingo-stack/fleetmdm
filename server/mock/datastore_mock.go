@@ -856,7 +856,11 @@ type OpenframeLoadWindowsWSTEPFunc func(ctx context.Context, teamID uint, newPai
 
 type OpenframeGetWindowsWSTEPFunc func(ctx context.Context, teamID uint) (certPEM []byte, keyPEM []byte, err error)
 
-type OpenframeHostTeamIDsByUUIDFunc func(ctx context.Context, hostUUID string) ([]uint, error)
+type OpenframeMDMWindowsEnrollmentTeamIDFunc func(ctx context.Context, enrollmentID uint) (*uint, error)
+
+type OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc func(ctx context.Context, mdmDeviceHWID string, teamID uint) error
+
+type OpenframeUpdateMDMWindowsEnrollmentHostFunc func(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error)
 
 type OpenframeRefuseSharedHardwareUUIDFunc func(ctx context.Context, hostID uint, hardwareUUID string) error
 
@@ -3389,8 +3393,14 @@ type DataStore struct {
 	OpenframeGetWindowsWSTEPFunc        OpenframeGetWindowsWSTEPFunc
 	OpenframeGetWindowsWSTEPFuncInvoked bool
 
-	OpenframeHostTeamIDsByUUIDFunc        OpenframeHostTeamIDsByUUIDFunc
-	OpenframeHostTeamIDsByUUIDFuncInvoked bool
+	OpenframeMDMWindowsEnrollmentTeamIDFunc        OpenframeMDMWindowsEnrollmentTeamIDFunc
+	OpenframeMDMWindowsEnrollmentTeamIDFuncInvoked bool
+
+	OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc        OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc
+	OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked bool
+
+	OpenframeUpdateMDMWindowsEnrollmentHostFunc        OpenframeUpdateMDMWindowsEnrollmentHostFunc
+	OpenframeUpdateMDMWindowsEnrollmentHostFuncInvoked bool
 
 	OpenframeRefuseSharedHardwareUUIDFunc        OpenframeRefuseSharedHardwareUUIDFunc
 	OpenframeRefuseSharedHardwareUUIDFuncInvoked bool
@@ -8230,11 +8240,25 @@ func (s *DataStore) OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (
 	return s.OpenframeGetWindowsWSTEPFunc(ctx, teamID)
 }
 
-func (s *DataStore) OpenframeHostTeamIDsByUUID(ctx context.Context, hostUUID string) ([]uint, error) {
+func (s *DataStore) OpenframeMDMWindowsEnrollmentTeamID(ctx context.Context, enrollmentID uint) (*uint, error) {
 	s.mu.Lock()
-	s.OpenframeHostTeamIDsByUUIDFuncInvoked = true
+	s.OpenframeMDMWindowsEnrollmentTeamIDFuncInvoked = true
 	s.mu.Unlock()
-	return s.OpenframeHostTeamIDsByUUIDFunc(ctx, hostUUID)
+	return s.OpenframeMDMWindowsEnrollmentTeamIDFunc(ctx, enrollmentID)
+}
+
+func (s *DataStore) OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx context.Context, mdmDeviceHWID string, teamID uint) error {
+	s.mu.Lock()
+	s.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeMDMWindowsDeleteEnrolledDeviceOnReenrollmentFunc(ctx, mdmDeviceHWID, teamID)
+}
+
+func (s *DataStore) OpenframeUpdateMDMWindowsEnrollmentHost(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error) {
+	s.mu.Lock()
+	s.OpenframeUpdateMDMWindowsEnrollmentHostFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeUpdateMDMWindowsEnrollmentHostFunc(ctx, hostID, mdmDeviceID)
 }
 
 func (s *DataStore) OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error {

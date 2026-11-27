@@ -354,7 +354,9 @@ func (svc *Service) EnrollOrbit(ctx context.Context, hostInfo fleet.OrbitHostInf
 	}
 	// <<< OPENFRAME(enroll-machine-identity)
 	if euaDeviceID != "" {
-		updated, err := svc.ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, host.UUID, euaDeviceID)
+		// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
+		updated, err := osquery_utils.OpenframeUpdateWindowsEnrollmentHost(ctx, svc.ds, host.ID, host.UUID, euaDeviceID, fleet.IsOpenframeSharedMode())
+		// <<< OPENFRAME(windows-mdm-tenant)
 		if err != nil {
 			svc.logger.ErrorContext(ctx, "failed to link windows mdm enrollment to orbit host via EUA token",
 				"err", err, "host_uuid", host.UUID, "device_id", euaDeviceID)
