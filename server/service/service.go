@@ -23,7 +23,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/service/async"
 	"github.com/fleetdm/fleet/v4/server/service/conditional_access_microsoft_proxy"
 	"github.com/fleetdm/fleet/v4/server/sso"
-	"golang.org/x/sync/singleflight"
+	"golang.org/x/sync/singleflight" // OPENFRAME(windows-wstep): one generation of a tenant's first WSTEP pair per server — openframe/docs/mysql-multitenancy-feature.md
 )
 
 var _ fleet.Service = (*Service)(nil)
