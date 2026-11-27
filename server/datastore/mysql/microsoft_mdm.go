@@ -426,12 +426,10 @@ func (ds *Datastore) MDMWindowsInsertEnrolledDevice(ctx context.Context, device 
 		return ctxerr.Wrap(ctx, err, "inserting MDMWindowsEnrolledDevice")
 	}
 
-	// >>> OPENFRAME(windows-mdm-tenant): record the tenant the device enrolled into — openframe/docs/mysql-multitenancy-feature.md
+	// >>> OPENFRAME(windows-mdm-tenant): record the tenant the device enrolled into, and check its identifiers again — openframe/docs/mysql-multitenancy-feature.md
 	if device.OpenframeTeamID != nil {
-		if _, err := ds.writer(ctx).ExecContext(ctx,
-			`UPDATE mdm_windows_enrollments SET team_id = ? WHERE mdm_hardware_id = ?`,
-			*device.OpenframeTeamID, device.MDMHardwareID); err != nil {
-			return ctxerr.Wrap(ctx, err, "recording the tenant of MDMWindowsEnrolledDevice")
+		if err := ds.openframeRecordWindowsEnrollmentTenant(ctx, device); err != nil {
+			return err
 		}
 	}
 	// <<< OPENFRAME(windows-mdm-tenant)

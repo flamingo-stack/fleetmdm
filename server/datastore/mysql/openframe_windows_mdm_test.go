@@ -58,6 +58,17 @@ func (f *openframeWindowsMDMFixture) enroll(t *testing.T, hwID, deviceID, hostUU
 	}))
 }
 
+// seed inserts an enrollment directly, as one that existed before a clash was created around it.
+func (f *openframeWindowsMDMFixture) seed(t *testing.T, hwID, deviceID, hostUUID string, teamID *uint) {
+	ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {
+		_, err := q.ExecContext(t.Context(), `INSERT INTO mdm_windows_enrollments (mdm_device_id, mdm_hardware_id, device_state,
+			device_type, device_name, enroll_type, enroll_user_id, enroll_proto_version, enroll_client_version, host_uuid, team_id)
+			VALUES (?, ?, ?, 'CIMClient_Windows', 'pc', 'ProgrammaticEnrollment', '', '5.0', '10.0', ?, ?)`,
+			deviceID, hwID, microsoft_mdm.MDMDeviceStateEnrolled, hostUUID, teamID)
+		return err
+	})
+}
+
 // hostState adds the host state a re-enrollment clears: a lock action and an upcoming activity.
 func (f *openframeWindowsMDMFixture) hostState(t *testing.T, h *fleet.Host) {
 	ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {
@@ -187,6 +198,31 @@ func TestOpenframeMDMWindowsRefusedReenrollmentKeepsEnrollment(t *testing.T) {
 	require.Equal(t, 1, f.count(t, `SELECT COUNT(*) FROM host_mdm_actions WHERE host_id = ?`, hostA.ID))
 }
 
+// Two enrollments that each pass the check before their insert: the one that finds the other already
+// committed after its own insert removes itself, so at most one stays.
+func TestOpenframeMDMWindowsConcurrentEnrollmentsKeepOne(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "race-a", "uuid-race-a", f.teamA.ID)
+	hostB := f.host(t, "race-b", "uuid-race-b", f.teamB.ID)
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostA.UUID, "hw-race-a", "dev-race", f.teamA.ID))
+	require.NoError(t, f.ds.OpenframeMDMWindowsPrepareEnrollment(ctx, hostB.UUID, "hw-race-b", "dev-race", f.teamB.ID))
+
+	f.enroll(t, "hw-race-a", "dev-race", hostA.UUID, &f.teamA.ID)
+	err := f.ds.MDMWindowsInsertEnrolledDevice(ctx, &fleet.MDMWindowsEnrolledDevice{
+		MDMDeviceID: "dev-race", MDMHardwareID: "hw-race-b", MDMDeviceState: microsoft_mdm.MDMDeviceStateEnrolled,
+		MDMDeviceType: "CIMClient_Windows", MDMDeviceName: "DESKTOP-race", MDMEnrollType: "ProgrammaticEnrollment",
+		MDMEnrollProtoVersion: "5.0", MDMEnrollClientVersion: "10.0", MDMNotInOOBE: true,
+		HostUUID: hostB.UUID, OpenframeTeamID: &f.teamB.ID,
+	})
+	var conflict *fleet.ConflictError
+	require.ErrorAs(t, err, &conflict, "the second enrollment with the same device id is refused after its insert")
+	require.Zero(t, f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-race-b'`),
+		"and removed again")
+	require.Equal(t, 1, f.count(t, `SELECT COUNT(*) FROM mdm_windows_enrollments WHERE mdm_hardware_id = 'hw-race-a'`),
+		"the first one stays")
+}
+
 func TestOpenframeMDMWindowsReenrollmentOfEnrollmentWithoutTenant(t *testing.T) {
 	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
 	ctx := t.Context()
@@ -289,7 +325,7 @@ func TestOpenframeMDMWindowsCommandsStayInTenant(t *testing.T) {
 		"tenant B's wipe or command for its host with A's uuid is queued for no device")
 
 	hostB := f.host(t, "cmd-b", "uuid-attacker", f.teamB.ID)
-	f.enroll(t, "hw-b", hostA.UUID, hostB.UUID, &f.teamB.ID)
+	f.seed(t, "hw-b", hostA.UUID, hostB.UUID, &f.teamB.ID)
 	enrollmentB := f.enrollmentID(t, "hw-b")
 	require.Equal(t, []uint{enrollmentA}, f.enrollmentIDs(t, pinnedA, false, hostA.UUID),
 		"a tenant-B enrollment whose device id is A's host uuid does not take A's commands")
@@ -377,7 +413,7 @@ func TestOpenframeMDMWindowsHostReadsStayInTenant(t *testing.T) {
 	ctx := t.Context()
 	hostA := f.host(t, "read-a", "uuid-read", f.teamA.ID)
 	hostB := f.host(t, "read-b-fake", hostA.UUID, f.teamB.ID)
-	f.enroll(t, "hw-read", "dev-read", hostA.UUID, &f.teamA.ID)
+	f.seed(t, "hw-read", "dev-read", hostA.UUID, &f.teamA.ID)
 	for _, h := range []*fleet.Host{hostA, hostB} {
 		require.NoError(t, f.ds.SetOrUpdateMDMData(ctx, h.ID, false, true, "https://x.example.com", false, fleet.WellKnownMDMFleet, "", false))
 		ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {

@@ -259,6 +259,10 @@ enrollment by those keys, so in shared mode each of these paths is held to the t
   with the removal (lock and wipe actions, setup experience results, upcoming activities) is the
   enrolling tenant's host's only, and `host_mdm_windows_profiles`, keyed by uuid alone, is cleared
   only when no host of another tenant has the uuid;
+- the identifiers are checked again right after the enrollment is inserted with its tenant
+  (`openframeRecordWindowsEnrollmentTenant`): the first check can't hold off a concurrent enrollment
+  until that insert, so an enrollment that finds a clashing one committed meanwhile removes itself
+  and is refused; of two concurrent enrollments at most one stays;
 - the link of an enrollment to a host (orbit's EUA token, osquery's MDM device id, the DevDetail
   serial of the management session) is made only when both have the same team, the host named by id
   (`OpenframeUpdateMDMWindowsEnrollmentHost`, `server/service/osquery_utils/queries_openframe_windows_mdm.go`);

@@ -40,6 +40,65 @@ func (ds *Datastore) OpenframeMDMWindowsEnrollmentTeamID(ctx context.Context, en
 const openframeWindowsUUIDHeldByOtherTenant = `EXISTS (SELECT 1 FROM hosts oh
 	WHERE oh.uuid = ? AND oh.team_id <=> COALESCE(?, oh.team_id) AND NOT (oh.team_id <=> ?))`
 
+// openframeWindowsEnrollConflict refuses (ConflictError) the identifiers of a Windows MDM enrollment into
+// teamID through the host with hostUUID that another device could be confused with: another host of any
+// tenant has hostUUID, another tenant's enrollment still held by its host has it, or the device id is
+// another host's uuid or another device's. The enrollment named by mdmDeviceHWID is not counted.
+func openframeWindowsEnrollConflict(ctx context.Context, q sqlx.QueryerContext, hostUUID, mdmDeviceHWID, mdmDeviceID string, teamID uint) error {
+	const stmt = `SELECT
+		(SELECT COUNT(*) FROM hosts WHERE uuid = ?) AS hosts_with_uuid,
+		EXISTS (SELECT 1 FROM mdm_windows_enrollments e
+			WHERE e.host_uuid = ? AND e.mdm_hardware_id <> ? AND NOT (e.team_id <=> ?)
+			AND EXISTS (SELECT 1 FROM hosts oh
+				WHERE oh.uuid = e.host_uuid AND oh.team_id <=> COALESCE(e.team_id, oh.team_id) AND NOT (oh.team_id <=> ?))
+		) AS uuid_enrolled_elsewhere,
+		EXISTS (SELECT 1 FROM hosts WHERE uuid = ? AND uuid <> ?) AS device_id_is_host_uuid,
+		EXISTS (SELECT 1 FROM mdm_windows_enrollments WHERE mdm_device_id = ? AND mdm_hardware_id <> ?) AS device_id_enrolled`
+	var conflict struct {
+		HostsWithUUID         int  `db:"hosts_with_uuid"`
+		UUIDEnrolledElsewhere bool `db:"uuid_enrolled_elsewhere"`
+		DeviceIDIsHostUUID    bool `db:"device_id_is_host_uuid"`
+		DeviceIDEnrolled      bool `db:"device_id_enrolled"`
+	}
+	if err := sqlx.GetContext(ctx, q, &conflict, stmt,
+		hostUUID, hostUUID, mdmDeviceHWID, teamID, teamID, mdmDeviceID, hostUUID, mdmDeviceID, mdmDeviceHWID); err != nil {
+		return ctxerr.Wrap(ctx, err, "checking the Windows MDM enrollment's identifiers")
+	}
+	switch {
+	case conflict.HostsWithUUID > 1:
+		return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "another host has the Windows device's hardware UUID"})
+	case conflict.UUIDEnrolledElsewhere:
+		return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "the Windows device's hardware UUID is enrolled in another tenant"})
+	case conflict.DeviceIDIsHostUUID:
+		return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "the Windows device's MDM device id is another host's UUID"})
+	case conflict.DeviceIDEnrolled:
+		return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "the Windows device's MDM device id is already enrolled"})
+	}
+	return nil
+}
+
+// openframeRecordWindowsEnrollmentTenant records the tenant on the enrollment just inserted and checks its
+// identifiers again: the check before it (OpenframeMDMWindowsPrepareEnrollment) can't hold off a
+// concurrent enrollment until this insert. When one with clashing identifiers committed meanwhile, this
+// enrollment is removed again and refused, so of two concurrent enrollments at most one stays.
+func (ds *Datastore) openframeRecordWindowsEnrollmentTenant(ctx context.Context, device *fleet.MDMWindowsEnrolledDevice) error {
+	teamID := *device.OpenframeTeamID
+	if _, err := ds.writer(ctx).ExecContext(ctx,
+		`UPDATE mdm_windows_enrollments SET team_id = ? WHERE mdm_hardware_id = ?`, teamID, device.MDMHardwareID); err != nil {
+		return ctxerr.Wrap(ctx, err, "recording the tenant of MDMWindowsEnrolledDevice")
+	}
+	err := openframeWindowsEnrollConflict(ctx, ds.writer(ctx), device.HostUUID, device.MDMHardwareID, device.MDMDeviceID, teamID)
+	var conflict *fleet.ConflictError
+	if !errors.As(err, &conflict) {
+		return err
+	}
+	if _, delErr := ds.writer(ctx).ExecContext(ctx,
+		`DELETE FROM mdm_windows_enrollments WHERE mdm_hardware_id = ? AND team_id = ?`, device.MDMHardwareID, teamID); delErr != nil {
+		return ctxerr.Wrap(ctx, delErr, "removing a Windows MDM enrollment whose identifiers clash")
+	}
+	return err
+}
+
 // OpenframeMDMWindowsPrepareEnrollment readies, in one transaction, the enrollment of a Windows device
 // into teamID through the host with hostUUID. Windows MDM sends commands and keeps profile statuses by
 // the host's hardware uuid and by the device id the device chose, and the hardware id that names the
@@ -51,15 +110,6 @@ const openframeWindowsUUIDHeldByOtherTenant = `EXISTS (SELECT 1 FROM hosts oh
 // host state cleared only on teamID's host); one another tenant's host still holds refuses it too.
 func (ds *Datastore) OpenframeMDMWindowsPrepareEnrollment(ctx context.Context, hostUUID, mdmDeviceHWID, mdmDeviceID string, teamID uint) error {
 	const (
-		conflictStmt = `SELECT
-			(SELECT COUNT(*) FROM hosts WHERE uuid = ?) AS hosts_with_uuid,
-			EXISTS (SELECT 1 FROM mdm_windows_enrollments e
-				WHERE e.host_uuid = ? AND e.mdm_hardware_id <> ? AND NOT (e.team_id <=> ?)
-				AND EXISTS (SELECT 1 FROM hosts oh
-					WHERE oh.uuid = e.host_uuid AND oh.team_id <=> COALESCE(e.team_id, oh.team_id) AND NOT (oh.team_id <=> ?))
-			) AS uuid_enrolled_elsewhere,
-			EXISTS (SELECT 1 FROM hosts WHERE uuid = ? AND uuid <> ?) AS device_id_is_host_uuid,
-			EXISTS (SELECT 1 FROM mdm_windows_enrollments WHERE mdm_device_id = ? AND mdm_hardware_id <> ?) AS device_id_enrolled`
 		loadStmt        = `SELECT host_uuid, team_id FROM mdm_windows_enrollments WHERE mdm_hardware_id = ? FOR UPDATE`
 		heldStmt        = `SELECT ` + openframeWindowsUUIDHeldByOtherTenant
 		delActionsStmt  = `DELETE FROM host_mdm_actions WHERE host_id = (SELECT id FROM hosts WHERE uuid = ? AND team_id = ? LIMIT 1)`
@@ -76,25 +126,8 @@ func (ds *Datastore) OpenframeMDMWindowsPrepareEnrollment(ctx context.Context, h
 	}
 
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
-		var conflict struct {
-			HostsWithUUID         int  `db:"hosts_with_uuid"`
-			UUIDEnrolledElsewhere bool `db:"uuid_enrolled_elsewhere"`
-			DeviceIDIsHostUUID    bool `db:"device_id_is_host_uuid"`
-			DeviceIDEnrolled      bool `db:"device_id_enrolled"`
-		}
-		if err := sqlx.GetContext(ctx, tx, &conflict, conflictStmt,
-			hostUUID, hostUUID, mdmDeviceHWID, teamID, teamID, mdmDeviceID, hostUUID, mdmDeviceID, mdmDeviceHWID); err != nil {
-			return ctxerr.Wrap(ctx, err, "checking the Windows MDM enrollment's identifiers")
-		}
-		switch {
-		case conflict.HostsWithUUID > 1:
-			return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "another host has the Windows device's hardware UUID"})
-		case conflict.UUIDEnrolledElsewhere:
-			return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "the Windows device's hardware UUID is enrolled in another tenant"})
-		case conflict.DeviceIDIsHostUUID:
-			return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "the Windows device's MDM device id is another host's UUID"})
-		case conflict.DeviceIDEnrolled:
-			return ctxerr.Wrap(ctx, &fleet.ConflictError{Message: "the Windows device's MDM device id is already enrolled"})
+		if err := openframeWindowsEnrollConflict(ctx, tx, hostUUID, mdmDeviceHWID, mdmDeviceID, teamID); err != nil {
+			return err
 		}
 
 		var row struct {
