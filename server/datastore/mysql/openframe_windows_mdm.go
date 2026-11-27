@@ -78,25 +78,36 @@ func openframeWindowsEnrollConflict(ctx context.Context, q sqlx.QueryerContext, 
 }
 
 // openframeRecordWindowsEnrollmentTenant records the tenant on the enrollment just inserted and checks its
-// identifiers again: the check before it (OpenframeMDMWindowsPrepareEnrollment) can't hold off a
-// concurrent enrollment until this insert. When one with clashing identifiers committed meanwhile, this
-// enrollment is removed again and refused, so of two concurrent enrollments at most one stays.
+// identifiers again, in one transaction: the check before the insert (OpenframeMDMWindowsPrepareEnrollment)
+// can't hold off a concurrent enrollment until it. When one with clashing identifiers committed meanwhile,
+// this enrollment, which has no host state yet, is removed again and refused, so of two concurrent
+// enrollments at most one stays. If the transaction fails, the enrollment keeps no tenant, which gets it
+// no management session.
 func (ds *Datastore) openframeRecordWindowsEnrollmentTenant(ctx context.Context, device *fleet.MDMWindowsEnrolledDevice) error {
 	teamID := *device.OpenframeTeamID
-	if _, err := ds.writer(ctx).ExecContext(ctx,
-		`UPDATE mdm_windows_enrollments SET team_id = ? WHERE mdm_hardware_id = ?`, teamID, device.MDMHardwareID); err != nil {
-		return ctxerr.Wrap(ctx, err, "recording the tenant of MDMWindowsEnrolledDevice")
-	}
-	err := openframeWindowsEnrollConflict(ctx, ds.writer(ctx), device.HostUUID, device.MDMHardwareID, device.MDMDeviceID, teamID)
-	var conflict *fleet.ConflictError
-	if !errors.As(err, &conflict) {
+	var refused error
+	err := ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
+		refused = nil
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE mdm_windows_enrollments SET team_id = ? WHERE mdm_hardware_id = ?`, teamID, device.MDMHardwareID); err != nil {
+			return ctxerr.Wrap(ctx, err, "recording the tenant of MDMWindowsEnrolledDevice")
+		}
+		err := openframeWindowsEnrollConflict(ctx, tx, device.HostUUID, device.MDMHardwareID, device.MDMDeviceID, teamID)
+		var conflict *fleet.ConflictError
+		if !errors.As(err, &conflict) {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM mdm_windows_enrollments WHERE mdm_hardware_id = ? AND team_id = ?`, device.MDMHardwareID, teamID); err != nil {
+			return ctxerr.Wrap(ctx, err, "removing a Windows MDM enrollment whose identifiers clash")
+		}
+		refused = err
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-	if _, delErr := ds.writer(ctx).ExecContext(ctx,
-		`DELETE FROM mdm_windows_enrollments WHERE mdm_hardware_id = ? AND team_id = ?`, device.MDMHardwareID, teamID); delErr != nil {
-		return ctxerr.Wrap(ctx, delErr, "removing a Windows MDM enrollment whose identifiers clash")
-	}
-	return err
+	return refused
 }
 
 // OpenframeMDMWindowsPrepareEnrollment readies, in one transaction, the enrollment of a Windows device
