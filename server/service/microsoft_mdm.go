@@ -1289,6 +1289,11 @@ func (svc *Service) GetMDMWindowsEnrollResponse(ctx context.Context, secTokenMsg
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "device enroll check")
 	}
+	// >>> OPENFRAME(windows-mdm-tenant): no enrollment whose hardware uuid or device id another device could be confused with — openframe/docs/mysql-multitenancy-feature.md
+	if err := svc.openframeRefuseWindowsEnrollConflict(ctx, hostUUID, secTokenMsg); err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "Windows MDM enrollment identifiers")
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// Getting the device provisioning information in the form of a WapProvisioningDoc
 	deviceProvisioning, credentialsHash, err := svc.getDeviceProvisioningInformation(ctx, secTokenMsg)
@@ -1836,7 +1841,9 @@ func (svc *Service) processIncomingMDMCmds(ctx context.Context, enrolledDevice *
 			}
 
 			if result != nil && result.WipeFailed != nil {
-				host, err := svc.ds.HostByIdentifier(ctx, result.WipeFailed.HostUUID)
+				// >>> OPENFRAME(windows-mdm-tenant): the wiped host is the device's tenant's — openframe/docs/mysql-multitenancy-feature.md
+				host, err := svc.ds.HostByIdentifier(openframeWindowsMDMPinnedContext(ctx), result.WipeFailed.HostUUID)
+				// <<< OPENFRAME(windows-mdm-tenant)
 				if err != nil {
 					svc.logger.WarnContext(ctx, "failed to look up host for wipe_failed_host activity",
 						"host_uuid", result.WipeFailed.HostUUID, "err", err)
@@ -1853,7 +1860,9 @@ func (svc *Service) processIncomingMDMCmds(ctx context.Context, enrolledDevice *
 			}
 
 			if result != nil && result.WipeSucceeded != nil {
-				host, err := svc.ds.HostByIdentifier(ctx, result.WipeSucceeded.HostUUID)
+				// >>> OPENFRAME(windows-mdm-tenant): the wiped host is the device's tenant's — openframe/docs/mysql-multitenancy-feature.md
+				host, err := svc.ds.HostByIdentifier(openframeWindowsMDMPinnedContext(ctx), result.WipeSucceeded.HostUUID)
+				// <<< OPENFRAME(windows-mdm-tenant)
 				if err != nil {
 					return ctxerr.Wrap(ctx, err, "wipe succeeded: get host by identifier")
 				}
@@ -3121,7 +3130,9 @@ func (svc *Service) storeWindowsMDMEnrolledDevice(ctx context.Context, userID st
 	var serial string
 	if hostUUID != "" {
 		mdmLifecycle := mdmlifecycle.New(svc.ds, svc.logger, svc.NewActivity)
-		err = mdmLifecycle.Do(ctx, mdmlifecycle.HostOptions{
+		// >>> OPENFRAME(windows-mdm-tenant): in shared mode the reset touches only the enrolling tenant's host — openframe/docs/mysql-multitenancy-feature.md
+		err = mdmLifecycle.Do(openframeWindowsMDMPinnedContext(ctx), mdmlifecycle.HostOptions{
+			// <<< OPENFRAME(windows-mdm-tenant)
 			Action:   mdmlifecycle.HostActionTurnOn,
 			Platform: "windows",
 			UUID:     hostUUID,

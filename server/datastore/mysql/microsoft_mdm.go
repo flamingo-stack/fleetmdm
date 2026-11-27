@@ -37,8 +37,8 @@ func isWindowsHostConnectedToFleetMDM(ctx context.Context, q sqlx.QueryerContext
 	    JOIN host_mdm hm ON hm.host_id = h.id
 	  WHERE h.id = %d
 	    AND mwe.device_state = '`+microsoft_mdm.MDMDeviceStateEnrolled+`'
-	    AND hm.enrolled = 1 LIMIT 1
-	`, h.ID))
+	    AND hm.enrolled = 1`+openframeWindowsEnrollmentOfHostTeam(ctx)+` LIMIT 1
+	`, h.ID)) // OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -840,6 +840,11 @@ func (ds *Datastore) mdmWindowsInsertCommandForEnrollmentIDsDB(ctx context.Conte
 // getEnrollmentIDsByHostUUIDDB fetches enrollment IDs for a list of host UUIDs
 // using an indexed batch query. Returns the most recent enrollment per host.
 func (ds *Datastore) getEnrollmentIDsByHostUUIDDB(ctx context.Context, tx sqlx.ExtContext, hostUUIDs []string) ([]uint, error) {
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a command reaches only its tenant's device — openframe/docs/mysql-multitenancy-feature.md
+	if openframeSharedMode(ctx) {
+		return ds.openframeGetEnrollmentIDsByHostUUIDDB(ctx, tx, hostUUIDs)
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 	var allIDs []uint
 	err := common_mysql.BatchProcessSimple(hostUUIDs, windowsMDMCommandQueueBatchSize, func(batch []string) error {
 		stmt, args, err := sqlx.In(
@@ -862,6 +867,11 @@ func (ds *Datastore) getEnrollmentIDsByHostUUIDDB(ctx context.Context, tx sqlx.E
 // per-row SELECT that supports both host_uuid and mdm_device_id lookups.
 // Used by the general-purpose command insertion path (typically 1-2 IDs).
 func (ds *Datastore) getEnrollmentIDsByHostUUIDOrDeviceIDDB(ctx context.Context, tx sqlx.ExtContext, hostUUIDsOrDeviceIDs []string) ([]uint, error) {
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a command reaches only its tenant's device — openframe/docs/mysql-multitenancy-feature.md
+	if openframeSharedMode(ctx) {
+		return ds.openframeGetEnrollmentIDsByHostUUIDOrDeviceIDDB(ctx, tx, hostUUIDsOrDeviceIDs)
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 	var allIDs []uint
 	for _, id := range hostUUIDsOrDeviceIDs {
 		var eid uint
@@ -2939,7 +2949,14 @@ host_uuid = ? AND profile_name NOT IN(?) AND NOT (operation_type = '%s' AND COAL
 		fleet.MDMDeliveryVerified,
 	)
 
-	stmt, args, err := sqlx.In(stmt, hostUUID, mdm.ListFleetReservedWindowsProfileNames())
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a tenant sees only its own profiles' statuses: they are keyed by host uuid alone — openframe/docs/mysql-multitenancy-feature.md
+	inArgs := []any{hostUUID, mdm.ListFleetReservedWindowsProfileNames()}
+	if teamID, ok := fleet.OpenframeTeamID(ctx); ok && openframeSharedMode(ctx) {
+		stmt += ` AND profile_uuid IN (SELECT profile_uuid FROM mdm_windows_configuration_profiles WHERE team_id = ?)`
+		inArgs = append(inArgs, teamID)
+	}
+	stmt, args, err := sqlx.In(stmt, inArgs...)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "building in statement")
 	}

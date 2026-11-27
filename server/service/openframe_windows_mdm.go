@@ -12,6 +12,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
+	"github.com/fleetdm/fleet/v4/server/mdm/microsoft/syncml"
 )
 
 var errOpenframeWindowsMDMURLNotSet = errors.New("the tenant has no Windows MDM address (mdm.windows_server_url)")
@@ -95,6 +96,29 @@ func openframeWindowsMDMEnrollTeamID(ctx context.Context) *uint {
 		return &teamID
 	}
 	return nil
+}
+
+// openframeWindowsMDMPinnedContext pins the request to the tenant named for this Windows device request
+// (enroll or management), for the lookups by host uuid it makes; outside shared mode it returns ctx.
+func openframeWindowsMDMPinnedContext(ctx context.Context) context.Context {
+	if teamID := openframeWindowsMDMEnrollTeamID(ctx); teamID != nil {
+		return fleet.NewOpenframeTeamContext(ctx, *teamID)
+	}
+	return ctx
+}
+
+// openframeRefuseWindowsEnrollConflict refuses, in shared mode, an enrollment whose hardware uuid or
+// device id another device could be confused with (OpenframeWindowsMDMEnrollConflict).
+func (svc *Service) openframeRefuseWindowsEnrollConflict(ctx context.Context, hostUUID string, secTokenMsg *fleet.RequestSecurityToken) error {
+	teamID := openframeWindowsMDMEnrollTeamID(ctx)
+	if teamID == nil {
+		return nil
+	}
+	deviceID, err := GetContextItem(secTokenMsg, syncml.ReqSecTokenContextItemDeviceID)
+	if err != nil {
+		return err
+	}
+	return svc.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostUUID, deviceID, *teamID)
 }
 
 // openframeDeleteWindowsDeviceOnReenrollment removes the enrollment the re-enrolling device's hardware id

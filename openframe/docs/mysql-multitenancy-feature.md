@@ -244,7 +244,9 @@ the enrollment as `mdm_windows_enrollments.team_id` (fork migration `20261127000
 management message reads it back with one primary-key query
 (`server/datastore/mysql/openframe_windows_mdm.go`). Those requests are not pinned: only the URLs and
 the WSTEP pair come from that tenant. The enrollment's other keys (hardware id, device id, host uuid)
-come from the device, so in shared mode they never reach across tenants:
+come from the device and are not unique across tenants: an agent reports its own hardware uuid, and
+the device chooses its device id. Upstream sends commands, keeps profile statuses and resets an
+enrollment by those keys, so in shared mode each of these paths is held to the tenant:
 
 - re-enrollment removes the enrollment its hardware id names only when it belongs to the enrolling
   tenant (its `team_id`, or for a row without one, a host of that tenant with the row's host uuid);
@@ -257,6 +259,30 @@ come from the device, so in shared mode they never reach across tenants:
   (`OpenframeUpdateMDMWindowsEnrollmentHost`, `server/service/osquery_utils/queries_openframe_windows_mdm.go`);
 - an enrollment without a recorded tenant (enrolled before the migration) gets no management session
   until it re-enrolls, and is linked to no host.
+- enrollment is refused when another host, of any tenant, has the device's hardware uuid, when
+  another tenant's enrollment holds that uuid, or when the device id is another host's uuid or
+  already enrolled (`OpenframeWindowsMDMEnrollConflict`);
+- a command (wipe, custom command, profile, TPM, setup experience) is resolved to an enrollment of the
+  request's tenant when the request is pinned; an unpinned one (the profile cron, a device request)
+  reaches only an enrollment whose host uuid no host of another tenant has, and an enrollment of the
+  host uuid wins over one whose device id merely equals it (`openframeWindowsEnrollmentFence`,
+  `getEnrollmentIDsByHostUUIDDB`, `getEnrollmentIDsByHostUUIDOrDeviceIDDB`);
+- the Windows profile reconciler skips a host whose enrollment is of another tenant or whose uuid a
+  host of another tenant has (`openframeWindowsReconcileHostsStmt`): profile statuses are keyed by
+  uuid alone;
+- the enrollment reset at turn-on (`MDMResetEnrollment`: BitLocker key, certificates, profile
+  statuses) and the host looked up for a wipe result are the device's tenant's;
+- a host's profile statuses list only its tenant's profiles, and a host counts as connected to MDM
+  only through an enrollment of its tenant (`GetHostMDMWindowsProfiles`, `IsHostConnectedToFleetMDM`,
+  `AreHostsConnectedToFleetMDM`);
+- the WSTEP pair check and a tenant's Windows profile cleanup read the enrollment's `team_id` and skip
+  uuids another tenant shares.
+
+A hardware uuid that hosts of two tenants share is fail-closed: neither tenant's device with it gets
+profiles from the cron, and the tenant that enrolls second is refused. Left as upstream, read-only,
+and needing such a shared uuid: the host list's `connected_to_fleet` filter and labels
+(`hostMDMSelect`, `labels.go`), the profile summary counts, the orbit config's ESP flags
+(`GetMDMWindowsHostConfigState`) and setup experience lookups by uuid.
 
 A device moved to another tenant enrolls there only after the old tenant releases it (deletes the
 host or turns its MDM off). Outside shared mode `team_id` stays NULL and every query is upstream's. Shared mode never
@@ -337,6 +363,13 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are
   unused. New-format stats are team-scoped.
 - **`IsEnrollSecretAvailable`** — intentionally unfenced (cross-team uniqueness check).
+- **`POST /commands/run` (`RunMDMCommand`)** — `authorizeAllHostsTeams` lists the target hosts by
+  uuid with a global-admin filter and no tenant fence (`ListHostsLiteByUUIDs`). OpenFrame has no
+  caller (neither the gateway allowlist nor the SDK carries it); fence it before adding one. The
+  Windows command it enqueues is held to the pinned tenant's enrollments either way.
+- **Windows MDM challenge state** — upstream stores the SyncML message of a device that has not yet
+  authenticated (`saveResponse` in the Challenge state) and resets its nonce; results keyed by a
+  command uuid it cannot guess.
 - **"Instance" means every Fleet on the shared database** — one instance row, one APNs
   certificate, one Android enterprise and one MDM URL for every cluster on that MySQL (seven on
   prod). The MDM URL on the instance row must be an address that serves all of them, not one

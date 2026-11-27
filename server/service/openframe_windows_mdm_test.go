@@ -17,6 +17,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/fleetdm/fleet/v4/server/mdm"
 	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
+	"github.com/fleetdm/fleet/v4/server/mdm/microsoft/syncml"
 	"github.com/fleetdm/fleet/v4/server/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/singleflight"
@@ -184,6 +185,33 @@ func TestOpenframeWindowsReenrollmentDeletesOnlyOwnTenant(t *testing.T) {
 	require.NoError(t, svc.openframeDeleteWindowsDeviceOnReenrollment(t.Context(), "hw-1"))
 	require.True(t, ds.MDMWindowsDeleteEnrolledDeviceOnReenrollmentFuncInvoked, "outside shared mode as upstream")
 	require.Len(t, deletedFor, 1)
+}
+
+func TestOpenframeWindowsEnrollConflictAndPin(t *testing.T) {
+	ds := openframeWindowsTenantStore()
+	var checked []string
+	ds.OpenframeWindowsMDMEnrollConflictFunc = func(_ context.Context, hostUUID, deviceID string, teamID uint) error {
+		checked = append(checked, fmt.Sprintf("%s/%s/%d", hostUUID, deviceID, teamID))
+		return &fleet.ConflictError{Message: "conflict"}
+	}
+	svc := &Service{ds: ds}
+	msg := &fleet.RequestSecurityToken{AdditionalContext: fleet.AdditionalContext{ContextItems: []fleet.ContextItem{
+		{Name: syncml.ReqSecTokenContextItemDeviceID, Value: "dev-1"},
+	}}}
+
+	ctxB := openframeWithWindowsMDMTeam(t.Context(), openframeTestTeamB)
+	var conflict *fleet.ConflictError
+	require.ErrorAs(t, svc.openframeRefuseWindowsEnrollConflict(ctxB, "uuid-1", msg), &conflict)
+	require.Equal(t, []string{fmt.Sprintf("uuid-1/dev-1/%d", openframeTestTeamB)}, checked, "shared mode checks the device's identifiers in its tenant")
+
+	require.NoError(t, svc.openframeRefuseWindowsEnrollConflict(t.Context(), "uuid-1", msg))
+	require.Len(t, checked, 1, "outside shared mode nothing is checked")
+
+	pinned, ok := fleet.OpenframeTeamID(openframeWindowsMDMPinnedContext(ctxB))
+	require.True(t, ok)
+	require.Equal(t, openframeTestTeamB, pinned, "lookups by host uuid are pinned to the device's tenant")
+	_, ok = fleet.OpenframeTeamID(openframeWindowsMDMPinnedContext(t.Context()))
+	require.False(t, ok, "outside shared mode nothing is pinned")
 }
 
 func TestOpenframeWindowsWSTEPPerTenant(t *testing.T) {

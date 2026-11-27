@@ -936,7 +936,8 @@ func (ds *Datastore) CleanupAllHostMDMProfilesForPlatform(ctx context.Context, p
 				if _, err := tx.ExecContext(ctx, `
 					DELETE hmwp FROM host_mdm_windows_profiles hmwp
 					JOIN hosts h ON h.uuid = hmwp.host_uuid
-					WHERE h.team_id = ?`, teamID); err != nil {
+					WHERE h.team_id = ?
+					AND NOT EXISTS (SELECT 1 FROM hosts oh WHERE oh.uuid = hmwp.host_uuid AND NOT (oh.team_id <=> h.team_id))`, teamID); err != nil {
 					return ctxerr.Wrap(ctx, err, "deleting the pinned team's rows from host_mdm_windows_profiles")
 				}
 				return nil
@@ -2244,7 +2245,9 @@ func (ds *Datastore) AreHostsConnectedToFleetMDM(ctx context.Context, hosts []*f
 	    AND mwe.device_state = '` + microsoft_mdm.MDMDeviceStateEnrolled + `'
 	    AND hm.enrolled = 1
 	`
-	if err := setConnectedUUIDs(winStmt, winUUIDs, res); err != nil {
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
+	if err := setConnectedUUIDs(winStmt+openframeWindowsEnrollmentOfHostTeam(ctx), winUUIDs, res); err != nil {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		return nil, err
 	}
 

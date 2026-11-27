@@ -1238,6 +1238,10 @@ type Datastore interface {
 	// OpenframeUpdateMDMWindowsEnrollmentHost is UpdateMDMWindowsEnrollmentsHostUUID that links the enrollment to the
 	// host only when both belong to the same tenant.
 	OpenframeUpdateMDMWindowsEnrollmentHost(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error)
+	// OpenframeWindowsMDMEnrollConflict refuses (ConflictError) a Windows MDM enrollment into teamID whose hardware uuid
+	// another host has or another tenant's enrollment holds, or whose device id is another host's uuid or already
+	// enrolled.
+	OpenframeWindowsMDMEnrollConflict(ctx context.Context, hostUUID, mdmDeviceID string, teamID uint) error
 	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// >>> OPENFRAME(enroll-machine-identity)

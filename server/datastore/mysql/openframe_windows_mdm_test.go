@@ -2,10 +2,12 @@
 package mysql
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
 	"github.com/fleetdm/fleet/v4/server/test"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -32,10 +34,10 @@ func newOpenframeWindowsMDMFixture(t *testing.T, ds *Datastore) *openframeWindow
 func (f *openframeWindowsMDMFixture) host(t *testing.T, name, hostUUID string, teamID uint) *fleet.Host {
 	h := test.NewHost(t, f.ds, name, "", name+"-key", name+"-osq", time.Now())
 	ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {
-		_, err := q.ExecContext(t.Context(), `UPDATE hosts SET uuid = ?, team_id = ? WHERE id = ?`, hostUUID, teamID, h.ID)
+		_, err := q.ExecContext(t.Context(), `UPDATE hosts SET uuid = ?, team_id = ?, platform = 'windows' WHERE id = ?`, hostUUID, teamID, h.ID)
 		return err
 	})
-	h.UUID, h.TeamID = hostUUID, &teamID
+	h.UUID, h.TeamID, h.Platform = hostUUID, &teamID, "windows"
 	return h
 }
 
@@ -43,7 +45,7 @@ func (f *openframeWindowsMDMFixture) enroll(t *testing.T, hwID, deviceID, hostUU
 	require.NoError(t, f.ds.MDMWindowsInsertEnrolledDevice(t.Context(), &fleet.MDMWindowsEnrolledDevice{
 		MDMDeviceID:            deviceID,
 		MDMHardwareID:          hwID,
-		MDMDeviceState:         "ds",
+		MDMDeviceState:         microsoft_mdm.MDMDeviceStateEnrolled,
 		MDMDeviceType:          "CIMClient_Windows",
 		MDMDeviceName:          "DESKTOP-" + hwID,
 		MDMEnrollType:          "ProgrammaticEnrollment",
@@ -193,4 +195,189 @@ func TestOpenframeMDMWindowsLinkStaysInTenant(t *testing.T) {
 	updated, err = f.ds.OpenframeUpdateMDMWindowsEnrollmentHost(ctx, hostA.ID, "dev-link-legacy")
 	require.NoError(t, err)
 	require.False(t, updated, "an enrollment without a tenant is linked to no host")
+}
+
+func openframeSharedCtx(ctx context.Context) context.Context {
+	return context.WithValue(ctx, openframeSharedModeCtxKey{}, true)
+}
+
+func openframePinnedSharedCtx(ctx context.Context, teamID uint) context.Context {
+	return openframeSharedCtx(fleet.NewOpenframeTeamContext(ctx, teamID))
+}
+
+func (f *openframeWindowsMDMFixture) enrollmentIDs(t *testing.T, ctx context.Context, byUUIDOnly bool, ids ...string) []uint {
+	var (
+		got []uint
+		err error
+	)
+	if byUUIDOnly {
+		got, err = f.ds.getEnrollmentIDsByHostUUIDDB(ctx, f.ds.writer(ctx), ids)
+	} else {
+		got, err = f.ds.getEnrollmentIDsByHostUUIDOrDeviceIDDB(ctx, f.ds.writer(ctx), ids)
+	}
+	require.NoError(t, err)
+	return got
+}
+
+// A tenant-B host claiming tenant A's hardware uuid, and a tenant-B enrollment whose device id is that uuid,
+// must not receive tenant A's commands, and tenant B's commands must not reach tenant A's device.
+func TestOpenframeMDMWindowsCommandsStayInTenant(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "cmd-a", "uuid-victim", f.teamA.ID)
+	f.enroll(t, "hw-a", "dev-a", hostA.UUID, &f.teamA.ID)
+	enrollmentA := f.enrollmentID(t, "hw-a")
+	pinnedA, pinnedB := openframePinnedSharedCtx(ctx, f.teamA.ID), openframePinnedSharedCtx(ctx, f.teamB.ID)
+
+	for _, byUUIDOnly := range []bool{true, false} {
+		require.Equal(t, []uint{enrollmentA}, f.enrollmentIDs(t, pinnedA, byUUIDOnly, hostA.UUID), "tenant A reaches its device")
+		require.Equal(t, []uint{enrollmentA}, f.enrollmentIDs(t, openframeSharedCtx(ctx), byUUIDOnly, hostA.UUID),
+			"an unpinned command reaches a uuid only one tenant has")
+	}
+
+	f.host(t, "cmd-b-fake", hostA.UUID, f.teamB.ID)
+	for _, byUUIDOnly := range []bool{true, false} {
+		require.Empty(t, f.enrollmentIDs(t, pinnedB, byUUIDOnly, hostA.UUID), "tenant B's command for its host with A's uuid reaches no device")
+		require.Equal(t, []uint{enrollmentA}, f.enrollmentIDs(t, pinnedA, byUUIDOnly, hostA.UUID), "tenant A still reaches its device")
+		require.Empty(t, f.enrollmentIDs(t, openframeSharedCtx(ctx), byUUIDOnly, hostA.UUID),
+			"an unpinned command reaches no device of a uuid two tenants share")
+		require.Equal(t, []uint{enrollmentA}, f.enrollmentIDs(t, ctx, byUUIDOnly, hostA.UUID), "outside shared mode as upstream")
+	}
+	cmd := &fleet.MDMWindowsCommand{CommandUUID: uuid.NewString(), RawCommand: []byte("<Exec></Exec>"), TargetLocURI: "./test/uri"}
+	require.NoError(t, f.ds.MDMWindowsInsertCommandForHosts(pinnedB, []string{hostA.UUID}, cmd))
+	require.Zero(t, f.count(t, `SELECT COUNT(*) FROM windows_mdm_command_queue WHERE command_uuid = ?`, cmd.CommandUUID),
+		"tenant B's wipe or command for its host with A's uuid is queued for no device")
+
+	hostB := f.host(t, "cmd-b", "uuid-attacker", f.teamB.ID)
+	f.enroll(t, "hw-b", hostA.UUID, hostB.UUID, &f.teamB.ID)
+	enrollmentB := f.enrollmentID(t, "hw-b")
+	require.Equal(t, []uint{enrollmentA}, f.enrollmentIDs(t, pinnedA, false, hostA.UUID),
+		"a tenant-B enrollment whose device id is A's host uuid does not take A's commands")
+	require.Equal(t, []uint{enrollmentB}, f.enrollmentIDs(t, ctx, false, hostA.UUID),
+		"upstream resolves the newest enrollment, whatever its tenant")
+
+}
+
+func TestOpenframeMDMWindowsReconcileSkipsSharedUUID(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	shared := openframeSharedCtx(ctx)
+	hostA := f.host(t, "rec-a", "uuid-rec", f.teamA.ID)
+	f.enroll(t, "hw-rec", "dev-rec", hostA.UUID, &f.teamA.ID)
+	require.NoError(t, f.ds.SetOrUpdateMDMData(ctx, hostA.ID, false, true, "https://a.example.com", false, fleet.WellKnownMDMFleet, "", false))
+
+	got, err := f.ds.GetWindowsMDMHostForReconcile(shared, hostA.UUID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, hostA.ID, got.HostID)
+
+	hostB := f.host(t, "rec-b-fake", hostA.UUID, f.teamB.ID)
+	require.NoError(t, f.ds.SetOrUpdateMDMData(ctx, hostB.ID, false, true, "https://b.example.com", false, fleet.WellKnownMDMFleet, "", false))
+	got, err = f.ds.GetWindowsMDMHostForReconcile(shared, hostA.UUID)
+	require.NoError(t, err)
+	require.Nil(t, got, "the reconciler skips a uuid two tenants share")
+
+	listed, _, _, _, err := f.ds.GetWindowsProfileReconcileSnapshot(shared, "", 100)
+	require.NoError(t, err)
+	require.Empty(t, listed, "neither tenant's host with the shared uuid is reconciled")
+
+	got, err = f.ds.GetWindowsMDMHostForReconcile(ctx, hostA.UUID)
+	require.NoError(t, err)
+	require.NotNil(t, got, "outside shared mode as upstream")
+}
+
+func TestOpenframeMDMWindowsEnrollConflict(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "conf-a", "uuid-conf-a", f.teamA.ID)
+	hostB := f.host(t, "conf-b", "uuid-conf-b", f.teamB.ID)
+	f.enroll(t, "hw-conf-a", "dev-conf-a", hostA.UUID, &f.teamA.ID)
+	var conflict *fleet.ConflictError
+
+	require.NoError(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, "dev-new", f.teamB.ID))
+
+	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, "dev-conf-a", f.teamB.ID), &conflict,
+		"another device's device id is refused")
+	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, hostA.UUID, f.teamB.ID), &conflict,
+		"a device id that is another host's uuid is refused")
+	require.NoError(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, hostB.UUID, f.teamB.ID),
+		"a device id equal to the host's own uuid is not another host's")
+	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostA.UUID, "dev-new", f.teamB.ID), &conflict,
+		"a hardware uuid another tenant's enrollment holds is refused")
+
+	f.host(t, "conf-b-twin", hostB.UUID, f.teamA.ID)
+	require.ErrorAs(t, f.ds.OpenframeWindowsMDMEnrollConflict(ctx, hostB.UUID, "dev-new", f.teamB.ID), &conflict,
+		"a hardware uuid another host has, in any tenant, is refused")
+}
+
+func TestOpenframeMDMWindowsResetStaysInTenant(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "reset-a", "uuid-reset", f.teamA.ID)
+	hostB := f.host(t, "reset-b", "uuid-reset", f.teamB.ID)
+	for _, h := range []*fleet.Host{hostA, hostB} {
+		ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {
+			if _, err := q.ExecContext(ctx, `UPDATE hosts SET platform = 'windows' WHERE id = ?`, h.ID); err != nil {
+				return err
+			}
+			_, err := q.ExecContext(ctx, `INSERT INTO host_disk_encryption_keys (host_id, base64_encrypted) VALUES (?, 'x')`, h.ID)
+			return err
+		})
+	}
+	keys := func(h *fleet.Host) int {
+		return f.count(t, `SELECT COUNT(*) FROM host_disk_encryption_keys WHERE host_id = ?`, h.ID)
+	}
+
+	require.NoError(t, f.ds.MDMResetEnrollment(openframePinnedSharedCtx(ctx, f.teamB.ID), hostB.UUID, false))
+	require.Zero(t, keys(hostB), "tenant B's own host is reset")
+	require.Equal(t, 1, keys(hostA), "tenant A's host with the same uuid keeps its BitLocker key")
+}
+
+func TestOpenframeMDMWindowsHostReadsStayInTenant(t *testing.T) {
+	f := newOpenframeWindowsMDMFixture(t, CreateMySQLDS(t))
+	ctx := t.Context()
+	hostA := f.host(t, "read-a", "uuid-read", f.teamA.ID)
+	hostB := f.host(t, "read-b-fake", hostA.UUID, f.teamB.ID)
+	f.enroll(t, "hw-read", "dev-read", hostA.UUID, &f.teamA.ID)
+	for _, h := range []*fleet.Host{hostA, hostB} {
+		require.NoError(t, f.ds.SetOrUpdateMDMData(ctx, h.ID, false, true, "https://x.example.com", false, fleet.WellKnownMDMFleet, "", false))
+		ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {
+			_, err := q.ExecContext(ctx, `UPDATE hosts SET platform = 'windows' WHERE id = ?`, h.ID)
+			return err
+		})
+		h.Platform = "windows"
+	}
+	profileA, err := f.ds.NewMDMWindowsConfigProfile(ctx, fleet.MDMWindowsConfigProfile{
+		TeamID: &f.teamA.ID, Name: "tenant-a-wifi",
+		SyncML: []byte(`<Replace><Item><Target><LocURI>./Device/Vendor/MSFT/Policy/Config/A</LocURI></Target></Item></Replace>`),
+	}, nil)
+	require.NoError(t, err)
+	ExecAdhocSQL(t, f.ds, func(q sqlx.ExtContext) error {
+		_, err := q.ExecContext(ctx, `INSERT INTO host_mdm_windows_profiles (host_uuid, profile_uuid, profile_name, command_uuid, status, operation_type)
+			VALUES (?, ?, ?, ?, 'failed', 'install')`, hostA.UUID, profileA.ProfileUUID, profileA.Name, uuid.NewString())
+		return err
+	})
+
+	profiles, err := f.ds.GetHostMDMWindowsProfiles(openframePinnedSharedCtx(ctx, f.teamA.ID), hostA.UUID)
+	require.NoError(t, err)
+	require.Len(t, profiles, 1, "tenant A sees its profile")
+	profiles, err = f.ds.GetHostMDMWindowsProfiles(openframePinnedSharedCtx(ctx, f.teamB.ID), hostB.UUID)
+	require.NoError(t, err)
+	require.Empty(t, profiles, "tenant B's host with A's uuid does not show A's profile")
+
+	connected, err := f.ds.IsHostConnectedToFleetMDM(openframeSharedCtx(ctx), hostA)
+	require.NoError(t, err)
+	require.True(t, connected)
+	connected, err = f.ds.IsHostConnectedToFleetMDM(openframeSharedCtx(ctx), hostB)
+	require.NoError(t, err)
+	require.False(t, connected, "tenant B's host is not connected through A's enrollment")
+	byUUID, err := f.ds.AreHostsConnectedToFleetMDM(openframePinnedSharedCtx(ctx, f.teamB.ID), []*fleet.Host{hostB})
+	require.NoError(t, err)
+	require.False(t, byUUID[hostB.UUID], "tenant B's host list does not show its host connected through A's enrollment")
+	byUUID, err = f.ds.AreHostsConnectedToFleetMDM(openframePinnedSharedCtx(ctx, f.teamA.ID), []*fleet.Host{hostA})
+	require.NoError(t, err)
+	require.True(t, byUUID[hostA.UUID])
+	connected, err = f.ds.IsHostConnectedToFleetMDM(ctx, hostB)
+	require.NoError(t, err)
+	require.True(t, connected, "outside shared mode as upstream")
 }

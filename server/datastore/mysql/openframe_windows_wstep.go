@@ -21,8 +21,8 @@ const openframeWindowsMDMTeamDataExistsQuery = `
 SELECT
   EXISTS (
     SELECT 1 FROM mdm_windows_enrollments e
-    JOIN hosts h ON h.uuid = e.host_uuid
-    WHERE h.team_id = ?
+    WHERE e.team_id = ?
+      OR (e.team_id IS NULL AND EXISTS (SELECT 1 FROM hosts h WHERE h.uuid = e.host_uuid AND h.team_id = ?))
   ) OR
   EXISTS (
     SELECT 1 FROM host_disk_encryption_keys k
@@ -51,7 +51,7 @@ func (ds *Datastore) OpenframeLoadWindowsWSTEP(
 	}
 
 	var exists bool
-	if err := sqlx.GetContext(ctx, ds.writer(ctx), &exists, openframeWindowsMDMTeamDataExistsQuery, teamID, teamID); err != nil {
+	if err := sqlx.GetContext(ctx, ds.writer(ctx), &exists, openframeWindowsMDMTeamDataExistsQuery, teamID, teamID, teamID); err != nil {
 		return nil, nil, ctxerr.Wrap(ctx, err, "checking the tenant's Windows MDM data")
 	}
 	if exists {

@@ -25,6 +25,7 @@ func openframeFakeWSTEPPair(calls *atomic.Int32) func() ([]byte, []byte, error) 
 func TestOpenframeLoadWindowsWSTEP(t *testing.T) {
 	ds := CreateMySQLDS(t)
 	ctx := t.Context()
+	require.NoError(t, ds.MigrateOpenframe(ctx))
 	teamA, err := ds.NewTeam(ctx, &fleet.Team{Name: "openframe-wstep-a"})
 	require.NoError(t, err)
 	teamB, err := ds.NewTeam(ctx, &fleet.Team{Name: "openframe-wstep-b"})
@@ -36,15 +37,16 @@ func TestOpenframeLoadWindowsWSTEP(t *testing.T) {
 			_, err := q.ExecContext(ctx, `UPDATE hosts SET platform = 'windows', team_id = ? WHERE id = ?`, teamID, h.ID)
 			return err
 		})
+		h.TeamID = &teamID
 		return h
 	}
 	enroll := func(t *testing.T, h *fleet.Host) {
 		ExecAdhocSQL(t, ds, func(q sqlx.ExtContext) error {
 			_, err := q.ExecContext(ctx, `
 				INSERT INTO mdm_windows_enrollments (mdm_device_id, mdm_hardware_id, device_state, device_type, device_name,
-					enroll_type, enroll_user_id, enroll_proto_version, enroll_client_version, host_uuid)
-				VALUES (?, ?, 'enrolled', 'CIMClient_Windows', 'pc', 'ProgrammaticEnrollment', '', '5.0', '10.0', ?)`,
-				h.UUID+"-dev", h.UUID+"-hw", h.UUID)
+					enroll_type, enroll_user_id, enroll_proto_version, enroll_client_version, host_uuid, team_id)
+				VALUES (?, ?, 'enrolled', 'CIMClient_Windows', 'pc', 'ProgrammaticEnrollment', '', '5.0', '10.0', ?, ?)`,
+				h.UUID+"-dev", h.UUID+"-hw", h.UUID, h.TeamID)
 			return err
 		})
 	}
