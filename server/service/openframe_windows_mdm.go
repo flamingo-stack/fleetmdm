@@ -114,6 +114,9 @@ func (svc *Service) openframeRefuseWindowsEnrollConflict(ctx context.Context, ho
 	if teamID == nil {
 		return nil
 	}
+	if hostUUID == "" {
+		return ctxerr.New(ctx, "Windows MDM enrollment has no host")
+	}
 	deviceID, err := GetContextItem(secTokenMsg, syncml.ReqSecTokenContextItemDeviceID)
 	if err != nil {
 		return err

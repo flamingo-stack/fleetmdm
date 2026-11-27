@@ -204,6 +204,9 @@ func TestOpenframeWindowsEnrollConflictAndPin(t *testing.T) {
 	require.ErrorAs(t, svc.openframeRefuseWindowsEnrollConflict(ctxB, "uuid-1", msg), &conflict)
 	require.Equal(t, []string{fmt.Sprintf("uuid-1/dev-1/%d", openframeTestTeamB)}, checked, "shared mode checks the device's identifiers in its tenant")
 
+	require.ErrorContains(t, svc.openframeRefuseWindowsEnrollConflict(ctxB, "", msg), "no host")
+	require.Len(t, checked, 1, "an enrollment without a host is refused before any lookup")
+
 	require.NoError(t, svc.openframeRefuseWindowsEnrollConflict(t.Context(), "uuid-1", msg))
 	require.Len(t, checked, 1, "outside shared mode nothing is checked")
 

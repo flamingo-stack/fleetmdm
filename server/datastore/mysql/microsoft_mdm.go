@@ -29,6 +29,10 @@ const windowsMDMCommandQueueBatchSize = 10000
 func isWindowsHostConnectedToFleetMDM(ctx context.Context, q sqlx.QueryerContext, h *fleet.Host) (bool, error) {
 	var unused string
 
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
+	tenantFence := openframeWindowsEnrollmentOfHostTeam(ctx)
+	// <<< OPENFRAME(windows-mdm-tenant)
+
 	// safe to use with interpolation rather than prepared statements because we're using a numeric ID here
 	err := sqlx.GetContext(ctx, q, &unused, fmt.Sprintf(`
 	  SELECT mwe.host_uuid
@@ -37,8 +41,8 @@ func isWindowsHostConnectedToFleetMDM(ctx context.Context, q sqlx.QueryerContext
 	    JOIN host_mdm hm ON hm.host_id = h.id
 	  WHERE h.id = %d
 	    AND mwe.device_state = '`+microsoft_mdm.MDMDeviceStateEnrolled+`'
-	    AND hm.enrolled = 1`+openframeWindowsEnrollmentOfHostTeam(ctx)+` LIMIT 1
-	`, h.ID)) // OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
+	    AND hm.enrolled = 1`+tenantFence+` LIMIT 1
+	`, h.ID)) // OPENFRAME(windows-mdm-tenant): tenantFence above
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
