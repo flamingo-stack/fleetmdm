@@ -3102,7 +3102,9 @@ func LinkWindowsHostMDMEnrollment(ctx context.Context, logger *slog.Logger, ds f
 		}
 	}
 	// <<< OPENFRAME(enroll-machine-identity)
-	updated, err := ds.UpdateMDMWindowsEnrollmentsHostUUID(ctx, hostUUID, mdmDeviceID)
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
+	updated, err := OpenframeUpdateWindowsEnrollmentHost(ctx, ds, hostID, hostUUID, mdmDeviceID, fleet.IsOpenframeSharedMode())
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		return false, ctxerr.Wrap(ctx, err, "updating windows mdm device id")
 	}

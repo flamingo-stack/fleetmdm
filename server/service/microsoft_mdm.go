@@ -1066,6 +1066,11 @@ func (svc *Service) authBinarySecurityToken(ctx context.Context, authToken *flee
 
 		// Validating the Binary Security Token Type used on Automatic Enrollments (returned by STS Auth Endpoint)
 		if binSecToken.Type == mdm_types.WindowsMDMAutomaticEnrollmentType {
+			// >>> OPENFRAME(windows-mdm-tenant): shared mode has no instance WSTEP pair, so automatic enrollment isn't available
+			if svc.wstepCertManager == nil {
+				return "", "", 0, errors.New("automatic enrollment is not available")
+			}
+			// <<< OPENFRAME(windows-mdm-tenant)
 			upnToken, err := svc.wstepCertManager.GetSTSAuthTokenUPNClaim(binSecToken.Payload.AuthToken)
 			if err != nil {
 				return "", "", 0, ctxerr.Wrap(ctx, err, "issue retrieving UPN from Auth token")
@@ -1154,19 +1159,20 @@ func (svc *Service) GetMDMMicrosoftDiscoveryResponse(ctx context.Context, upnEma
 	// skipauth: This endpoint does not use authentication
 	svc.authz.SkipAuthorization(ctx)
 
-	// Getting the app config
-	appCfg, err := svc.ds.AppConfig(ctx)
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode the policy and enroll URLs are on the tenant's address (the request is pinned by the gateway's X-Tenant-Id)
+	serverURL, err := svc.openframeWindowsMDMBaseURL(ctx, fleet.IsOpenframeSharedMode())
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err)
 	}
 
 	// Getting the DiscoveryResponse message content
-	urlPolicyEndpoint, err := microsoft_mdm.ResolveWindowsMDMPolicy(appCfg.ServerSettings.ServerURL)
+	urlPolicyEndpoint, err := microsoft_mdm.ResolveWindowsMDMPolicy(serverURL)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "resolve policy endpoint")
 	}
 
-	urlEnrollEndpoint, err := microsoft_mdm.ResolveWindowsMDMEnroll(appCfg.ServerSettings.ServerURL)
+	urlEnrollEndpoint, err := microsoft_mdm.ResolveWindowsMDMEnroll(serverURL)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "resolve enroll endpoint")
 	}
@@ -1271,6 +1277,13 @@ func (svc *Service) GetMDMWindowsEnrollResponse(ctx context.Context, secTokenMsg
 		return nil, ctxerr.Wrap(ctx, err, "validate binary security token")
 	}
 
+	// >>> OPENFRAME(windows-mdm-tenant): the enrolling host's tenant gives the WSTEP pair and the management URL
+	ctx, err = svc.openframeWindowsMDMEnrollContext(ctx, userID, enrollType, fleet.IsOpenframeSharedMode())
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "Windows MDM enrollment tenant")
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
+
 	// Removing the device if already MDM enrolled
 	err = svc.removeWindowsDeviceIfAlreadyMDMEnrolled(ctx, secTokenMsg)
 	if err != nil {
@@ -1320,6 +1333,13 @@ func (svc *Service) GetMDMWindowsManagementResponse(ctx context.Context, reqSync
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "management request is not trusted")
 	}
+
+	// >>> OPENFRAME(windows-mdm-tenant): the tenant the device enrolled into gives the address the responses carry
+	ctx, err = svc.openframeWindowsMDMDeviceContext(ctx, enrolledDevice.ID, fleet.IsOpenframeSharedMode())
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "Windows MDM device tenant")
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// Token is authorized
 	svc.authz.SkipAuthorization(ctx)
@@ -1816,7 +1836,9 @@ func (svc *Service) processIncomingMDMCmds(ctx context.Context, enrolledDevice *
 			}
 
 			if result != nil && result.WipeFailed != nil {
-				host, err := svc.ds.HostByIdentifier(ctx, result.WipeFailed.HostUUID)
+				// >>> OPENFRAME(windows-mdm-tenant): the wiped host is the device's tenant's — openframe/docs/mysql-multitenancy-feature.md
+				host, err := svc.ds.HostByIdentifier(openframeWindowsMDMPinnedContext(ctx), result.WipeFailed.HostUUID)
+				// <<< OPENFRAME(windows-mdm-tenant)
 				if err != nil {
 					svc.logger.WarnContext(ctx, "failed to look up host for wipe_failed_host activity",
 						"host_uuid", result.WipeFailed.HostUUID, "err", err)
@@ -1833,7 +1855,9 @@ func (svc *Service) processIncomingMDMCmds(ctx context.Context, enrolledDevice *
 			}
 
 			if result != nil && result.WipeSucceeded != nil {
-				host, err := svc.ds.HostByIdentifier(ctx, result.WipeSucceeded.HostUUID)
+				// >>> OPENFRAME(windows-mdm-tenant): the wiped host is the device's tenant's — openframe/docs/mysql-multitenancy-feature.md
+				host, err := svc.ds.HostByIdentifier(openframeWindowsMDMPinnedContext(ctx), result.WipeSucceeded.HostUUID)
+				// <<< OPENFRAME(windows-mdm-tenant)
 				if err != nil {
 					return ctxerr.Wrap(ctx, err, "wipe succeeded: get host by identifier")
 				}
@@ -2068,12 +2092,14 @@ func (svc *Service) createResponseSyncML(ctx context.Context, req *fleet.SyncML,
 	}
 
 	// Getting the Management endpoint URL
-	appConfig, err := svc.ds.AppConfig(ctx)
+	// >>> OPENFRAME(windows-mdm-tenant): the management URL is on the device's tenant's address
+	serverURL, err := svc.openframeWindowsMDMBaseURL(ctx, fleet.IsOpenframeSharedMode())
 	if err != nil {
 		return nil, fmt.Errorf("appconfig was not available %w", err)
 	}
 
-	urlManagementEndpoint, err := microsoft_mdm.ResolveWindowsMDMManagement(appConfig.ServerSettings.ServerURL)
+	urlManagementEndpoint, err := microsoft_mdm.ResolveWindowsMDMManagement(serverURL)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "resolve management endpoint")
 	}
@@ -2886,7 +2912,9 @@ func (svc *Service) removeWindowsDeviceIfAlreadyMDMEnrolled(ctx context.Context,
 	}
 
 	// Device is already enrolled, let's remove it
-	err = svc.ds.MDMWindowsDeleteEnrolledDeviceOnReenrollment(ctx, reqHWDeviceID)
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode identifiers are checked first, and only an enrollment of the device's tenant or a released one is removed — openframe/docs/mysql-multitenancy-feature.md
+	err = svc.openframeDeleteWindowsDeviceOnReenrollment(ctx, secTokenMsg, reqHWDeviceID)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		if fleet.IsNotFound(err) {
 			return nil
@@ -2944,22 +2972,29 @@ func (svc *Service) getDeviceProvisioningInformation(ctx context.Context, secTok
 		return "", nil, err
 	}
 
+	// >>> OPENFRAME(windows-mdm-tenant): the identity certificate and the management URL are the device's tenant's
+	wstepCertManager, err := svc.openframeWindowsWSTEPManager(ctx, fleet.IsOpenframeSharedMode())
+	if err != nil {
+		return "", nil, err
+	}
+
 	// Preparing client certificate and identity certificate information to be sent to the Windows MDM Enrollment Client
 	certStoreProvisioningData := NewCertStoreProvisioningData(
 		reqEnrollType,
-		svc.wstepCertManager.IdentityFingerprint(),
-		svc.wstepCertManager.IdentityCert().Raw,
+		wstepCertManager.IdentityFingerprint(),
+		wstepCertManager.IdentityCert().Raw,
 		rawSignedCertFingerprint,
 		rawSignedCertDER)
 
 	// Preparing the provisioning information that includes the location of the Device Management Service (DMS)
-	appCfg, err := svc.ds.AppConfig(ctx)
+	serverURL, err := svc.openframeWindowsMDMBaseURL(ctx, fleet.IsOpenframeSharedMode())
 	if err != nil {
 		return "", nil, err
 	}
 
 	// Getting the MS-MDM management URL to provision the device
-	urlManagementEndpoint, err := microsoft_mdm.ResolveWindowsMDMManagement(appCfg.ServerSettings.ServerURL)
+	urlManagementEndpoint, err := microsoft_mdm.ResolveWindowsMDMManagement(serverURL)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		return "", nil, err
 	}
@@ -3074,6 +3109,9 @@ func (svc *Service) storeWindowsMDMEnrolledDevice(ctx context.Context, userID st
 		CredentialsHash:         &credentialsHash,
 		CredentialsAcknowledged: true,
 	}
+	// >>> OPENFRAME(windows-mdm-tenant): the enrollment records the tenant it enrolled into — openframe/docs/mysql-multitenancy-feature.md
+	enrolledDevice.OpenframeTeamID = openframeWindowsMDMEnrollTeamID(ctx)
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	if err := svc.ds.MDMWindowsInsertEnrolledDevice(ctx, enrolledDevice); err != nil {
 		return err
@@ -3087,7 +3125,9 @@ func (svc *Service) storeWindowsMDMEnrolledDevice(ctx context.Context, userID st
 	var serial string
 	if hostUUID != "" {
 		mdmLifecycle := mdmlifecycle.New(svc.ds, svc.logger, svc.NewActivity)
-		err = mdmLifecycle.Do(ctx, mdmlifecycle.HostOptions{
+		// >>> OPENFRAME(windows-mdm-tenant): in shared mode the reset touches only the enrolling tenant's host — openframe/docs/mysql-multitenancy-feature.md
+		err = mdmLifecycle.Do(openframeWindowsMDMPinnedContext(ctx), mdmlifecycle.HostOptions{
+			// <<< OPENFRAME(windows-mdm-tenant)
 			Action:   mdmlifecycle.HostActionTurnOn,
 			Platform: "windows",
 			UUID:     hostUUID,
@@ -3121,12 +3161,14 @@ func (svc *Service) storeWindowsMDMEnrolledDevice(ctx context.Context, userID st
 			// isServer is best-effort false (osquery corrects it later from installation_type); installed_from_dep
 			// mirrors osquery's "automatic" semantics (Azure AD + OOBE = automatic). On failure, we log and continue:
 			// osquery will reconcile the row on the next check-in.
-			appCfg, acErr := svc.ds.AppConfig(ctx)
+			// >>> OPENFRAME(windows-mdm-tenant): the discovery URL recorded for the host is its tenant's
+			serverURL, acErr := svc.openframeWindowsMDMBaseURL(ctx, fleet.IsOpenframeSharedMode())
 			if acErr != nil {
 				svc.logger.WarnContext(ctx, "loading app config for host_mdm sync after Windows MDM enrollment", "err", acErr)
 				ctxerr.Handle(ctx, acErr)
 			} else {
-				discoveryURL, dErr := microsoft_mdm.ResolveWindowsMDMDiscovery(appCfg.ServerSettings.ServerURL)
+				discoveryURL, dErr := microsoft_mdm.ResolveWindowsMDMDiscovery(serverURL)
+				// <<< OPENFRAME(windows-mdm-tenant)
 				if dErr != nil {
 					svc.logger.WarnContext(ctx, "resolving Windows MDM discovery URL after enrollment", "err", dErr)
 					ctxerr.Handle(ctx, dErr)
@@ -3210,11 +3252,14 @@ func (svc *Service) GetAuthorizedSoapFault(ctx context.Context, eType string, or
 }
 
 func (svc *Service) SignMDMMicrosoftClientCSR(ctx context.Context, subject string, csr *x509.CertificateRequest) ([]byte, string, error) {
-	if svc.wstepCertManager == nil {
-		return nil, "", errors.New("windows mdm identity keypair was not configured")
+	// >>> OPENFRAME(windows-mdm-tenant): the device's tenant's WSTEP pair signs its certificate
+	wstepCertManager, err := svc.openframeWindowsWSTEPManager(ctx, fleet.IsOpenframeSharedMode())
+	if err != nil {
+		return nil, "", err
 	}
 
-	cert, fpHex, err := svc.wstepCertManager.SignClientCSR(ctx, subject, csr)
+	cert, fpHex, err := wstepCertManager.SignClientCSR(ctx, subject, csr)
+	// <<< OPENFRAME(windows-mdm-tenant)
 	if err != nil {
 		return nil, "signing wstep client csr", ctxerr.Wrap(ctx, err)
 	}

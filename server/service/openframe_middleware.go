@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	microsoft_mdm "github.com/fleetdm/fleet/v4/server/mdm/microsoft"
 	"github.com/google/uuid"
 )
 
@@ -40,7 +41,8 @@ func openframeTenantHandler(ds openframeTeamEnsurer, logger *slog.Logger, next h
 
 		// Agent/device/MDM planes carry no gateway header — their tenant comes from the
 		// authenticated host / enroll secret (openframePinHostTeam, the enrollment pins).
-		if openframeTenantExemptPath(r.URL.Path) || openframeTenantExemptRoute(r.Method, r.URL.Path) {
+		if (openframeTenantExemptPath(r.URL.Path) || openframeTenantExemptRoute(r.Method, r.URL.Path)) &&
+			!openframeTenantPinnedDevicePath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -101,6 +103,15 @@ func openframeTenantExemptPath(path string) bool {
 		}
 	}
 	return false
+}
+
+// openframeTenantPinnedDevicePath matches the device routes under an exempt marker that carry no
+// credential of their own and are reached only on a tenant's address, so the gateway's
+// X-Tenant-Id names their tenant: Windows MDM discovery, whose answer is the tenant's policy and
+// enroll URLs. The pin only picks the tenant config the URLs are built from; policy, enroll and
+// management authenticate the device and take the tenant from its host.
+func openframeTenantPinnedDevicePath(path string) bool {
+	return path == microsoft_mdm.MDE2DiscoveryPath
 }
 
 // openframeTenantExemptRoutes are the device-, browser-redirect- and Google-facing MDM enrollment

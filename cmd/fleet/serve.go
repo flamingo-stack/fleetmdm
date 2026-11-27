@@ -413,6 +413,21 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 		logger.InfoContext(cmd.Context(), "Apple Business enabled")
 	}
 
+	// >>> OPENFRAME(mysql-multitenancy): shared mode takes the instance row's public MDM address, org name and Windows MDM flag from the environment — openframe/docs/mysql-multitenancy-feature.md
+	if fleet.IsOpenframeSharedMode() {
+		instanceSettings, err := fleet.OpenframeInstanceSettingsFromEnv()
+		if err != nil {
+			initFatal(err, "reading OpenFrame instance settings")
+		}
+		if instanceSettings.WindowsMDMEnabled != nil && *instanceSettings.WindowsMDMEnabled {
+			if err := openframeCheckWindowsWSTEP(&config); err != nil {
+				initFatal(err, "checking the Windows MDM WSTEP settings")
+			}
+		}
+		instanceSettings.ApplyTo(appCfg)
+	}
+	// <<< OPENFRAME(mysql-multitenancy)
+
 	// register the Microsoft MDM services
 	var (
 		wstepCertManager microsoft_mdm.CertManager
@@ -429,16 +444,6 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 			initFatal(err, "initialize mdm microsoft wstep depot")
 		}
 	}
-
-	// >>> OPENFRAME(mysql-multitenancy): shared mode takes the instance row's public MDM address and org name from the environment — openframe/docs/mysql-multitenancy-feature.md
-	if fleet.IsOpenframeSharedMode() {
-		instanceSettings, err := fleet.OpenframeInstanceSettingsFromEnv()
-		if err != nil {
-			initFatal(err, "reading OpenFrame instance settings")
-		}
-		instanceSettings.ApplyTo(appCfg)
-	}
-	// <<< OPENFRAME(mysql-multitenancy)
 
 	// save the app config with the updated MDM.Enabled value
 	if err := ds.SaveAppConfig(context.Background(), appCfg); err != nil {

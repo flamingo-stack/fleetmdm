@@ -852,6 +852,16 @@ type UpdateHostSoftwareInstalledPathsFunc func(ctx context.Context, hostID uint,
 
 type OpenframeReplaceHostSoftwareWindowsDetailsFunc func(ctx context.Context, hostID uint, detailsByChecksum map[string]fleet.SoftwareWindowsDetails) error
 
+type OpenframeLoadWindowsWSTEPFunc func(ctx context.Context, teamID uint, newPair func() (certPEM, keyPEM []byte, err error)) (certPEM []byte, keyPEM []byte, err error)
+
+type OpenframeGetWindowsWSTEPFunc func(ctx context.Context, teamID uint) (certPEM []byte, keyPEM []byte, err error)
+
+type OpenframeMDMWindowsEnrollmentTeamIDFunc func(ctx context.Context, enrollmentID uint) (*uint, error)
+
+type OpenframeMDMWindowsPrepareEnrollmentFunc func(ctx context.Context, hostUUID string, mdmDeviceHWID string, mdmDeviceID string, teamID uint) error
+
+type OpenframeUpdateMDMWindowsEnrollmentHostFunc func(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error)
+
 type OpenframeRefuseSharedHardwareUUIDFunc func(ctx context.Context, hostID uint, hardwareUUID string) error
 
 type UpdateHostFunc func(ctx context.Context, host *fleet.Host) error
@@ -3376,6 +3386,21 @@ type DataStore struct {
 
 	OpenframeReplaceHostSoftwareWindowsDetailsFunc        OpenframeReplaceHostSoftwareWindowsDetailsFunc
 	OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked bool
+
+	OpenframeLoadWindowsWSTEPFunc        OpenframeLoadWindowsWSTEPFunc
+	OpenframeLoadWindowsWSTEPFuncInvoked bool
+
+	OpenframeGetWindowsWSTEPFunc        OpenframeGetWindowsWSTEPFunc
+	OpenframeGetWindowsWSTEPFuncInvoked bool
+
+	OpenframeMDMWindowsEnrollmentTeamIDFunc        OpenframeMDMWindowsEnrollmentTeamIDFunc
+	OpenframeMDMWindowsEnrollmentTeamIDFuncInvoked bool
+
+	OpenframeMDMWindowsPrepareEnrollmentFunc        OpenframeMDMWindowsPrepareEnrollmentFunc
+	OpenframeMDMWindowsPrepareEnrollmentFuncInvoked bool
+
+	OpenframeUpdateMDMWindowsEnrollmentHostFunc        OpenframeUpdateMDMWindowsEnrollmentHostFunc
+	OpenframeUpdateMDMWindowsEnrollmentHostFuncInvoked bool
 
 	OpenframeRefuseSharedHardwareUUIDFunc        OpenframeRefuseSharedHardwareUUIDFunc
 	OpenframeRefuseSharedHardwareUUIDFuncInvoked bool
@@ -8199,6 +8224,41 @@ func (s *DataStore) OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Conte
 	s.OpenframeReplaceHostSoftwareWindowsDetailsFuncInvoked = true
 	s.mu.Unlock()
 	return s.OpenframeReplaceHostSoftwareWindowsDetailsFunc(ctx, hostID, detailsByChecksum)
+}
+
+func (s *DataStore) OpenframeLoadWindowsWSTEP(ctx context.Context, teamID uint, newPair func() (certPEM, keyPEM []byte, err error)) (certPEM []byte, keyPEM []byte, err error) {
+	s.mu.Lock()
+	s.OpenframeLoadWindowsWSTEPFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeLoadWindowsWSTEPFunc(ctx, teamID, newPair)
+}
+
+func (s *DataStore) OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (certPEM []byte, keyPEM []byte, err error) {
+	s.mu.Lock()
+	s.OpenframeGetWindowsWSTEPFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeGetWindowsWSTEPFunc(ctx, teamID)
+}
+
+func (s *DataStore) OpenframeMDMWindowsEnrollmentTeamID(ctx context.Context, enrollmentID uint) (*uint, error) {
+	s.mu.Lock()
+	s.OpenframeMDMWindowsEnrollmentTeamIDFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeMDMWindowsEnrollmentTeamIDFunc(ctx, enrollmentID)
+}
+
+func (s *DataStore) OpenframeMDMWindowsPrepareEnrollment(ctx context.Context, hostUUID string, mdmDeviceHWID string, mdmDeviceID string, teamID uint) error {
+	s.mu.Lock()
+	s.OpenframeMDMWindowsPrepareEnrollmentFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeMDMWindowsPrepareEnrollmentFunc(ctx, hostUUID, mdmDeviceHWID, mdmDeviceID, teamID)
+}
+
+func (s *DataStore) OpenframeUpdateMDMWindowsEnrollmentHost(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error) {
+	s.mu.Lock()
+	s.OpenframeUpdateMDMWindowsEnrollmentHostFuncInvoked = true
+	s.mu.Unlock()
+	return s.OpenframeUpdateMDMWindowsEnrollmentHostFunc(ctx, hostID, mdmDeviceID)
 }
 
 func (s *DataStore) OpenframeRefuseSharedHardwareUUID(ctx context.Context, hostID uint, hardwareUUID string) error {

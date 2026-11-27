@@ -11,21 +11,30 @@ import (
 )
 
 type OpenframeInstanceSettings struct {
-	ServerURL string
-	OrgName   string
+	ServerURL         string
+	OrgName           string
+	WindowsMDMEnabled *bool
 }
 
 func OpenframeInstanceSettingsFromEnv() (OpenframeInstanceSettings, error) {
 	return parseOpenframeInstanceSettings(
 		os.Getenv("FLEET_OPENFRAME_INSTANCE_SERVER_URL"),
 		os.Getenv("FLEET_OPENFRAME_INSTANCE_ORG_NAME"),
+		os.Getenv("FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED"),
 	)
 }
 
-func parseOpenframeInstanceSettings(rawServerURL, rawOrgName string) (OpenframeInstanceSettings, error) {
+func parseOpenframeInstanceSettings(rawServerURL, rawOrgName, rawWindowsMDMEnabled string) (OpenframeInstanceSettings, error) {
 	settings := OpenframeInstanceSettings{
 		ServerURL: strings.TrimRight(strings.TrimSpace(rawServerURL), "/"),
 		OrgName:   strings.TrimSpace(rawOrgName),
+	}
+	if raw := strings.TrimSpace(rawWindowsMDMEnabled); raw != "" {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return OpenframeInstanceSettings{}, fmt.Errorf("invalid FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED %q: must be true or false", rawWindowsMDMEnabled)
+		}
+		settings.WindowsMDMEnabled = &enabled
 	}
 	if settings.ServerURL == "" {
 		return settings, nil
@@ -81,6 +90,9 @@ func (s OpenframeInstanceSettings) ApplyTo(cfg *AppConfig) {
 	}
 	if s.OrgName != "" {
 		cfg.OrgInfo.OrgName = s.OrgName
+	}
+	if s.WindowsMDMEnabled != nil {
+		cfg.MDM.WindowsEnabledAndConfigured = *s.WindowsMDMEnabled
 	}
 }
 

@@ -181,6 +181,12 @@ func (ds *Datastore) ListMDMCommands(
 	}
 
 	appleStmt, windowsStmt := getMDMCommandsSubqueries()
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a Windows command is listed only on a host of its enrollment's tenant — openframe/docs/mysql-multitenancy-feature.md
+	windowsStmt, fenceErr := openframeWindowsCommandsStmt(ctx, windowsStmt)
+	if fenceErr != nil {
+		return nil, nil, nil, fenceErr
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	// Per-branch pagination: without this, the UNION ALL would materialize every command on
 	// both sides before pagination, which times out at scale (#44170).
@@ -451,6 +457,9 @@ WHERE
 		} else {
 			winParams = append(winParams, winUUIDs)
 		}
+		// >>> OPENFRAME(windows-mdm-tenant): in shared mode a host lists only its tenant's enrollment's commands — openframe/docs/mysql-multitenancy-feature.md
+		filterSQL += openframeWindowsEnrollmentOfHostTeam(ctx)
+		// <<< OPENFRAME(windows-mdm-tenant)
 
 		winStmt = fmt.Sprintf(winStmt, filterSQL)
 
@@ -577,6 +586,12 @@ func addAppleCommandStatusFilter(stmt string, filter *fleet.MDMCommandFilters, p
 
 func (ds *Datastore) getMDMCommand(ctx context.Context, q sqlx.QueryerContext, cmdUUID string) (*fleet.MDMCommand, error) {
 	stmt := getCombinedMDMCommandsQuery() + "command_uuid = ?"
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode a Windows command is listed only on a host of its enrollment's tenant — openframe/docs/mysql-multitenancy-feature.md
+	stmt, err := openframeWindowsCommandsStmt(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
+	// <<< OPENFRAME(windows-mdm-tenant)
 
 	var cmd fleet.MDMCommand
 	if err := sqlx.GetContext(ctx, q, &cmd, stmt, cmdUUID); err != nil {
@@ -931,6 +946,18 @@ func (ds *Datastore) CleanupAllHostMDMProfilesForPlatform(ctx context.Context, p
 				return ctxerr.Wrap(ctx, err, "deleting all rows from host_mdm_apple_declarations")
 			}
 		case "windows":
+			// >>> OPENFRAME(mysql-multitenancy): a pinned tenant turning Windows MDM off clears only its own hosts' rows
+			if teamID, ok := fleet.OpenframeTeamID(ctx); ok {
+				if _, err := tx.ExecContext(ctx, `
+					DELETE hmwp FROM host_mdm_windows_profiles hmwp
+					JOIN hosts h ON h.uuid = hmwp.host_uuid
+					WHERE h.team_id = ?
+					AND NOT EXISTS (SELECT 1 FROM hosts oh WHERE oh.uuid = hmwp.host_uuid AND NOT (oh.team_id <=> h.team_id))`, teamID); err != nil {
+					return ctxerr.Wrap(ctx, err, "deleting the pinned team's rows from host_mdm_windows_profiles")
+				}
+				return nil
+			}
+			// <<< OPENFRAME(mysql-multitenancy)
 			if _, err := tx.ExecContext(ctx, `DELETE FROM host_mdm_windows_profiles`); err != nil {
 				return ctxerr.Wrap(ctx, err, "deleting all rows from host_mdm_windows_profiles")
 			}
@@ -2233,7 +2260,9 @@ func (ds *Datastore) AreHostsConnectedToFleetMDM(ctx context.Context, hosts []*f
 	    AND mwe.device_state = '` + microsoft_mdm.MDMDeviceStateEnrolled + `'
 	    AND hm.enrolled = 1
 	`
-	if err := setConnectedUUIDs(winStmt, winUUIDs, res); err != nil {
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only an enrollment of the host's tenant — openframe/docs/mysql-multitenancy-feature.md
+	if err := setConnectedUUIDs(winStmt+openframeWindowsEnrollmentOfHostTeam(ctx), winUUIDs, res); err != nil {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		return nil, err
 	}
 

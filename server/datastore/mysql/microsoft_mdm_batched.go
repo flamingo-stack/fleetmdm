@@ -43,8 +43,14 @@ func (ds *Datastore) listWindowsMDMHostsForReconcileBatchTransaction(
 		LIMIT ?
 	`
 
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only hosts whose uuid is their tenant's alone — openframe/docs/mysql-multitenancy-feature.md
+	query, err := openframeWindowsReconcileHostsStmt(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
 	var hosts []*fleet.WindowsHostReconcileInfo
-	if err := sqlx.SelectContext(ctx, tx, &hosts, stmt, afterHostUUID, batchSize); err != nil {
+	if err := sqlx.SelectContext(ctx, tx, &hosts, query, afterHostUUID, batchSize); err != nil {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		return nil, ctxerr.Wrap(ctx, err, "list windows mdm hosts for reconcile batch")
 	}
 	return hosts, nil
@@ -73,8 +79,14 @@ func (ds *Datastore) GetWindowsMDMHostForReconcile(ctx context.Context, hostUUID
 		LIMIT 1
 	`
 
+	// >>> OPENFRAME(windows-mdm-tenant): in shared mode only a host whose uuid is its tenant's alone — openframe/docs/mysql-multitenancy-feature.md
+	query, err := openframeWindowsReconcileHostsStmt(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
 	var host fleet.WindowsHostReconcileInfo
-	if err := sqlx.GetContext(ctx, ds.reader(ctx), &host, stmt, hostUUID); err != nil {
+	if err := sqlx.GetContext(ctx, ds.reader(ctx), &host, query, hostUUID); err != nil {
+		// <<< OPENFRAME(windows-mdm-tenant)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}

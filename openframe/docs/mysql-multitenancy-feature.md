@@ -220,13 +220,109 @@ without touching Fleet's API. Platform side of this pipeline: shared connector r
 `FLEET_OPENFRAME_MULTI_TENANCY_ENABLED` (+ optional `FLEET_OPENFRAME_TENANT_UUID` /
 `FLEET_OPENFRAME_TEAM_ID`); `job-migration.yaml` gets the flag too (so the `GET_LOCK` guard engages).
 
-Shared mode also reads two optional envs at boot (`cmd/fleet/serve.go`, set through the chart's
+Shared mode also reads three optional envs at boot (`cmd/fleet/serve.go`, set through the chart's
 `environments` map): `FLEET_OPENFRAME_INSTANCE_SERVER_URL`, the instance's public MDM address
 (an http(s) URL with a valid host and port and no query, fragment, credentials or whitespace; a
 trailing slash is dropped and the scheme and host are lowercased),
-and `FLEET_OPENFRAME_INSTANCE_ORG_NAME`. Each set value is written to the instance row
-(`server_settings.server_url`, `org_info.org_name`) in the same boot-time save that recomputes the
-Apple MDM flags; an unset value leaves the row as it is, and a malformed URL stops the boot.
+`FLEET_OPENFRAME_INSTANCE_ORG_NAME`, and `FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED` (`true` or
+`false`). Each set value is written to the instance row
+(`server_settings.server_url`, `org_info.org_name`, `mdm.windows_enabled_and_configured`) in the
+same boot-time save that recomputes the Apple MDM flags; an unset value leaves the row as it is,
+and a malformed URL or flag stops the boot.
+
+Windows MDM runs per tenant. Each tenant has its own public Windows MDM address,
+`mdm.windows_server_url` on its tenant row (`https://<tenant domain>/mdm`, an https URL with a valid
+host and no query, fragment, credentials or whitespace; `server/fleet/openframe_windows_mdm.go`),
+written by OpenFrame. Every Windows MDM URL is built from it
+(`server/service/openframe_windows_mdm.go`): the discovery URL in the pinned orbit config; the policy
+and enroll URLs of discovery, which the middleware pins by the gateway's `X-Tenant-Id` (the only
+device route under `/api/mdm/` that is pinned: it carries no credential and is reached only on the
+tenant's address; `openframeTenantPinnedDevicePath`); the management URL given at enrollment and in
+every management response, and the discovery URL recorded in `host_mdm`, both taken from the
+device's tenant. That tenant is the team of the host of the orbit node key at enrollment, recorded on
+the enrollment as `mdm_windows_enrollments.team_id` (fork migration `20261127000001`); every
+management message reads it back with one primary-key query
+(`server/datastore/mysql/openframe_windows_mdm.go`). Those requests are not pinned: only the URLs and
+the WSTEP pair come from that tenant. The enrollment's other keys (hardware id, device id, host uuid)
+come from the device and are not unique across tenants: an agent reports its own hardware uuid, and
+the device chooses its device id. Upstream sends commands, keeps profile statuses and resets an
+enrollment by those keys, so in shared mode each of these paths is held to the tenant:
+
+- enrollment is readied in one transaction (`OpenframeMDMWindowsPrepareEnrollment`). It is first
+  refused, with nothing changed, when another host of any tenant has the device's hardware uuid,
+  another tenant's enrollment still held by its host has it, or the device id is another host's uuid
+  or another device's. Then the enrollment the device's hardware id names is removed when it is the
+  enrolling tenant's or released, and refused when another tenant's host still holds it. An
+  enrollment is released once no host of its tenant has its host uuid any more (for one without a
+  tenant: no host of another tenant), so a device moved to another tenant enrolls there once the old
+  tenant deletes its host; Fleet has no turning MDM off for a Windows host. The host state cleared
+  with the removal (lock and wipe actions, setup experience results, upcoming activities) is the
+  enrolling tenant's host's only, and `host_mdm_windows_profiles`, keyed by uuid alone, is cleared
+  only when no host of another tenant has the uuid;
+- the identifiers are checked again right after the enrollment is inserted with its tenant
+  (`openframeRecordWindowsEnrollmentTenant`): the first check can't hold off a concurrent enrollment
+  until that insert, so an enrollment that finds a clashing one committed meanwhile removes itself
+  and is refused; of two concurrent enrollments at most one stays;
+- the link of an enrollment to a host (orbit's EUA token, osquery's MDM device id, the DevDetail
+  serial of the management session) is made only when both have the same team, the host named by id
+  (`OpenframeUpdateMDMWindowsEnrollmentHost`, `server/service/osquery_utils/queries_openframe_windows_mdm.go`);
+- an enrollment without a recorded tenant (enrolled before the migration) gets no management session
+  until it re-enrolls, and is linked to no host.
+- a command (wipe, custom command, profile, TPM, setup experience) is resolved to an enrollment of the
+  request's tenant when the request is pinned; an unpinned one (the profile cron, a device request)
+  reaches only an enrollment whose host uuid no host of another tenant has, and an enrollment of the
+  host uuid wins over one whose device id merely equals it (`openframeWindowsEnrollmentFence`,
+  `getEnrollmentIDsByHostUUIDDB`, `getEnrollmentIDsByHostUUIDOrDeviceIDDB`);
+- the Windows profile reconciler skips a host whose enrollment is of another tenant or whose uuid a
+  host of another tenant has (`openframeWindowsReconcileHostsStmt`): profile statuses are keyed by
+  uuid alone;
+- the enrollment reset at turn-on (`MDMResetEnrollment`: BitLocker key, certificates, profile
+  statuses) and the host looked up for a wipe result are the device's tenant's;
+- a host's profile statuses list only its tenant's profiles, a host counts as connected to MDM only
+  through an enrollment of its tenant, and the MDM command listings (per host, all hosts, one command)
+  show a Windows command only on a host of its enrollment's tenant and of the pinned tenant
+  (`GetHostMDMWindowsProfiles`, `IsHostConnectedToFleetMDM`, `AreHostsConnectedToFleetMDM`,
+  `listMDMCommandsByHostIdentifier`, `ListMDMCommands`, `getMDMCommand`);
+- the WSTEP pair check and a tenant's Windows profile cleanup read the enrollment's `team_id` and skip
+  uuids another tenant shares.
+
+A hardware uuid that hosts of two tenants share is fail-closed: neither tenant's device with it gets
+profiles from the cron, and the tenant that enrolls second is refused. Left as upstream, read-only,
+and needing such a shared uuid: the host list's `connected_to_fleet` filter and labels
+(`hostMDMSelect`, `labels.go`), the profile summary counts, the orbit config's ESP flags
+(`GetMDMWindowsHostConfigState`) and setup experience lookups by uuid.
+
+A device moved to another tenant enrolls there once the old tenant deletes its host. Outside shared mode `team_id` stays NULL and every query is upstream's. Shared mode never
+falls back to the server URL, which on a tenant row is the internal address: a tenant without the
+address isn't told to enroll, and turning Windows MDM on, or clearing the address while it is on, is
+refused. Shared mode enrolls only through the agent (programmatic enrollment); automatic (Entra)
+enrollment carries no host and is refused.
+
+Each tenant also has its own WSTEP pair (the CA that signs its Windows device certificates and
+encrypts its escrowed BitLocker keys), kept in `mdm_config_assets` as
+`openframe_windows_wstep_cert/<team id>` / `openframe_windows_wstep_key/<team id>`, encrypted with
+the server private key (`server/datastore/mysql/openframe_windows_wstep.go`). The tenant's first
+enrollment generates a self-signed RSA 4096 CA valid for ten years
+(`server/mdm/microsoft/openframe_wstep.go`) and stores it with an insert that loses to a concurrent
+one, so every server of every cluster reads back the same pair; within a server, concurrent first
+enrollments of a tenant share one load (single-flight), so the RSA 4096 key is generated once per
+server, not once per request. Each server keeps the tenant's cert manager in memory after the first
+read. The pair is refused instead when only half of it is stored, or
+when none is stored but the tenant's hosts already have `mdm_windows_enrollments` rows or Windows
+`host_disk_encryption_keys`: a new pair would break those devices and leave the escrowed keys
+unreadable. Escrowing and decrypting a BitLocker key use the host's tenant's pair and never generate
+one. With `FLEET_OPENFRAME_INSTANCE_WINDOWS_MDM_ENABLED=true` boot stops when the server private key is
+missing or a WSTEP pair is also configured through the usual settings
+(`cmd/fleet/openframe_windows_wstep.go`); no instance pair exists, so the upstream single-pair paths
+(automatic enrollment, the EUA token) are off.
+
+Windows MDM has two switches in shared mode: the instance row's flag, read by the unpinned Windows
+device routes (`VerifyMDMWindowsConfigured`) and the Windows profile cron, which only this env sets;
+and each tenant row's flag, set by the tenant's own config update and read by its pinned orbit config
+and its pinned discovery, which tells that tenant's hosts to enroll or unenroll. A tenant that turns
+Windows MDM off clears only its own hosts' `host_mdm_windows_profiles` rows
+(`CleanupAllHostMDMProfilesForPlatform`, `server/datastore/mysql/mdm.go`); unpinned, the cleanup stays
+instance-wide as upstream.
 Every cluster on the shared database writes the same row at boot, so the values must be identical
 on all of them; different values would flip the row on each restart. Set the URL before the
 Android enterprise is created and do not change it afterwards: the proxy finds the enterprise by
@@ -274,6 +370,16 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
 - **Legacy 2017 "user packs" scheduled-query-stats join** — resolves by global pack name; packs are
   unused. New-format stats are team-scoped.
 - **`IsEnrollSecretAvailable`** — intentionally unfenced (cross-team uniqueness check).
+- **`POST /commands/run` (`RunMDMCommand`)** — `authorizeAllHostsTeams` lists the target hosts by
+  uuid with a global-admin filter and no tenant fence (`ListHostsLiteByUUIDs`). OpenFrame has no
+  caller (neither the gateway allowlist nor the SDK carries it); fence it before adding one. The
+  Windows command it enqueues is held to the pinned tenant's enrollments either way.
+- **`GET /commands` without a host (`ListMDMCommands`)** — its team filter (`whereFilterHostsByTeams`)
+  does not fence a pinned request, so the Apple rows of every tenant are listed; the Windows rows are
+  held to the pinned tenant. OpenFrame has no caller.
+- **Windows MDM challenge state** — upstream stores the SyncML message of a device that has not yet
+  authenticated (`saveResponse` in the Challenge state) and resets its nonce; results keyed by a
+  command uuid it cannot guess.
 - **"Instance" means every Fleet on the shared database** — one instance row, one APNs
   certificate, one Android enterprise and one MDM URL for every cluster on that MySQL (seven on
   prod). The MDM URL on the instance row must be an address that serves all of them, not one
@@ -290,7 +396,8 @@ Flag-parsing / mode-precedence unit tests in `server/fleet/openframe_test.go`. M
   Android signup callback and Pub/Sub push URLs and the APNs CSR all take the server URL or org
   name from the instance row; set them with `FLEET_OPENFRAME_INSTANCE_SERVER_URL` and
   `FLEET_OPENFRAME_INSTANCE_ORG_NAME` (see "Helm / config wiring"). A non-empty
-  `mdm.apple_server_url` on the instance row still takes precedence for Apple MDM.
+  `mdm.apple_server_url` on the instance row still takes precedence for Apple MDM. Windows MDM URLs
+  come from each tenant's `mdm.windows_server_url` instead (see "Helm / config wiring").
 - **Any tenant can obtain a device identity for the shared SCEP CA** — the SCEP challenge is
   instance-wide and is embedded in every tenant's OTA profile, and nanomdm accepts an Authenticate
   with any new certificate (`nano_cert_auth_associations` keeps the real device's certificate as

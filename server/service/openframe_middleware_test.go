@@ -245,3 +245,42 @@ func TestOpenframePinHostTeamShared(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+// OPENFRAME(windows-mdm-tenant): Windows MDM discovery is pinned by the gateway's X-Tenant-Id, so
+// its policy and enroll URLs are the tenant's; the other Windows device routes stay exempt.
+func TestOpenframeTenantHandlerPinsWindowsDiscovery(t *testing.T) {
+	ensurer := &fakeTeamEnsurer{teamID: 42}
+	var gotTeam uint
+	var gotOK bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotTeam, gotOK = fleet.OpenframeTeamID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	h := openframeTenantHandler(ensurer, slog.New(slog.DiscardHandler), next)
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		req := httptest.NewRequest(method, "/api/mdm/microsoft/discovery", nil)
+		req.Header.Set("X-Tenant-Id", "3f1a9b2c-0000-4d5e-8f00-000000000001")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.True(t, gotOK)
+		require.Equal(t, uint(42), gotTeam)
+
+		gotOK = false
+		req = httptest.NewRequest(method, "/api/mdm/microsoft/discovery", nil)
+		rr = httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusUnauthorized, rr.Code, "discovery without the gateway's tenant is refused")
+		require.False(t, gotOK)
+	}
+
+	for _, path := range []string{"/api/mdm/microsoft/policy", "/api/mdm/microsoft/enroll", "/api/mdm/microsoft/management"} {
+		gotOK = false
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code, path)
+		require.False(t, gotOK, "%s authenticates the device and takes the tenant from its host", path)
+	}
+}

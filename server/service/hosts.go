@@ -3540,7 +3540,9 @@ func (svc *Service) getHostDiskEncryptionKey(ctx context.Context, host *fleet.Ho
 		if err := svc.VerifyMDMWindowsConfigured(ctx); err != nil {
 			return nil, err
 		}
-		cert, _, _, err := svc.config.MDM.MicrosoftWSTEP()
+		// >>> OPENFRAME(windows-wstep): in shared mode the key is decrypted with the host's tenant's WSTEP pair
+		cert, err := svc.openframeWindowsWSTEPCertificate(ctx, host.TeamID, fleet.IsOpenframeSharedMode())
+		// <<< OPENFRAME(windows-wstep)
 		if err != nil {
 			return nil, ctxerr.Wrap(ctx, err, "getting Microsoft WSTEP certificate to decrypt key")
 		}

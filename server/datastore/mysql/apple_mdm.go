@@ -4336,10 +4336,16 @@ WHERE
 func (ds *Datastore) MDMResetEnrollment(ctx context.Context, hostUUID string, scepRenewalInProgress bool) error {
 	return ds.withRetryTxx(ctx, func(tx sqlx.ExtContext) error {
 		var hosts []fleet.Host
+		// >>> OPENFRAME(windows-mdm-tenant): in shared mode a pinned reset touches only its tenant's host — openframe/docs/mysql-multitenancy-feature.md
+		hostsStmt, hostsArgs := `SELECT id, platform, team_id FROM hosts WHERE uuid = ?`, []any{hostUUID}
+		if teamID, ok := fleet.OpenframeTeamID(ctx); ok && openframeSharedMode(ctx) {
+			hostsStmt, hostsArgs = hostsStmt+` AND team_id = ?`, append(hostsArgs, teamID)
+		}
 		err := sqlx.SelectContext(
 			ctx, tx, &hosts,
-			`SELECT id, platform, team_id FROM hosts WHERE uuid = ?`, hostUUID,
+			hostsStmt, hostsArgs...,
 		)
+		// <<< OPENFRAME(windows-mdm-tenant)
 		switch {
 		case err != nil:
 			return ctxerr.Wrap(ctx, err, "resetting mdm enrollment: getting host info from UUID")

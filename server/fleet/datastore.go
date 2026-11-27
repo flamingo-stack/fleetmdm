@@ -1220,6 +1220,27 @@ type Datastore interface {
 	OpenframeReplaceHostSoftwareWindowsDetails(ctx context.Context, hostID uint, detailsByChecksum map[string]SoftwareWindowsDetails) error
 	// <<< OPENFRAME(software-windows-details)
 
+	// >>> OPENFRAME(windows-wstep)
+	// OpenframeLoadWindowsWSTEP returns the tenant team's Windows MDM WSTEP pair, generating it with newPair and
+	// storing it when the team has none yet.
+	OpenframeLoadWindowsWSTEP(ctx context.Context, teamID uint, newPair func() (certPEM, keyPEM []byte, err error)) (certPEM, keyPEM []byte, err error)
+	// OpenframeGetWindowsWSTEP returns the tenant team's stored Windows MDM WSTEP pair, or a NotFound error.
+	OpenframeGetWindowsWSTEP(ctx context.Context, teamID uint) (certPEM, keyPEM []byte, err error)
+	// <<< OPENFRAME(windows-wstep)
+
+	// >>> OPENFRAME(windows-mdm-tenant)
+	// OpenframeMDMWindowsEnrollmentTeamID returns the tenant team a Windows MDM enrollment enrolled into, or nil when
+	// it has none recorded.
+	OpenframeMDMWindowsEnrollmentTeamID(ctx context.Context, enrollmentID uint) (*uint, error)
+	// OpenframeMDMWindowsPrepareEnrollment readies, in one transaction, a Windows MDM enrollment into teamID: it refuses
+	// (ConflictError, nothing changed) identifiers another device could be confused with, then removes the device's
+	// previous enrollment when it is teamID's or released.
+	OpenframeMDMWindowsPrepareEnrollment(ctx context.Context, hostUUID, mdmDeviceHWID, mdmDeviceID string, teamID uint) error
+	// OpenframeUpdateMDMWindowsEnrollmentHost is UpdateMDMWindowsEnrollmentsHostUUID that links the enrollment to the
+	// host only when both belong to the same tenant.
+	OpenframeUpdateMDMWindowsEnrollmentHost(ctx context.Context, hostID uint, mdmDeviceID string) (bool, error)
+	// <<< OPENFRAME(windows-mdm-tenant)
+
 	// >>> OPENFRAME(enroll-machine-identity)
 	// OpenframeRefuseSharedHardwareUUID refuses the MDM enrollment of a host whose hardware UUID another host of its team
 	// shares.
